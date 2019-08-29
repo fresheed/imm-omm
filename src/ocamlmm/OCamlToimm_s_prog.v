@@ -59,9 +59,17 @@ Section OCamlMM_TO_IMM_S_PROG.
       (TI: IdentMap.find thread pi = Some ti),
       is_thread_compiled to ti.
 
+  Notation "'E' G" := G.(acts_set) (at level 1).
+  Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
+  
+  Definition added_fences (a: actid) :=
+    match a with
+    | ThreadEvent tid num => True (* insert between; should multiply by 3 before or place hypothesis on nums *)
+    | _ => False
+    end.
+  
   Definition same_behavior (GO GI: execution) :=
-    (* graph correspondence definition *)
-    True. 
+    ⟪ADD_EVENTS: GI.(acts_set) ≡₁ GO.(acts_set)⟫.
       
   Variable ProgO: OProg.
 
@@ -77,6 +85,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       ⟪OC: ocaml_consistent GO ⟫ /\
       ⟪SameBeh: same_behavior GO GI⟫.
   Proof.
+    ins. 
   Admitted.
 
   
