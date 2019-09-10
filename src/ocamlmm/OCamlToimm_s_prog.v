@@ -83,6 +83,7 @@ Section OCamlMM_TO_IMM_S_PROG.
   Notation "'E' G" := G.(acts_set) (at level 1).
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
   Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
+  Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1).
   Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
   
@@ -118,19 +119,34 @@ Section OCamlMM_TO_IMM_S_PROG.
       
   Variable ProgO: OProg.
 
-  Variable GI : execution.
   Variable ProgI: Prog.Prog.t.
   Hypothesis Compiled: is_compiled ProgI ProgO.
 
   Theorem compilation_correctness:
     forall (GI: execution) sc (ExecI: program_execution ProgI GI) 
-      (IPC: imm_s.imm_psc_consistent GI sc),
+      (IPC: imm_s.imm_psc_consistent GI sc)
+      (IMM_SCALED: forall e (OMM_EVENT: E GI e), exists num,
+            ((set_compl (F GI ∪₁ codom_rel GI.(rmw))) e /\ index e = 3 * num) \/ 
+            (F GI e /\ index e = 3 * num - 2) \/
+            (codom_rel GI.(rmw) e /\ index e = 3 * num - 1)),
     exists (GO: execution),
       ⟪ExecO: Oprogram_execution ProgO GO⟫ /\
       ⟪OC: ocaml_consistent GO ⟫ /\
       ⟪SameBeh: same_behavior GO GI⟫.
   Proof.
-    ins. 
+    ins.
+    exists {| acts := filter (fun e => Nat.eqb (Nat.modulo (index e) 3) 0) GI.(acts);
+         lab := GI.(lab);
+         rmw := ∅₂;
+         (* same deps? *)
+         data := GI.(data);
+         addr := GI.(addr);
+         ctrl := GI.(ctrl);
+         
+         rmw_dep := ∅₂;
+         rf := GI.(rf) ⨾ ⦗set_compl (codom_rel GI.(rmw))⦘;
+         co := GI.(co) |}. 
+    
   Admitted.
 
   
