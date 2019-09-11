@@ -83,9 +83,11 @@ Section OCamlMM_TO_IMM_S_PROG.
   Notation "'E' G" := G.(acts_set) (at level 1).
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
   Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
+  Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
   Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1).
   Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
+  Notation "'hbo'" := (OCaml.hb). 
   
   Definition prepend_events (s: actid -> Prop) (shift: nat):=
     fun (a: actid) =>
@@ -122,10 +124,14 @@ Section OCamlMM_TO_IMM_S_PROG.
   Variable ProgI: Prog.Prog.t.
   Hypothesis Compiled: is_compiled ProgI ProgO.
 
+  Definition compile_grouped EE shift event :=
+    Nat.eqb (Nat.modulo (index event) 3) 0 /\
+    EE (ThreadEvent (tid event) (index event + shift)). 
+
   Theorem compilation_correctness:
     forall (GI: execution) sc (ExecI: program_execution ProgI GI) 
       (IPC: imm_s.imm_psc_consistent GI sc)
-      (IMM_SCALED: forall e (OMM_EVENT: E GI e), exists num,
+      (IMM_SCALED: forall e (IMM_EVENT: E GI e), exists num,
             ((set_compl (F GI ∪₁ codom_rel GI.(rmw))) e /\ index e = 3 * num) \/ 
             (F GI e /\ index e = 3 * num - 2) \/
             (codom_rel GI.(rmw) e /\ index e = 3 * num - 1)),
@@ -135,20 +141,83 @@ Section OCamlMM_TO_IMM_S_PROG.
       ⟪SameBeh: same_behavior GO GI⟫.
   Proof.
     ins.
-    exists {| acts := filter (fun e => Nat.eqb (Nat.modulo (index e) 3) 0) GI.(acts);
-         lab := GI.(lab);
-         rmw := ∅₂;
-         (* same deps? *)
-         data := GI.(data);
-         addr := GI.(addr);
-         ctrl := GI.(ctrl);
-         
-         rmw_dep := ∅₂;
-         rf := GI.(rf) ⨾ ⦗set_compl (codom_rel GI.(rmw))⦘;
-         co := GI.(co) |}. 
-    
-  Admitted.
+    set (GO :=
+           {| acts := filterP (RW GI \₁ dom_rel (GI.(rmw))) GI.(acts);
+              lab := GI.(lab); (* should restrict domain *)
+              rmw := ∅₂;
+              (* same deps? *)
+              data := GI.(data);
+              addr := GI.(addr);
+              ctrl := GI.(ctrl);              
+              rmw_dep := ∅₂;
+              rf := GI.(rf) ⨾ ⦗set_compl (dom_rel GI.(rmw))⦘;
+              co := GI.(co) |}). 
+    exists GO. splits.
+    3: { red. splits; auto.
+         { admit. (* should convert to another graph *) }
+         { admit. }
+         { admit. }
+         { admit. }
+         { admit. }
+         { admit. }
+         subst GO. simpl. basic_solver. }
+    { red. splits.
+      { intros e EGOe.
+        destruct e; auto. right.
+        (* same threads, should be easy *) admit. }
+      intros thread subprog TP.
+      eexists. (* how to restrict existing execution ?*)
+      split.
+      { red.
+        (* ? show by induction that thread execution goes to some final state *)
+        admit. 
+      }
+      (* again, need to restrict execution *)
+      admit. }
 
+    cut (ocaml_consistent GI).
+    { assert (RF': rf GO ≡ rf GI ⨾ ⦗set_compl (dom_rel (rmw GI))⦘).
+      { subst GO.  simpl. basic_solver. }
+      assert (E': E GO ≡₁ E GI ∩₁ (RW GI \₁ dom_rel (rmw GI))).
+      { subst GO. unfold acts_set. simpl.
+        red. split.
+        { red. ins. rewrite in_filterP_iff in H. red. desc. auto. }
+        red. ins. rewrite  in_filterP_iff. red in H. auto. }
+      assert (SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘).
+      { unfold Execution.sb.        
+        rewrite !seqA. do 2 seq_rewrite <- id_inter.
+        rewrite set_interC. 
+        rewrite E'. 
+        basic_solver. }
+      assert (HBO': hbo GO ⊆ hbo GI).
+      { unfold OCaml.hb. apply clos_trans_mori.
+        apply union_mori; [rewrite SB'; basic_solver | ].
+        arewrite (Sc GO ≡₁ Sc GI). hahn_frame.
+        apply union_mori; [basic_solver | rewrite RF'; basic_solver]. }
+      intros OCAML_GI. unfold ocaml_consistent. unfold ocaml_consistent in OCAML_GI.
+      splits; auto.
+      { red. rewrite E', RF'.
+        desc. red in Comp.
+        rewrite set_interC, <- set_interA.
+        rewrite set_inter_minus_r.
+        arewrite (R GO ∩₁ E GI ∩₁ RW GI ≡₁ R GO ∩₁ E GI) by basic_solver.
+        rewrite codom_eqv1.
+        rewrite set_minusE.
+        apply set_subset_inter; [rewrite set_interC; apply Comp | basic_solver]. }
+      { red. subst GO. simpl. rewrite inter_false_l. basic_solver. }
+      { rewrite HBO'. subst GO. simpl. desc. auto. }
+      { unfold fr. rewrite HBO'.
+        arewrite (rf GO ⊆ rf GI) by rewrite RF'; auto. 
+        subst GO. simpl. auto. desc. auto. }
+      
+      (* left to prove: acyclicity implied *)
+      (* unfold rfe, coe, fre.  *)
+      (* arewrite (Sc GO ≡₁ Sc GI). *)
+      (* arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver. *)
+      admit. 
+    }
+    admit. 
+  Admitted.
   
   
 End OCamlMM_TO_IMM_S_PROG.
