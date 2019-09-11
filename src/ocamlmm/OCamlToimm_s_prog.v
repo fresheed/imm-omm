@@ -129,7 +129,7 @@ Section OCamlMM_TO_IMM_S_PROG.
     EE (ThreadEvent (tid event) (index event + shift)). 
 
   Theorem compilation_correctness:
-    forall (GI: execution) sc (ExecI: program_execution ProgI GI) 
+    forall (GI: execution) (WF: Wf GI) sc (ExecI: program_execution ProgI GI) 
       (IPC: imm_s.imm_psc_consistent GI sc)
       (IMM_SCALED: forall e (IMM_EVENT: E GI e), exists num,
             ((set_compl (F GI ∪₁ codom_rel GI.(rmw))) e /\ index e = 3 * num) \/ 
@@ -189,11 +189,16 @@ Section OCamlMM_TO_IMM_S_PROG.
         rewrite set_interC. 
         rewrite E'. 
         basic_solver. }
+      assert (SC': Sc GO ≡₁ Sc GI) by intuition. 
       assert (HBO': hbo GO ⊆ hbo GI).
       { unfold OCaml.hb. apply clos_trans_mori.
         apply union_mori; [rewrite SB'; basic_solver | ].
-        arewrite (Sc GO ≡₁ Sc GI). hahn_frame.
+        hahn_frame.
         apply union_mori; [basic_solver | rewrite RF'; basic_solver]. }
+      assert (CO': co GO ≡ co GI) by intuition.
+      assert (FR': fr GO ≡ ⦗set_compl (dom_rel (rmw GI))⦘ ⨾ fr GI).
+      { unfold fr. rewrite CO'. rewrite <- seqA. apply seq_more; [| basic_solver].
+        subst GO. simpl. basic_solver. }
       intros OCAML_GI. unfold ocaml_consistent. unfold ocaml_consistent in OCAML_GI.
       splits; auto.
       { red. rewrite E', RF'.
@@ -210,12 +215,46 @@ Section OCamlMM_TO_IMM_S_PROG.
         arewrite (rf GO ⊆ rf GI) by rewrite RF'; auto. 
         subst GO. simpl. auto. desc. auto. }
       
-      (* left to prove: acyclicity implied *)
-      (* unfold rfe, coe, fre.  *)
-      (* arewrite (Sc GO ≡₁ Sc GI). *)
-      (* arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver. *)
-      admit. 
-    }
+      assert (W_RMW: W GI ⊆₁ RW GI \₁ dom_rel (rmw GI)).
+      { rewrite set_minusE.
+        apply set_subset_inter_r. split; [basic_solver| ].
+        sin_rewrite (WF.(wf_rmwD)).
+        rewrite dom_eqv1. rewrite set_compl_inter.
+        unionR left. type_solver. }
+      arewrite (rfe GO ⊆ rfe GI).
+      { unfold rfe. rewrite SB', RF'.
+        apply inclusion_minus_l.
+        rewrite rfi_union_rfe at 1. rewrite seq_union_l.
+        apply union_mori.        
+        { rewrite (WF.(wf_rfiD)). 
+          arewrite (rfi GI ⊆ sb GI).
+          apply seq_mori; [ | basic_solver]. 
+          apply eqv_rel_mori. apply W_RMW. }
+        unfold rfe. basic_solver. }
+      arewrite (fre GO ⊆ fre GI).
+      { unfold fre. rewrite SB', FR'.
+        apply inclusion_minus_l.
+        rewrite fri_union_fre at 1. rewrite seq_union_r.
+        apply union_mori.        
+        { rewrite (WF.(wf_friD)). 
+          arewrite (fri GI ⊆ sb GI).
+          rewrite <- seqA. 
+          apply seq_mori; [basic_solver |].
+          hahn_frame. apply eqv_rel_mori. apply W_RMW. }
+        unfold fre. basic_solver. }
+          
+      arewrite (coe GO ⊆ coe GI).
+      { unfold coe. rewrite SB', CO'. 
+        apply inclusion_minus_l.
+        rewrite coi_union_coe at 1. 
+        apply union_mori.        
+        { rewrite (WF.(wf_coiD)). 
+          arewrite (coi GI ⊆ sb GI).
+          apply seq_mori; hahn_frame; apply eqv_rel_mori; apply W_RMW. } 
+        unfold coe. basic_solver. }
+      rewrite SC'. 
+      arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver.
+      desc. auto. } 
     admit. 
   Admitted.
   
