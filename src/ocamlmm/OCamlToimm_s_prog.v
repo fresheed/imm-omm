@@ -11,6 +11,7 @@ Require Import imm_common.
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
+Require Import OCamlToimm_s. 
 Require Import Prog.
 Require Import ProgToExecution.
 Require Import ProgToExecutionProperties.
@@ -87,6 +88,8 @@ Section OCamlMM_TO_IMM_S_PROG.
   Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1).
   Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
+  Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
+  Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1). 
   Notation "'hbo'" := (OCaml.hb). 
   
   Definition prepend_events (s: actid -> Prop) (shift: nat):=
@@ -254,8 +257,19 @@ Section OCamlMM_TO_IMM_S_PROG.
         unfold coe. basic_solver. }
       rewrite SC'. 
       arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver.
-      desc. auto. } 
-    admit. 
+      desc. auto. }
+
+    (* need to specify location separation for OCaml program and prove that it's preserved in IMM program *)
+    assert (LSM: forall l,
+               (fun x => loc GI.(lab) x = Some l) \₁ is_init ⊆₁ ORlx GI \/
+               (fun x => loc GI.(lab) x = Some l) \₁ is_init ⊆₁ Sc GI) by admit.
+    assert (WSCFACQRMW : W GI ∩₁ Sc GI ≡₁ codom_rel (⦗F GI ∩₁ Acq GI⦘ ⨾ immediate (sb GI) ⨾ rmw GI)) by admit.
+    assert (RMWSC: rmw GI ≡ ⦗Sc GI⦘ ⨾ rmw GI ⨾ ⦗Sc GI⦘) by admit.
+    assert (WRLXF: W GI ∩₁ ORlx GI ⊆₁ codom_rel (⦗F GI ∩₁Acqrel GI⦘ ⨾ immediate (sb GI))) by admit. 
+    assert (RSCF: R GI ∩₁ Sc GI ⊆₁ codom_rel (⦗F GI ∩₁ Acq GI⦘ ⨾ immediate (sb GI))) by admit. 
+
+    apply (@imm_to_ocaml_consistent GI LSM WSCFACQRMW RMWSC WRLXF RSCF WF sc IPC).
+    (* goal on the shelf ? *)
   Admitted.
   
   
