@@ -139,6 +139,7 @@ Section OCamlMM_TO_IMM_S_PROG.
             (F GI e /\ index e = 3 * num - 2) \/
             (codom_rel GI.(rmw) e /\ index e = 3 * num - 1)),
     exists (GO: execution),
+      ⟪WF': Wf GO ⟫ /\
       ⟪ExecO: Oprogram_execution ProgO GO⟫ /\
       ⟪OC: ocaml_consistent GO ⟫ /\
       ⟪SameBeh: same_behavior GO GI⟫.
@@ -156,6 +157,7 @@ Section OCamlMM_TO_IMM_S_PROG.
               rf := GI.(rf) ⨾ ⦗set_compl (dom_rel GI.(rmw))⦘;
               co := GI.(co) |}). 
     exists GO. splits.
+    { admit. }
     3: { red. splits; auto.
          { admit. (* should convert to another graph *) }
          { admit. }
