@@ -75,9 +75,8 @@ Section OCamlMM_TO_IMM_S_PROG.
   
 
   Definition is_compiled (po: OProg) (pi: Prog.Prog.t) :=
-    ⟪ SAME_THREADS: True ⟫ /\ (* how to compare key sets? *)
-    forall thread to ti
-      (TO: IdentMap.find thread po = Some to)
+    ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id po <-> IdentMap.In t_id pi ⟫ /\
+    forall thread to ti (TO: IdentMap.find thread po = Some to)
       (TI: IdentMap.find thread pi = Some ti),
       is_thread_compiled to ti.
 
@@ -135,9 +134,9 @@ Section OCamlMM_TO_IMM_S_PROG.
     forall (GI: execution) (WF: Wf GI) sc (ExecI: program_execution ProgI GI) 
       (IPC: imm_s.imm_psc_consistent GI sc)
       (IMM_SCALED: forall e (IMM_EVENT: E GI e), exists num,
-            ((set_compl (F GI ∪₁ codom_rel GI.(rmw))) e /\ index e = 3 * num) \/ 
+            ((set_compl (F GI ∪₁ dom_rel GI.(rmw))) e /\ index e = 3 * num) \/ 
             (F GI e /\ index e = 3 * num - 2) \/
-            (codom_rel GI.(rmw) e /\ index e = 3 * num - 1)),
+            (dom_rel GI.(rmw) e /\ index e = 3 * num - 1)),
     exists (GO: execution),
       ⟪WF': Wf GO ⟫ /\
       ⟪ExecO: Oprogram_execution ProgO GO⟫ /\
@@ -157,7 +156,8 @@ Section OCamlMM_TO_IMM_S_PROG.
               rf := GI.(rf) ⨾ ⦗set_compl (dom_rel GI.(rmw))⦘;
               co := GI.(co) |}). 
     exists GO. splits.
-    { admit. }
+    { destruct WF. 
+      split; subst GO; simpl; auto; admit. }
     3: { red. splits; auto.
          { admit. (* should convert to another graph *) }
          { admit. }
@@ -168,16 +168,28 @@ Section OCamlMM_TO_IMM_S_PROG.
          subst GO. simpl. basic_solver. }
     { red. splits.
       { intros e EGOe.
-        destruct e; auto. right.
+        right. 
+        (* destruct e; auto. right. *)
         (* same threads, should be easy *) admit. }
       intros thread subprog TP.
-      eexists. (* how to restrict existing execution ?*)
+      set (GOt := let eq_tid := (fun e => tid e = thread) in
+                  let restrict rel := ⦗eq_tid⦘ ⨾ rel ⨾ ⦗eq_tid⦘ in
+                  {| acts := filterP eq_tid GO.(acts);
+                     lab := GO.(lab); (* should restrict domain *)
+                     rmw := restrict GO.(rmw);
+                     data := restrict GO.(data);
+                     addr := restrict GO.(addr);
+                     ctrl := restrict GO.(ctrl);              
+                     rmw_dep := restrict GO.(rmw_dep);
+                     rf := restrict GO.(rf);
+                     co := restrict GI.(co) |}). 
+      exists GOt.
       split.
-      { red.
-        (* ? show by induction that thread execution goes to some final state *)
-        admit. 
+      2: { subst GOt. split; simpl; auto.
+           admit. (* E GO restriction; should be easy *)
       }
-      (* again, need to restrict execution *)
+      (* ? show by induction that thread execution goes to some final state *)
+      red. 
       admit. }
 
     cut (ocaml_consistent GI).
@@ -260,7 +272,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       rewrite SC'. 
       arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver.
       desc. auto. }
-
+    
     (* need to specify location separation for OCaml program and prove that it's preserved in IMM program *)
     assert (LSM: forall l,
                (fun x => loc GI.(lab) x = Some l) \₁ is_init ⊆₁ ORlx GI \/
