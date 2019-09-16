@@ -22,10 +22,145 @@ Remove Hints plus_n_O.
 
 
 Section OCaml_Program.
-    
+
+  Inductive Oistep_ tid labels s1 s2 instr dindex : Prop :=
+  | assign reg expr
+      (LABELS : labels = nil)
+      (II : instr = Instr.assign reg expr)
+      (UPC : s2.(pc) = s1.(pc) + 1)
+      (UG : s2.(G) = s1.(G))
+      (UINDEX : s2.(eindex) = s1.(eindex))
+      (UREGS : s2.(regf) = RegFun.add reg (RegFile.eval_expr s1.(regf) expr) s1.(regf))
+      (UDEPS : s2.(depf) = RegFun.add reg (DepsFile.expr_deps s1.(depf) expr) s1.(depf))
+      (UECTRL : s2.(ectrl) = s1.(ectrl))
+  | if_ expr shift
+      (LABELS : labels = nil)
+      (II : instr = Instr.ifgoto expr shift)
+      (UPC   : if Const.eq_dec (RegFile.eval_expr s1.(regf) expr) 0
+               then s2.(pc) = s1.(pc) + 1
+               else s2.(pc) = shift)
+      (UG    : s2.(G) = s1.(G))
+      (UINDEX : s2.(eindex) = s1.(eindex))
+      (UREGS : s2.(regf) = s1.(regf))
+      (UDEPS : s2.(depf) = s1.(depf))
+      (UECTRL : s2.(ectrl) = (DepsFile.expr_deps s1.(depf) expr) ∪₁ s1.(ectrl))
+  | load ord reg lexpr val l
+      (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
+      (II : instr = Instr.load ord reg lexpr)
+      (LABELS : labels = [Aload false ord (RegFile.eval_lexpr s1.(regf) lexpr) val])
+      (UPC   : s2.(pc) = s1.(pc) + 1)
+      (UG    : s2.(G) =
+                 add s1.(G) tid s1.(eindex) (Aload false ord (RegFile.eval_lexpr s1.(regf) lexpr) val) ∅
+                     (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl) ∅)
+      (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+      (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
+      (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
+      (UECTRL : s2.(ectrl) = s1.(ectrl))
+  | store ord lexpr expr l v x
+      (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
+      (V: v = RegFile.eval_expr  s1.(regf)  expr)
+      (X: x = Xpln)
+      (LABELS : labels = [Astore x ord l v])
+      (II : instr = Instr.store ord lexpr expr)
+      (UPC   : s2.(pc) = s1.(pc) + 1)
+      (UG    : s2.(G) =
+                 add s1.(G) tid s1.(eindex) (Astore x ord l v)
+                     (DepsFile.expr_deps  s1.(depf)  expr)
+                     (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl) ∅)
+      (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+      (UREGS : s2.(regf) = s1.(regf))
+      (UDEPS : s2.(depf) = s1.(depf))
+      (UECTRL : s2.(ectrl) = s1.(ectrl))
+  | fence ord 
+      (LABELS : labels = [Afence ord])
+      (II : instr = Instr.fence ord)
+      (UPC   : s2.(pc) = s1.(pc) + 1)
+      (UG    : s2.(G) = add s1.(G) tid s1.(eindex) (Afence ord) ∅ ∅ s1.(ectrl) ∅)
+      (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+      (UREGS : s2.(regf) = s1.(regf))
+      (UDEPS : s2.(depf) = s1.(depf))
+      (UECTRL : s2.(ectrl) = s1.(ectrl))
+  | cas_un expr_old expr_new xmod ordr ordw reg lexpr val l
+      (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
+      (NEXPECTED : val <> RegFile.eval_expr s1.(regf) expr_old)
+      (LABELS : labels = [Aload true ordr l val])
+      (II : instr= Instr.update (Instr.cas expr_old expr_new) xmod ordr ordw reg lexpr)
+      (UPC   : s2.(pc) = s1.(pc) + 1)
+      (UG    : s2.(G) =
+                 add s1.(G) tid s1.(eindex) (Aload true ordr l val) ∅
+                     (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl)
+                     (DepsFile.expr_deps s1.(depf) expr_old))
+      (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+      (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
+      (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
+      (UECTRL : s2.(ectrl) = s1.(ectrl))
+  | cas_suc expr_old expr_new xmod ordr ordw reg lexpr l expected new_value
+      (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
+      (EXPECTED: expected = RegFile.eval_expr s1.(regf) expr_old)
+      (NEW: new_value = RegFile.eval_expr s1.(regf) expr_new)
+      (LABELS : labels = [Astore xmod ordw l new_value; Aload true ordr l expected])
+      (II : instr = Instr.update (Instr.cas expr_old expr_new) xmod ordr ordw reg lexpr)
+      (UPC   : s2.(pc) = s1.(pc) + 1)
+      (UG    : s2.(G) =
+                 add_rmw s1.(G)
+                     tid s1.(eindex) (Aload true ordr l expected) (Astore xmod ordw l new_value)
+                     (DepsFile.expr_deps s1.(depf) expr_new)
+                     (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl)
+                     (DepsFile.expr_deps s1.(depf) expr_old))
+      (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+      (UREGS : s2.(regf) = RegFun.add reg expected s1.(regf))
+      (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
+      (UECTRL : s2.(ectrl) = s1.(ectrl))
+  | inc expr_add xmod ordr ordw reg lexpr val l nval
+      (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
+      (NVAL: nval = val + RegFile.eval_expr s1.(regf) expr_add)
+      (LABELS : labels = [Astore xmod ordw l nval; Aload true ordr l val])
+      (II : instr = Instr.update (Instr.fetch_add expr_add) xmod ordr ordw reg lexpr)
+      (UPC   : s2.(pc) = s1.(pc) + 1)
+      (UG    : s2.(G) =
+                 add_rmw s1.(G) tid s1.(eindex)
+                     (Aload true ordr l val)
+                     (Astore xmod ordw l nval)
+                     ((eq (ThreadEvent tid s1.(eindex))) ∪₁ (DepsFile.expr_deps s1.(depf) expr_add))
+                     (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl)
+                     ∅)
+      (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+      (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
+      (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
+      (UECTRL : s2.(ectrl) = s1.(ectrl))
+  | exchange new_expr xmod ordr ordw reg loc_expr old_value loc new_value
+      (L: loc = RegFile.eval_lexpr s1.(regf) loc_expr)
+      (NVAL: new_value = RegFile.eval_expr s1.(regf) new_expr)
+      (LABELS : labels = [Astore xmod ordw loc new_value;
+                          Aload true ordr loc old_value])
+      (II : instr = Instr.update (Instr.exchange new_expr)
+                                 xmod ordr ordw reg loc_expr)
+      (UPC   : s2.(pc) = s1.(pc) + 1)
+      (UG    : s2.(G) =
+                 add_rmw s1.(G) tid s1.(eindex)
+                     (Aload true ordr loc old_value)
+                     (Astore xmod ordw loc new_value)
+                     (DepsFile.expr_deps s1.(depf) new_expr)
+                     (DepsFile.lexpr_deps s1.(depf) loc_expr)
+                     s1.(ectrl)
+                     ∅)
+      (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+      (UREGS : s2.(regf) = RegFun.add reg old_value s1.(regf))
+      (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
+      (UECTRL : s2.(ectrl) = s1.(ectrl)).      
+
+  Definition Oistep (tid : thread_id) (labels : list label) s1 s2 :=
+    ⟪ INSTRS : s1.(instrs) = s2.(instrs) ⟫ /\
+    ⟪ ISTEP: exists instr dindex, 
+               Some instr = List.nth_error s1.(instrs) s1.(pc) /\
+               Oistep_ tid labels s1 s2 instr dindex⟫.    
+
+  Definition Ostep (tid : thread_id) s1 s2 :=
+    exists lbls, Oistep tid lbls s1 s2.
+
   Definition Othread_execution (tid : thread_id) (insts : list Prog.Instr.t) (pe : execution) :=
     exists s,
-      ⟪ STEPS : (step tid)＊ (init insts) s ⟫ /\
+      ⟪ STEPS : (Ostep tid)＊ (init insts) s ⟫ /\
       ⟪ TERMINAL : is_terminal s ⟫ /\
       ⟪ PEQ : s.(G) = pe ⟫.
 
@@ -98,7 +233,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       end.
 
   
-  Definition same_behavior (GO GI: execution) :=
+  Definition same_behavior_local (GO GI: execution) :=
     let Facq' := prepend_events (E GO ∩₁ Sc GO) 2 in
     let Facqrel' := prepend_events (E GO ∩₁ W GO ∩₁ ORlx GO) 2 in
     let R' := prepend_events (E GO ∩₁ W GO ∩₁ Sc GO) 1 in
@@ -113,15 +248,18 @@ Section OCamlMM_TO_IMM_S_PROG.
               GI.(lab) e = Aload true Osc loc val /\
               GO.(lab) w = Astore Xpln Osc loc val /\
               rmw_pair e w) in
-    (* ⟪OMM_SCALED: forall e (OMM_EVENT: E GO e), exists num, index e = 3 * num ⟫ /\ *)
     ⟪ADD_EVENTS: E GI ≡₁ E GO ∪₁ Facq' ∪₁ Facqrel' ∪₁ R' ⟫ /\
     ⟪EXT_LABELS: wf_labels ⟫ /\
-    ⟪NEW_RMW: GI.(rmw) ≡ fun r w => (E GI ∩₁ R GI ∩₁ Sc GI) r /\ (E GI ∩₁ W GI ∩₁ Sc GI) w /\ rmw_pair r w ⟫ /\
+    ⟪NEW_RMW: GI.(rmw) ≡ fun r w => (E GI ∩₁ R GI ∩₁ Sc GI) r /\ (E GI ∩₁ W GI ∩₁ Sc GI) w /\ rmw_pair r w ⟫.
+
+  Definition same_behavior (GO GI: execution) :=
+    ⟪SAME_LOCAL: same_behavior_local GO GI ⟫ /\
     ⟪SAME_CO: GI.(co) ≡ GO.(co)⟫ /\
-    ⟪EXT_RF: GO.(rf) ⊆ GI.(rf)⟫. 
-      
+    ⟪EXT_RF: GO.(rf) ⊆ GI.(rf)⟫.
+    
+  
   Variable ProgO ProgI: Prog.Prog.t.
-  Hypothesis Compiled: is_compiled ProgI ProgO.
+  Hypothesis Compiled: is_compiled ProgO ProgI.
   Hypothesis OCamlProgO: OCamlProgram ProgO.
 
   Variable GI: execution.
@@ -130,12 +268,104 @@ Section OCamlMM_TO_IMM_S_PROG.
   Hypothesis ExecI: program_execution ProgI GI.
   Hypothesis IPC: imm_s.imm_psc_consistent GI sc.
 
+  Definition prefix {A: Type} (p l: list A) :=
+    exists s, p ++ s = l.
+
+  Definition prefix_option {A: Type} (p: list A) (lo: option (list A)):=
+    exists l s, lo = Some l /\ p ++ s = l.
+
+  Definition kept_events G := ⦗set_compl (dom_rel G.(rmw) ∪₁ F G)⦘.
+  (* Definition respects_thread_relations Go Gi := *)
+  (*   Go.(rmw) = ∅₂ /\ *)
+  (*   Go.(data) = kept_events Gi ⨾ Gi.(data) ⨾ kept_events Gi /\ *)
+  (*   Go.(addr) = kept_events Gi ⨾ Gi.(addr) ⨾ kept_events Gi /\ *)
+  (*   Go.(ctrl) = kept_events Gi ⨾ Gi.(ctrl) ⨾ kept_events Gi /\ *)
+  (*   Go.(rmw_dep) = ∅₂.               *)
+
+  
+  Theorem correspondence_partial:
+    forall (BPI: list (list Prog.Instr.t)) PI (BLOCK_PI: flatten BPI = PI)
+      tid SGI (ExI: thread_execution tid PI SGI)
+      (INCL_I: prefix_option PI (IdentMap.find tid ProgI))
+      PO (INCL_O: prefix_option PO (IdentMap.find tid ProgO))
+      (COMP: is_thread_compiled PO PI),
+    exists SGO, Othread_execution tid PO SGO /\
+           same_behavior_local SGO SGI. 
+  Proof. Admitted.
+
+  Lemma ProgI_blocks: forall tid PI (THREAD: IdentMap.find tid ProgI = Some PI),
+      exists BPI, flatten BPI = PI.
+  Proof. Admitted. 
+
+  Lemma thread_execs: forall tid PO (THREAD_O: IdentMap.find tid ProgO = Some PO)
+                        PI (THREAD_I: IdentMap.find tid ProgI = Some PI)
+                        SGI (TRI: thread_restricted_execution GI tid SGI)
+                        (ExI: thread_execution tid PI SGI), 
+      exists SGO, Othread_execution tid PO SGO /\
+             same_behavior_local SGO SGI. 
+  Proof.
+    ins.    
+    assert (BLOCKS: exists BPI, flatten BPI = PI).
+    { apply (ProgI_blocks tid THREAD_I). }
+    destruct BLOCKS as [BPI BLOCKS].
+    apply (correspondence_partial BPI BLOCKS ExI).
+    { red. eexists. exists []. rewrite app_nil_r. eauto. }
+    { red. eexists. exists []. rewrite app_nil_r. eauto. }
+    red in Compiled. destruct Compiled as [_ Comp].
+    apply (Comp tid); auto.
+  Qed.
+
+  Lemma GO_exists: exists GO,
+      Oprogram_execution OCamlProgO GO /\
+      same_behavior GO GI. 
+  Proof. Admitted. 
+
+  (* Definition merge_executions (lab: actid -> label) (G0: execution) (tid: thread_id): execution. *)
+  (*   (* TODO: check if tid in thread list *) *)
+  (*   assert (exists PI, IdentMap.find tid ProgI = Some PI) by admit. *)
+  (*   destruct H.  *)
+  (*   pose proof (thread_execs tid).  *)
+  (* Defined.  *)
+  (*   {| *)
+  (*     acts := G1.(acts) ++ G2.(acts); *)
+  (*     lab := lab;  *)
+  (*     rmw := G1.(rmw) ∪ G2.(rmw);  *)
+  (*     data := G1.(data) ∪ G2.(data);  *)
+  (*     addr := G1.(addr) ∪ G2.(addr);  *)
+  (*     ctrl := G1.(ctrl) ∪ G2.(ctrl);      *)
+  (*     rmw_dep := G1.(rmw_dep) ∪ G2.(rmw_dep);      *)
+  (*     rf := G1.(rf) ∪ G2.(rf);      *)
+  (*     co := G1.(co) ∪ G2.(co); *)
+  (*   |}. *)
+
+  (* Definition corresponding_preexecution tids G0 := *)
+  (*   match tids with *)
+  (*   | [] => G0 *)
+  (*   | tid::tids' => *)
+  (*     let GOt := *)
+  (*     {| *)
+  (*       acts := G1.(acts) ++ G2.(acts); *)
+  (*       lab := lab;  *)
+  (*       rmw := G1.(rmw) ∪ G2.(rmw);  *)
+  (*       data := G1.(data) ∪ G2.(data);  *)
+  (*       addr := G1.(addr) ∪ G2.(addr);  *)
+  (*       ctrl := G1.(ctrl) ∪ G2.(ctrl);      *)
+  (*       rmw_dep := G1.(rmw_dep) ∪ G2.(rmw_dep);      *)
+  (*       rf := G1.(rf) ∪ G2.(rf);      *)
+  (*       co := G1.(co) ∪ G2.(co); *)
+  (*   |}.  *)
+    
   Theorem compilation_correctness: exists (GO: execution),
       ⟪WF': Wf GO ⟫ /\
       ⟪ExecO: Oprogram_execution OCamlProgO GO⟫ /\
       ⟪OC: ocaml_consistent GO ⟫ /\
       ⟪SameBeh: same_behavior GO GI⟫.
   Proof.
+    pose proof GO_exists as [GO [OPE EVENTS]].
+    exists GO. splits; auto.
+    { (* TODO: split WF condition to local and global  *)      
+      admit. }
+    admit. 
     
   Admitted.
   
