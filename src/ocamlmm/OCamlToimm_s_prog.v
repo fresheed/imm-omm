@@ -122,17 +122,22 @@ Section OCamlMM_TO_IMM_S_PROG.
       
   Variable ProgO ProgI: Prog.Prog.t.
   Hypothesis Compiled: is_compiled ProgI ProgO.
-  Hypothesis OCamlProgO: OCamlProgram ProgO. 
+  Hypothesis OCamlProgO: OCamlProgram ProgO.
 
-  Theorem compilation_correctness:
-    forall (GI: execution) (WF: Wf GI) sc (ExecI: program_execution ProgI GI) 
-      (IPC: imm_s.imm_psc_consistent GI sc),
-    exists (GO: execution),
+  Variable GI: execution.
+  Hypothesis WF: Wf GI.
+  Variable sc: relation actid. 
+  Hypothesis ExecI: program_execution ProgI GI.
+  Hypothesis IPC: imm_s.imm_psc_consistent GI sc.
+
+  Theorem compilation_correctness: exists (GO: execution),
       ⟪WF': Wf GO ⟫ /\
       ⟪ExecO: Oprogram_execution OCamlProgO GO⟫ /\
       ⟪OC: ocaml_consistent GO ⟫ /\
       ⟪SameBeh: same_behavior GO GI⟫.
-  Proof. Admitted.
+  Proof.
+    
+  Admitted.
   
   
 End OCamlMM_TO_IMM_S_PROG.
