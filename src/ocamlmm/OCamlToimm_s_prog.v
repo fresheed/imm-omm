@@ -182,37 +182,36 @@ Section OCamlMM_TO_IMM_S_PROG.
   Proof.
   Admitted. 
 
-  Inductive is_thread_compiled : list Prog.Instr.t -> list Prog.Instr.t -> Prop :=
-  | compiled_empty: is_thread_compiled [] []
-  | compiled_Rna lhs loc ro ri (rest: is_thread_compiled ro ri):
+  Inductive is_thread_block_compiled : list Prog.Instr.t -> list (list Prog.Instr.t) -> Prop :=
+  | compiled_empty: is_thread_block_compiled [] []
+  | compiled_Rna lhs loc ro ri (rest: is_thread_block_compiled ro ri):
       let ld := (Instr.load Orlx lhs loc) in
-      is_thread_compiled (ld :: ro) (ld :: ri)
-  | compiled_Wna loc val ro ri (rest: is_thread_compiled ro ri):
+      is_thread_block_compiled (ld :: ro) ([ld] :: ri)
+  | compiled_Wna loc val ro ri (rest: is_thread_block_compiled ro ri):
       let st := (Instr.store Orlx loc val) in
       let f := (Instr.fence Oacqrel) in
-      is_thread_compiled (st :: ro) (f :: st :: ri)
-  | compiled_Rat lhs loc ro ri (rest: is_thread_compiled ro ri):
+      is_thread_block_compiled (st :: ro) ([f; st] :: ri)
+  | compiled_Rat lhs loc ro ri (rest: is_thread_block_compiled ro ri):
       let ld := (Instr.load Osc lhs loc) in
       let f := (Instr.fence Oacq) in
-      is_thread_compiled (ld :: ro) (f :: ld :: ri)
-  | compiled_Wat loc val ro ri (rest: is_thread_compiled ro ri):
+      is_thread_block_compiled (ld :: ro) ([f; ld] :: ri)
+  | compiled_Wat loc val ro ri (rest: is_thread_block_compiled ro ri):
       let st := (Instr.store Osc loc val) in
       let exc := (Instr.update (Instr.exchange val) Xpln Osc Osc exchange_reg loc) in
       let f := (Instr.fence Oacq) in
-      is_thread_compiled (st :: ro) (f :: exc :: ri)
-  | compiled_assign lhs rhs ro ri (rest: is_thread_compiled ro ri):
+      is_thread_block_compiled (st :: ro) ([f; exc] :: ri)
+  | compiled_assign lhs rhs ro ri (rest: is_thread_block_compiled ro ri):
       let asn := (Instr.assign lhs rhs) in
-      is_thread_compiled (asn :: ro) (asn :: ri)
-  | compiled_ifgoto e n ro ri (rest: is_thread_compiled ro ri):
+      is_thread_block_compiled (asn :: ro) ([asn] :: ri)
+  | compiled_ifgoto e n ro ri (rest: is_thread_block_compiled ro ri):
       let igt := (Instr.ifgoto e n) in
-      is_thread_compiled (igt :: ro) (igt :: ri). 
+      is_thread_block_compiled (igt :: ro) ([igt] :: ri). 
   
 
   Definition is_compiled (po: Prog.Prog.t) (pi: Prog.Prog.t) :=
     ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id po <-> IdentMap.In t_id pi ⟫ /\
     forall thread to ti (TO: IdentMap.find thread po = Some to)
-      (TI: IdentMap.find thread pi = Some ti),
-      is_thread_compiled to ti.
+      (TI: IdentMap.find thread pi = Some ti), exists block_ti, flatten block_ti = ti /\ is_thread_block_compiled to block_ti.
 
   Notation "'E' G" := G.(acts_set) (at level 1).
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
@@ -279,19 +278,21 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   Definition kept_events G := ⦗set_compl (dom_rel G.(rmw) ∪₁ F G)⦘.
   
-  Theorem correspondence_partial:
-    forall (BPI: list (list Prog.Instr.t)) PI (BLOCK_PI: flatten BPI = PI)
-      tid SGI (ExI: thread_execution tid PI SGI)
-      (INCL_I: prefix_option PI (IdentMap.find tid ProgI))
-      PO (INCL_O: prefix_option PO (IdentMap.find tid ProgO))
-      (COMP: is_thread_compiled PO PI),
-    exists SGO, Othread_execution tid PO SGO /\
-           same_behavior_local SGO SGI. 
+  Theorem correspondence_partial
+    (* forall (BPI: list (list Prog.Instr.t)) PI (BLOCK_PI: flatten BPI = PI) *)
+    (*   tid SGI (ExI: thread_execution tid PI SGI) *)
+    (*   (INCL_I: prefix_option PI (IdentMap.find tid ProgI)) *)
+    (*   PO (INCL_O: prefix_option PO (IdentMap.find tid ProgO)) *)
+    (*   (COMP: is_thread_block_compiled PO PI), *)
+    (* exists SGO, Othread_execution tid PO SGO /\ *)
+    (*        same_behavior_local SGO SGI.  *)
+          BPI PO BPI' l (LI: length BPI' = l) (PREFI: prefix BPI' BPI)
+          PI' (BLOCKS: flatten BPI' = PI')
+          tid GI' (EXECI: thread_execution tid PI' GI')
+          PO' (PREFO: prefix PO' PO) (COMP': is_thread_block_compiled PO' BPI'):
+    exists GO', Othread_execution tid PO' GO' /\
+           same_behavior_local GO' GI'. 
   Proof. Admitted.
-
-  Lemma ProgI_blocks: forall tid PI (THREAD: IdentMap.find tid ProgI = Some PI),
-      exists BPI, flatten BPI = PI.
-  Proof. Admitted. 
 
   Lemma thread_execs: forall tid PO (THREAD_O: IdentMap.find tid ProgO = Some PO)
                         PI (THREAD_I: IdentMap.find tid ProgI = Some PI)
@@ -300,15 +301,17 @@ Section OCamlMM_TO_IMM_S_PROG.
       exists SGO, Othread_execution tid PO SGO /\
              same_behavior_local SGO SGI. 
   Proof.
-    ins.    
-    assert (BLOCKS: exists BPI, flatten BPI = PI).
-    { apply (ProgI_blocks tid THREAD_I). }
-    destruct BLOCKS as [BPI BLOCKS].
-    apply (correspondence_partial BPI BLOCKS ExI).
-    { red. eexists. exists []. rewrite app_nil_r. eauto. }
-    { red. eexists. exists []. rewrite app_nil_r. eauto. }
-    red in Compiled. destruct Compiled as [_ Comp].
-    apply (Comp tid); auto.
+    ins.
+    destruct Compiled as [_ COMP_BLOCKS].
+    specialize (COMP_BLOCKS tid PO PI THREAD_O THREAD_I).
+    destruct COMP_BLOCKS as [BPI [BLOCKS COMP]].
+    assert (exists l, length BPI = l) as [l L].
+    { exists (length BPI); auto. }
+    assert (PREF_REFL: prefix BPI BPI).
+    { red. exists []. rewrite app_nil_r. eauto. }
+    apply (@correspondence_partial _ PO _ _ L PREF_REFL _ BLOCKS _ _ ExI).
+    { red. exists []. rewrite app_nil_r. eauto. }
+    auto. 
   Qed.
 
   Lemma GO_exists: exists GO,
