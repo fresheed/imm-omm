@@ -279,13 +279,6 @@ Section OCamlMM_TO_IMM_S_PROG.
   Definition kept_events G := ⦗set_compl (dom_rel G.(rmw) ∪₁ F G)⦘.
   
   Theorem correspondence_partial
-    (* forall (BPI: list (list Prog.Instr.t)) PI (BLOCK_PI: flatten BPI = PI) *)
-    (*   tid SGI (ExI: thread_execution tid PI SGI) *)
-    (*   (INCL_I: prefix_option PI (IdentMap.find tid ProgI)) *)
-    (*   PO (INCL_O: prefix_option PO (IdentMap.find tid ProgO)) *)
-    (*   (COMP: is_thread_block_compiled PO PI), *)
-    (* exists SGO, Othread_execution tid PO SGO /\ *)
-    (*        same_behavior_local SGO SGI.  *)
           BPI PO BPI' l (LI: length BPI' = l) (PREFI: prefix BPI' BPI)
           PI' (BLOCKS: flatten BPI' = PI')
           tid GI' (EXECI: thread_execution tid PI' GI')
