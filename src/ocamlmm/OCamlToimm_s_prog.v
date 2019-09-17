@@ -186,26 +186,26 @@ Section OCamlMM_TO_IMM_S_PROG.
   | compiled_empty: is_thread_block_compiled [] []
   | compiled_Rna lhs loc ro ri (rest: is_thread_block_compiled ro ri):
       let ld := (Instr.load Orlx lhs loc) in
-      is_thread_block_compiled (ld :: ro) ([ld] :: ri)
+      is_thread_block_compiled (ro ++ [ld]) (ri ++ [[ld]])
   | compiled_Wna loc val ro ri (rest: is_thread_block_compiled ro ri):
       let st := (Instr.store Orlx loc val) in
       let f := (Instr.fence Oacqrel) in
-      is_thread_block_compiled (st :: ro) ([f; st] :: ri)
+      is_thread_block_compiled (ro ++ [st]) (ri ++ [[f; st]])
   | compiled_Rat lhs loc ro ri (rest: is_thread_block_compiled ro ri):
       let ld := (Instr.load Osc lhs loc) in
       let f := (Instr.fence Oacq) in
-      is_thread_block_compiled (ld :: ro) ([f; ld] :: ri)
+      is_thread_block_compiled (ro ++ [ld]) (ri ++ [[f; ld]])
   | compiled_Wat loc val ro ri (rest: is_thread_block_compiled ro ri):
       let st := (Instr.store Osc loc val) in
       let exc := (Instr.update (Instr.exchange val) Xpln Osc Osc exchange_reg loc) in
       let f := (Instr.fence Oacq) in
-      is_thread_block_compiled (st :: ro) ([f; exc] :: ri)
+      is_thread_block_compiled (ro ++ [st]) (ri ++ [[f; exc]])
   | compiled_assign lhs rhs ro ri (rest: is_thread_block_compiled ro ri):
       let asn := (Instr.assign lhs rhs) in
-      is_thread_block_compiled (asn :: ro) ([asn] :: ri)
+      is_thread_block_compiled (ro ++ [asn]) (ri ++ [[asn]])
   | compiled_ifgoto e n ro ri (rest: is_thread_block_compiled ro ri):
       let igt := (Instr.ifgoto e n) in
-      is_thread_block_compiled (igt :: ro) ([igt] :: ri). 
+      is_thread_block_compiled (ro ++ [igt]) (ri ++ [[igt]]). 
   
 
   Definition is_compiled (po: Prog.Prog.t) (pi: Prog.Prog.t) :=
@@ -318,7 +318,15 @@ Section OCamlMM_TO_IMM_S_PROG.
       PO' (COMP': is_thread_block_compiled PO' BPI'),
     exists GO', Othread_execution tid PO' GO' /\
            same_behavior_local GO' GI' /\
-           Wf_local GO'. 
+           Wf_local GO'.
+
+  Lemma compilation_same_length PO BPI (COMP: is_thread_block_compiled PO BPI):
+    length PO = length BPI.
+  Proof.
+    induction COMP.
+    { auto. }
+    all: do 2 rewrite app_length; rewrite IHCOMP; auto.
+  Qed. 
     
   Theorem correspondence_partial: 
     forall BPI', tmp BPI'.
@@ -329,7 +337,10 @@ Section OCamlMM_TO_IMM_S_PROG.
       intros.
       (* assert (NO_BPI': BPI' = []) by (apply length_zero_iff_nil; auto).  *)
       (* rewrite NO_BPI' in *.  *)
-      assert (NO_PO': PO' = []) by (inversion COMP'; auto).
+      assert (NO_PO': PO' = []).
+      { inversion COMP'.
+        { auto. }
+        all: apply app_eq_nil in H1; desc; discriminate. }
       assert (GI'_INIT: GI' = init_execution).
       { red in EXECI.
         assert (PI' = []) by (simpl in BLOCKS; auto).
@@ -356,11 +367,61 @@ Section OCamlMM_TO_IMM_S_PROG.
       (* unfold init_execution in GI'_INIT. *)
       all: unfold init_execution; simpl; basic_solver.
     - intros block BPI' IH.
-      red. red in IH.
-      intros PI BLOCKS tid GI EXECI WFI PO COMP.
-      
-      
-
+      red. (* red in IH. *)
+      intros PI BLOCKS tid GI EXECI WFLI PO COMP.
+      inversion COMP.
+      + symmetry in H1. apply app_eq_nil in H1. desc.
+        discriminate.
+      + rename ro into PO'.
+        pose proof (compilation_same_length rest).
+        pose proof (compilation_same_length COMP).
+        rewrite app_length in H2. simpl in H2.
+        assert (length (PO' ++ [ld]) = length PO).
+        { rewrite H. auto. }
+        rewrite app_length in H3. simpl in H3.
+        rewrite H0 in H3.
+        rewrite <- H3 in H2. rewrite !NPeano.Nat.add_1_r in H2.
+        injection H2. intros SL.
+        assert (TMP: BPI' = ri) by admit. assert (block = [ld]) by admit.
+        rewrite <- TMP in *. clear dependent ri. clear H1 H2 H3 SL. 
+        assert (exists PI', flatten BPI' = PI') as [PI' BLOCKS'].
+        { rewrite flatten_app in BLOCKS.  eauto. }
+        assert (exists GI', thread_execution tid PI' GI') as [GI' EXECI'] by admit.
+        assert (Wf_local GI') as WFLI' by admit. 
+        red in IH. 
+        specialize (IH PI' BLOCKS' tid GI' EXECI' WFLI' PO' rest).
+        destruct IH as [GO' [OEXEC' [SB' WFLO']]].
+        red in OEXEC'. destruct OEXEC' as [st' [TRANS' [TERM' GSTATE']]].
+        eexists. split.
+        { red. eexists.
+          splits.
+          { apply clos_refl_transE. right. 
+            rewrite t_rt_step. exists st'. split.
+            { assert (init (PO' ++ [ld]) = init PO').
+              { unfold init. simpl.
+                admit. (* prove that adding instructions preserves reachability *) }
+              rewrite H1. auto. }
+            red. eexists. red. split. 
+            { admit. (* again, should extend previous state *)}
+            red. exists ld. exists 1.
+            split.
+            { admit. (* prove that ld is the last instruction *)}
+            eapply load.
+            { eauto. }
+            { subst ld. eauto. }
+            { eauto. }
+            { eauto. admit. }
+            { admit. }
+            { admit. }
+            { admit. }
+            { admit. }
+            { admit. }
+          }
+          { admit. }
+          admit.
+        }
+        
+            
   Theorem correspondence_partial BPI PO l:
     forall BPI' (LI: length BPI' = l) (PREFI: prefix BPI' BPI)
       PI' (BLOCKS: flatten BPI' = PI')
