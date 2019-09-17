@@ -223,7 +223,10 @@ Section OCamlMM_TO_IMM_S_PROG.
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
   Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
   Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1). 
+  Notation "'R_ex' G" := (fun a => is_true (R_ex G.(lab) a)) (at level 1).
   Notation "'hbo'" := (OCaml.hb). 
+  Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
+  Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
   
   Definition prepend_events (s: actid -> Prop) (shift: nat):=
     fun (a: actid) =>
@@ -263,7 +266,7 @@ Section OCamlMM_TO_IMM_S_PROG.
   Hypothesis OCamlProgO: OCamlProgram ProgO.
 
   Variable GI: execution.
-  Hypothesis WF: Wf GI.
+  Hypothesis WFI: Wf GI.
   Variable sc: relation actid. 
   Hypothesis ExecI: program_execution ProgI GI.
   Hypothesis IPC: imm_s.imm_psc_consistent GI sc.
@@ -275,13 +278,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     exists l s, lo = Some l /\ p ++ s = l.
 
   Definition kept_events G := ⦗set_compl (dom_rel G.(rmw) ∪₁ F G)⦘.
-  (* Definition respects_thread_relations Go Gi := *)
-  (*   Go.(rmw) = ∅₂ /\ *)
-  (*   Go.(data) = kept_events Gi ⨾ Gi.(data) ⨾ kept_events Gi /\ *)
-  (*   Go.(addr) = kept_events Gi ⨾ Gi.(addr) ⨾ kept_events Gi /\ *)
-  (*   Go.(ctrl) = kept_events Gi ⨾ Gi.(ctrl) ⨾ kept_events Gi /\ *)
-  (*   Go.(rmw_dep) = ∅₂.               *)
-
   
   Theorem correspondence_partial:
     forall (BPI: list (list Prog.Instr.t)) PI (BLOCK_PI: flatten BPI = PI)
@@ -318,45 +314,55 @@ Section OCamlMM_TO_IMM_S_PROG.
   Lemma GO_exists: exists GO,
       Oprogram_execution OCamlProgO GO /\
       same_behavior GO GI. 
-  Proof. Admitted. 
+  Proof. Admitted.
 
-  (* Definition merge_executions (lab: actid -> label) (G0: execution) (tid: thread_id): execution. *)
-  (*   (* TODO: check if tid in thread list *) *)
-  (*   assert (exists PI, IdentMap.find tid ProgI = Some PI) by admit. *)
-  (*   destruct H.  *)
-  (*   pose proof (thread_execs tid).  *)
-  (* Defined.  *)
-  (*   {| *)
-  (*     acts := G1.(acts) ++ G2.(acts); *)
-  (*     lab := lab;  *)
-  (*     rmw := G1.(rmw) ∪ G2.(rmw);  *)
-  (*     data := G1.(data) ∪ G2.(data);  *)
-  (*     addr := G1.(addr) ∪ G2.(addr);  *)
-  (*     ctrl := G1.(ctrl) ∪ G2.(ctrl);      *)
-  (*     rmw_dep := G1.(rmw_dep) ∪ G2.(rmw_dep);      *)
-  (*     rf := G1.(rf) ∪ G2.(rf);      *)
-  (*     co := G1.(co) ∪ G2.(co); *)
-  (*   |}. *)
+  Record Wf_local (G: execution) :=
+    {  wf_index : forall a b, 
+        (E G) a /\ (E G) b /\ a <> b /\ tid a = tid b /\ ~ is_init a -> index a <> index b;
+       wf_dataD : G.(data) ≡ ⦗R G⦘ ⨾ G.(data) ⨾ ⦗W G⦘ ;
+       ctrl_sb : G.(ctrl) ⨾ G.(sb) ⊆ G.(ctrl) ;
+       wf_addrD : G.(addr) ≡ ⦗R G⦘ ⨾ G.(addr) ⨾ ⦗RW G⦘ ;
+       wf_ctrlD : G.(ctrl) ≡ ⦗R G⦘ ⨾ G.(ctrl) ;
+       wf_rmwD : G.(rmw) ≡ ⦗R_ex G⦘ ⨾ G.(rmw) ⨾ ⦗W G⦘ ;
+       wf_rmwl : G.(rmw) ⊆ same_loc G ;
+       wf_rmwi : G.(rmw) ⊆ immediate G.(sb) ;
+       wf_rmw_depD : G.(rmw_dep) ≡ ⦗R G⦘ ⨾ G.(rmw_dep) ⨾ ⦗R_ex G⦘ ;
+    }. 
 
-  (* Definition corresponding_preexecution tids G0 := *)
-  (*   match tids with *)
-  (*   | [] => G0 *)
-  (*   | tid::tids' => *)
-  (*     let GOt := *)
-  (*     {| *)
-  (*       acts := G1.(acts) ++ G2.(acts); *)
-  (*       lab := lab;  *)
-  (*       rmw := G1.(rmw) ∪ G2.(rmw);  *)
-  (*       data := G1.(data) ∪ G2.(data);  *)
-  (*       addr := G1.(addr) ∪ G2.(addr);  *)
-  (*       ctrl := G1.(ctrl) ∪ G2.(ctrl);      *)
-  (*       rmw_dep := G1.(rmw_dep) ∪ G2.(rmw_dep);      *)
-  (*       rf := G1.(rf) ∪ G2.(rf);      *)
-  (*       co := G1.(co) ∪ G2.(co); *)
-  (*   |}.  *)
+  Record Wf_global (G: execution) :=
+    {
+       data_in_sb : G.(data) ⊆ G.(sb) ;
+       addr_in_sb : G.(addr) ⊆ G.(sb) ;
+       ctrl_in_sb : G.(ctrl) ⊆ G.(sb) ;
+       rmw_dep_in_sb : G.(rmw_dep) ⊆ G.(sb) ;
+       wf_rfE : G.(rf) ≡ ⦗E G⦘ ⨾ G.(rf) ⨾ ⦗E G⦘ ;
+       wf_rfD : G.(rf) ≡ ⦗W G⦘ ⨾ G.(rf) ⨾ ⦗R G⦘ ;
+       wf_rfl : G.(rf) ⊆ same_loc G;
+       wf_rfv : funeq (val G.(lab)) G.(rf) ;
+       wf_rff : functional G.(rf)⁻¹ ;
+       wf_coE : G.(co) ≡ ⦗E G⦘ ⨾ G.(co) ⨾ ⦗E G⦘ ;
+       wf_coD : G.(co) ≡ ⦗W G⦘ ⨾ G.(co) ⨾ ⦗W G⦘ ;
+       wf_col : G.(co) ⊆ same_loc G;
+       co_trans : transitive G.(co) ;
+       wf_co_total : forall ol, is_total (E G ∩₁ W G ∩₁ (fun x => loc G.(lab) x = ol)) G.(co) ;
+       co_irr : irreflexive G.(co) ;
+       wf_init : forall l, (exists b, E G b /\ loc G.(lab) b = Some l) -> E G (InitEvent l) ;
+       wf_init_lab : forall l, G.(lab) (InitEvent l) = Astore Xpln Opln l 0 ;       
+    }.
+
+  Lemma wf_split G (WFG: Wf_global G)
+        (WFL: forall tid SG (TRE: thread_restricted_execution G tid SG), Wf_local SG):
+    Wf G.
+  Proof.
+    destruct WFG. split; auto.
+    { ins. desc. set (t := tid a).
+      specialize (WFL t).
+      admit. }
+  Admitted. 
+    
     
   Theorem compilation_correctness: exists (GO: execution),
-      ⟪WF': Wf GO ⟫ /\
+      ⟪WFO: Wf GO ⟫ /\
       ⟪ExecO: Oprogram_execution OCamlProgO GO⟫ /\
       ⟪OC: ocaml_consistent GO ⟫ /\
       ⟪SameBeh: same_behavior GO GI⟫.
