@@ -243,7 +243,7 @@ Section OCamlMM_TO_IMM_S_PROG.
     let rmw_pair r w := (tid r = tid w) /\ (index r = index w - 1) in
 
     let wf_labels :=
-        (forall e (OMM_EVENT: E GO e), GI.(lab) e = GO.(lab) e) /\
+        (GI.(lab) = GO.(lab)) /\
         (forall e (FACQ: Facq' e), GI.(lab) e = Afence Oacq) /\
         (forall e (FACQ: Facqrel' e), GI.(lab) e = Afence Oacqrel) /\
         (forall e (R': R' e), exists loc val w,
@@ -257,7 +257,7 @@ Section OCamlMM_TO_IMM_S_PROG.
   Definition same_behavior (GO GI: execution) :=
     ⟪SAME_LOCAL: same_behavior_local GO GI ⟫ /\
     ⟪SAME_CO: GI.(co) ≡ GO.(co)⟫ /\
-    ⟪EXT_RF: GO.(rf) ⊆ GI.(rf)⟫.
+    ⟪EXT_RF: GO.(rf) ≡ GI.(rf) ⨾ ⦗set_compl (dom_rel GI.(rmw))⦘⟫.
     
   
   Variable ProgO ProgI: Prog.Prog.t.
@@ -278,21 +278,73 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   Definition kept_events G := ⦗set_compl (dom_rel G.(rmw) ∪₁ F G)⦘.
   
+  Record Wf_local (G: execution) :=
+    {  wf_index' : forall a b, 
+        (E G) a /\ (E G) b /\ a <> b /\ tid a = tid b /\ ~ is_init a -> index a <> index b;
+       wf_dataD' : G.(data) ≡ ⦗R G⦘ ⨾ G.(data) ⨾ ⦗W G⦘ ;
+       ctrl_sb' : G.(ctrl) ⨾ G.(sb) ⊆ G.(ctrl) ;
+       wf_addrD' : G.(addr) ≡ ⦗R G⦘ ⨾ G.(addr) ⨾ ⦗RW G⦘ ;
+       wf_ctrlD' : G.(ctrl) ≡ ⦗R G⦘ ⨾ G.(ctrl) ;
+       wf_rmwD' : G.(rmw) ≡ ⦗R_ex G⦘ ⨾ G.(rmw) ⨾ ⦗W G⦘ ;
+       wf_rmwl' : G.(rmw) ⊆ same_loc G ;
+       wf_rmwi' : G.(rmw) ⊆ immediate G.(sb) ;
+       wf_rmw_depD' : G.(rmw_dep) ≡ ⦗R G⦘ ⨾ G.(rmw_dep) ⨾ ⦗R_ex G⦘ ;
+    }. 
+
+  Record Wf_global (G: execution) :=
+    {
+       data_in_sb' : G.(data) ⊆ G.(sb) ;
+       addr_in_sb' : G.(addr) ⊆ G.(sb) ;
+       ctrl_in_sb' : G.(ctrl) ⊆ G.(sb) ;
+       rmw_dep_in_sb' : G.(rmw_dep) ⊆ G.(sb) ;
+       wf_rfE' : G.(rf) ≡ ⦗E G⦘ ⨾ G.(rf) ⨾ ⦗E G⦘ ;
+       wf_rfD' : G.(rf) ≡ ⦗W G⦘ ⨾ G.(rf) ⨾ ⦗R G⦘ ;
+       wf_rfl' : G.(rf) ⊆ same_loc G;
+       wf_rfv' : funeq (val G.(lab)) G.(rf) ;
+       wf_rff' : functional G.(rf)⁻¹ ;
+       wf_coE' : G.(co) ≡ ⦗E G⦘ ⨾ G.(co) ⨾ ⦗E G⦘ ;
+       wf_coD' : G.(co) ≡ ⦗W G⦘ ⨾ G.(co) ⨾ ⦗W G⦘ ;
+       wf_col' : G.(co) ⊆ same_loc G;
+       co_trans' : transitive G.(co) ;
+       wf_co_total' : forall ol, is_total (E G ∩₁ W G ∩₁ (fun x => loc G.(lab) x = ol)) G.(co) ;
+       co_irr' : irreflexive G.(co) ;
+       wf_init' : forall l, (exists b, E G b /\ loc G.(lab) b = Some l) -> E G (InitEvent l) ;
+       wf_init_lab' : forall l, G.(lab) (InitEvent l) = Astore Xpln Opln l 0 ;       
+    }.
+
   Theorem correspondence_partial
           BPI PO BPI' l (LI: length BPI' = l) (PREFI: prefix BPI' BPI)
           PI' (BLOCKS: flatten BPI' = PI')
-          tid GI' (EXECI: thread_execution tid PI' GI')
+          tid GI' (EXECI: thread_execution tid PI' GI') (WFLI: Wf_local GI')
           PO' (PREFO: prefix PO' PO) (COMP': is_thread_block_compiled PO' BPI'):
     exists GO', Othread_execution tid PO' GO' /\
-           same_behavior_local GO' GI'. 
+           same_behavior_local GO' GI' /\
+           Wf_local GO'.
   Proof. Admitted.
+
+  Lemma restricted_wf SGI tid (TRI: thread_restricted_execution GI tid SGI): Wf SGI. 
+  Proof.
+  Admitted. 
+    
+  Lemma wf_alt G: Wf G <-> Wf_global G /\ (forall tid SG (TRE: thread_restricted_execution G tid SG), Wf_local SG). 
+  Proof.
+    (* destruct WFG. split; auto. *)
+    (* { ins. desc. set (t := tid a). *)
+    (*   specialize (WFL t). *)
+    (*   admit. } *)
+  Admitted.
+
+  Lemma tre_idempotent SG tid G (TRE: thread_restricted_execution G tid SG):
+    thread_restricted_execution SG tid SG.
+  Proof. Admitted. 
 
   Lemma thread_execs: forall tid PO (THREAD_O: IdentMap.find tid ProgO = Some PO)
                         PI (THREAD_I: IdentMap.find tid ProgI = Some PI)
                         SGI (TRI: thread_restricted_execution GI tid SGI)
                         (ExI: thread_execution tid PI SGI), 
       exists SGO, Othread_execution tid PO SGO /\
-             same_behavior_local SGO SGI. 
+             same_behavior_local SGO SGI /\
+             Wf_local SGO. 
   Proof.
     ins.
     destruct Compiled as [_ COMP_BLOCKS].
@@ -302,9 +354,12 @@ Section OCamlMM_TO_IMM_S_PROG.
     { exists (length BPI); auto. }
     assert (PREF_REFL: prefix BPI BPI).
     { red. exists []. rewrite app_nil_r. eauto. }
-    apply (@correspondence_partial _ PO _ _ L PREF_REFL _ BLOCKS _ _ ExI).
+    apply (@correspondence_partial _ PO _ _ L PREF_REFL _ BLOCKS _ _ ExI); auto.
+    { pose proof restricted_wf TRI. apply wf_alt in H. desc.
+      specialize (H0 tid SGI).
+      apply H0. 
+      apply (tre_idempotent TRI). } 
     { red. exists []. rewrite app_nil_r. eauto. }
-    auto. 
   Qed.
 
   Lemma GO_exists: exists GO,
@@ -312,50 +367,101 @@ Section OCamlMM_TO_IMM_S_PROG.
       same_behavior GO GI. 
   Proof. Admitted.
 
-  Record Wf_local (G: execution) :=
-    {  wf_index : forall a b, 
-        (E G) a /\ (E G) b /\ a <> b /\ tid a = tid b /\ ~ is_init a -> index a <> index b;
-       wf_dataD : G.(data) ≡ ⦗R G⦘ ⨾ G.(data) ⨾ ⦗W G⦘ ;
-       ctrl_sb : G.(ctrl) ⨾ G.(sb) ⊆ G.(ctrl) ;
-       wf_addrD : G.(addr) ≡ ⦗R G⦘ ⨾ G.(addr) ⨾ ⦗RW G⦘ ;
-       wf_ctrlD : G.(ctrl) ≡ ⦗R G⦘ ⨾ G.(ctrl) ;
-       wf_rmwD : G.(rmw) ≡ ⦗R_ex G⦘ ⨾ G.(rmw) ⨾ ⦗W G⦘ ;
-       wf_rmwl : G.(rmw) ⊆ same_loc G ;
-       wf_rmwi : G.(rmw) ⊆ immediate G.(sb) ;
-       wf_rmw_depD : G.(rmw_dep) ≡ ⦗R G⦘ ⨾ G.(rmw_dep) ⨾ ⦗R_ex G⦘ ;
-    }. 
-
-  Record Wf_global (G: execution) :=
-    {
-       data_in_sb : G.(data) ⊆ G.(sb) ;
-       addr_in_sb : G.(addr) ⊆ G.(sb) ;
-       ctrl_in_sb : G.(ctrl) ⊆ G.(sb) ;
-       rmw_dep_in_sb : G.(rmw_dep) ⊆ G.(sb) ;
-       wf_rfE : G.(rf) ≡ ⦗E G⦘ ⨾ G.(rf) ⨾ ⦗E G⦘ ;
-       wf_rfD : G.(rf) ≡ ⦗W G⦘ ⨾ G.(rf) ⨾ ⦗R G⦘ ;
-       wf_rfl : G.(rf) ⊆ same_loc G;
-       wf_rfv : funeq (val G.(lab)) G.(rf) ;
-       wf_rff : functional G.(rf)⁻¹ ;
-       wf_coE : G.(co) ≡ ⦗E G⦘ ⨾ G.(co) ⨾ ⦗E G⦘ ;
-       wf_coD : G.(co) ≡ ⦗W G⦘ ⨾ G.(co) ⨾ ⦗W G⦘ ;
-       wf_col : G.(co) ⊆ same_loc G;
-       co_trans : transitive G.(co) ;
-       wf_co_total : forall ol, is_total (E G ∩₁ W G ∩₁ (fun x => loc G.(lab) x = ol)) G.(co) ;
-       co_irr : irreflexive G.(co) ;
-       wf_init : forall l, (exists b, E G b /\ loc G.(lab) b = Some l) -> E G (InitEvent l) ;
-       wf_init_lab : forall l, G.(lab) (InitEvent l) = Astore Xpln Opln l 0 ;       
-    }.
-
-  Lemma wf_split G (WFG: Wf_global G)
-        (WFL: forall tid SG (TRE: thread_restricted_execution G tid SG), Wf_local SG):
-    Wf G.
+  Lemma Wf_subgraph G' G (SB: same_behavior G G') (WF: Wf G'): Wf G.
   Proof.
-    destruct WFG. split; auto.
-    { ins. desc. set (t := tid a).
-      specialize (WFL t).
-      admit. }
-  Admitted. 
+    (* split. *)
+    (* red in SB. desc. red in SAME_LOCAL. desc.  *)
+  Admitted.
+
+  Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI):
+    ocaml_consistent GO.
+  Proof.
+    assert (E': E GO ≡₁ E GI ∩₁ (RW GI \₁ dom_rel (GI.(rmw)))).
+    { admit. }
+    red in SB. desc. 
+    assert (RF': rf GO ≡ rf GI ⨾ ⦗set_compl (dom_rel (rmw GI))⦘).
+    { rewrite EXT_RF. basic_solver. }
+    assert (SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘).
+    { unfold Execution.sb.        
+      rewrite !seqA. do 2 seq_rewrite <- id_inter.
+      rewrite set_interC. 
+      rewrite E'. 
+      basic_solver. }
+    assert (LAB': GO.(lab) = GI.(lab)).
+    { red in SAME_LOCAL. desc. auto. }
+    assert (SC': Sc GO ≡₁ Sc GI). 
+    { rewrite LAB'. auto. }
+    assert (HBO': hbo GO ⊆ hbo GI).
+    { unfold OCaml.hb. rewrite SC'. apply clos_trans_mori.
+      apply union_mori; [rewrite SB'; basic_solver | ].
+      hahn_frame. 
+      apply union_mori; [rewrite SAME_CO; basic_solver | rewrite RF'; basic_solver]. }
+    assert (CO': co GO ≡ co GI) by intuition.
+    assert (FR': fr GO ≡ ⦗set_compl (dom_rel (rmw GI))⦘ ⨾ fr GI).
+    { unfold fr. rewrite CO'. rewrite <- seqA. apply seq_more; [| basic_solver].
+      rewrite RF'.  basic_solver. }
+    red. red in OMM_I.
+    splits; auto.
+    { red. rewrite E', RF'.
+      desc. red in Comp.
+      rewrite set_interC, <- set_interA.
+      rewrite set_inter_minus_r.
+      arewrite (R GO ∩₁ E GI ∩₁ RW GI ≡₁ R GO ∩₁ E GI) by rewrite LAB'; basic_solver.
+      rewrite codom_eqv1.
+      rewrite set_minusE.
+      apply set_subset_inter.
+      { rewrite set_interC. rewrite LAB'. apply Comp. }
+      basic_solver. }
+    { assert (NO_RMW: rmw GO ≡ ∅₂) by admit. 
+      red. rewrite NO_RMW. basic_solver. }
+    { rewrite HBO', CO'. desc.  auto. }
+    { unfold fr. rewrite HBO', CO'. 
+      arewrite (rf GO ⊆ rf GI) by rewrite RF'; auto. 
+      auto. desc. auto. }    
+    assert (W_RMW: W GI ⊆₁ RW GI \₁ dom_rel (rmw GI)).
+    { rewrite set_minusE.
+      apply set_subset_inter_r. split; [basic_solver| ].
+      rewrite (WFI.(wf_rmwD)).
+      rewrite dom_eqv1. rewrite set_compl_inter.
+      unionR left. type_solver. }
+    arewrite (rfe GO ⊆ rfe GI).
+    { unfold rfe. rewrite SB', RF'.
+      apply inclusion_minus_l.
+      rewrite rfi_union_rfe at 1. rewrite seq_union_l.
+      apply union_mori.        
+      { rewrite (WFI.(wf_rfiD)). 
+        arewrite (rfi GI ⊆ sb GI).
+        apply seq_mori; [ | basic_solver]. 
+        apply eqv_rel_mori. apply W_RMW. }
+      unfold rfe. basic_solver. }
+    arewrite (fre GO ⊆ fre GI).
+    { unfold fre. rewrite SB', FR'.
+      apply inclusion_minus_l.
+      rewrite fri_union_fre at 1. rewrite seq_union_r.
+      apply union_mori.        
+      { rewrite (WFI.(wf_friD)). 
+        arewrite (fri GI ⊆ sb GI).
+        rewrite <- seqA. 
+        apply seq_mori; [basic_solver |].
+        hahn_frame. apply eqv_rel_mori. apply W_RMW. }
+      unfold fre. basic_solver. }
     
+    arewrite (coe GO ⊆ coe GI).
+    { unfold coe. rewrite SB', CO'. 
+      apply inclusion_minus_l.
+      rewrite coi_union_coe at 1. 
+      apply union_mori.        
+      { rewrite (WFI.(wf_coiD)). 
+        arewrite (coi GI ⊆ sb GI).
+        apply seq_mori; hahn_frame; apply eqv_rel_mori; apply W_RMW. } 
+      unfold coe. basic_solver. }
+    rewrite SC'. 
+    arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver.
+    desc. auto.
+  Admitted.
+
+  Lemma imm_implies_omm: ocaml_consistent GI.
+  Proof. Admitted. 
     
   Theorem compilation_correctness: exists (GO: execution),
       ⟪WFO: Wf GO ⟫ /\
@@ -365,11 +471,10 @@ Section OCamlMM_TO_IMM_S_PROG.
   Proof.
     pose proof GO_exists as [GO [OPE EVENTS]].
     exists GO. splits; auto.
-    { (* TODO: split WF condition to local and global  *)      
-      admit. }
-    admit. 
-    
-  Admitted.
+    { apply (Wf_subgraph EVENTS WFI). }
+    apply graph_switch; auto. 
+    apply imm_implies_omm.
+  Qed. 
   
   
 End OCamlMM_TO_IMM_S_PROG.
