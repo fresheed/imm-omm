@@ -312,15 +312,48 @@ Section OCamlMM_TO_IMM_S_PROG.
        wf_init_lab' : forall l, G.(lab) (InitEvent l) = Astore Xpln Opln l 0 ;       
     }.
 
-  Theorem correspondence_partial
-          BPI PO BPI' l (LI: length BPI' = l) (PREFI: prefix BPI' BPI)
-          PI' (BLOCKS: flatten BPI' = PI')
-          tid GI' (EXECI: thread_execution tid PI' GI') (WFLI: Wf_local GI')
-          PO' (PREFO: prefix PO' PO) (COMP': is_thread_block_compiled PO' BPI'):
+  Theorem correspondence_partial BPI PO l:
+    forall BPI' (LI: length BPI' = l) (PREFI: prefix BPI' BPI)
+      PI' (BLOCKS: flatten BPI' = PI')
+      tid GI' (EXECI: thread_execution tid PI' GI') (WFLI: Wf_local GI')
+      PO' (PREFO: prefix PO' PO) (COMP': is_thread_block_compiled PO' BPI'),
     exists GO', Othread_execution tid PO' GO' /\
            same_behavior_local GO' GI' /\
            Wf_local GO'.
-  Proof. Admitted.
+  Proof.    
+    induction l.
+    - intros.
+      assert (NO_BPI': BPI' = []) by (apply length_zero_iff_nil; auto). 
+      rewrite NO_BPI' in *. 
+      assert (NO_PO': PO' = []) by (inversion COMP'; auto).
+      assert (GI'_INIT: GI' = init_execution).
+      { red in EXECI.
+        assert (PI' = []) by (simpl in BLOCKS; auto).
+        (* rewrite H in EXECI.  *)
+        destruct EXECI as [FINS REACH]. desc.
+        admit. (* related to init issue *)}
+      exists init_execution. 
+      splits.
+      { red. exists (init PO'). split.
+        { red. apply rt_refl. }
+        split; auto.
+        unfold is_terminal. red.
+        simpl. rewrite NO_PO', length_nil.
+        admit. (* should be strictly larger? *) }
+      { assert (NO_E: E init_execution = ∅) by auto.
+        rewrite GI'_INIT.
+        red; auto.
+        rewrite NO_E. 
+        splits; auto. 
+        { admit. (* cannot rewrite ?*)
+        (* rewrite set_inter_empty_l. *) }
+        admit. admit. admit.  admit. }
+      split.
+      (* unfold init_execution in GI'_INIT. *)
+      all: unfold init_execution; simpl; basic_solver. 
+    - intros.
+      admit.       
+  Admitted.
 
   Lemma restricted_wf SGI tid (TRI: thread_restricted_execution GI tid SGI): Wf SGI. 
   Proof.
