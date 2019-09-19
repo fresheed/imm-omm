@@ -3,7 +3,7 @@
 (******************************************************************************)
 Require Import Classical Peano_dec.
 From hahn Require Import Hahn.
-
+Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
@@ -326,155 +326,95 @@ Section OCamlMM_TO_IMM_S_PROG.
     induction COMP.
     { auto. }
     all: do 2 rewrite app_length; rewrite IHCOMP; auto.
-  Qed. 
-    
-  Theorem correspondence_partial: 
-    forall BPI', tmp BPI'.
-  Proof.
-    clear dependent GI. 
-    apply (rev_ind _). 
-    - red. 
-      intros.
-      (* assert (NO_BPI': BPI' = []) by (apply length_zero_iff_nil; auto).  *)
-      (* rewrite NO_BPI' in *.  *)
-      assert (NO_PO': PO' = []).
-      { inversion COMP'.
-        { auto. }
-        all: apply app_eq_nil in H1; desc; discriminate. }
-      assert (GI'_INIT: GI' = init_execution).
-      { red in EXECI.
-        assert (PI' = []) by (simpl in BLOCKS; auto).
-        (* rewrite H in EXECI.  *)
-        destruct EXECI as [FINS REACH]. desc.
-        admit. (* related to init issue *)}
-      exists init_execution. 
-      splits.
-      { red. exists (init PO'). split.
-        { red. apply rt_refl. }
-        split; auto.
-        unfold is_terminal. red.
-        simpl. rewrite NO_PO', length_nil.
-        admit. (* should be strictly larger? *) }
-      { assert (NO_E: E init_execution = ∅) by auto.
-        rewrite GI'_INIT.
-        red; auto.
-        rewrite NO_E. 
-        splits; auto. 
-        { admit. (* cannot rewrite ?*)
-        (* rewrite set_inter_empty_l. *) }
-        admit. admit. admit.  admit. }
-      split.
-      (* unfold init_execution in GI'_INIT. *)
-      all: unfold init_execution; simpl; basic_solver.
-    - intros block BPI' IH.
-      red. (* red in IH. *)
-      intros PI BLOCKS tid GI EXECI WFLI PO COMP.
-      inversion COMP.
-      + symmetry in H1. apply app_eq_nil in H1. desc.
-        discriminate.
-      + rename ro into PO'.
-        pose proof (compilation_same_length rest).
-        pose proof (compilation_same_length COMP).
-        rewrite app_length in H2. simpl in H2.
-        assert (length (PO' ++ [ld]) = length PO).
-        { rewrite H. auto. }
-        rewrite app_length in H3. simpl in H3.
-        rewrite H0 in H3.
-        rewrite <- H3 in H2. rewrite !NPeano.Nat.add_1_r in H2.
-        injection H2. intros SL.
-        assert (TMP: BPI' = ri) by admit. assert (block = [ld]) by admit.
-        rewrite <- TMP in *. clear dependent ri. clear H1 H2 H3 SL. 
-        assert (exists PI', flatten BPI' = PI') as [PI' BLOCKS'].
-        { rewrite flatten_app in BLOCKS.  eauto. }
-        assert (exists GI', thread_execution tid PI' GI') as [GI' EXECI'] by admit.
-        assert (Wf_local GI') as WFLI' by admit. 
-        red in IH. 
-        specialize (IH PI' BLOCKS' tid GI' EXECI' WFLI' PO' rest).
-        destruct IH as [GO' [OEXEC' [SB' WFLO']]].
-        red in OEXEC'. destruct OEXEC' as [st' [TRANS' [TERM' GSTATE']]].
-        eexists. split.
-        { red. eexists.
-          splits.
-          { apply clos_refl_transE. right. 
-            rewrite t_rt_step. exists st'. split.
-            { assert (init (PO' ++ [ld]) = init PO').
-              { unfold init. simpl.
-                admit. (* prove that adding instructions preserves reachability *) }
-              rewrite H1. auto. }
-            red. eexists. red. split. 
-            { admit. (* again, should extend previous state *)}
-            red. exists ld. exists 1.
-            split.
-            { admit. (* prove that ld is the last instruction *)}
-            eapply load.
-            { eauto. }
-            { subst ld. eauto. }
-            { eauto. }
-            { eauto. admit. }
-            { admit. }
-            { admit. }
-            { admit. }
-            { admit. }
-            { admit. }
-          }
-          { admit. }
-          admit.
-        }
-        
-            
-  Theorem correspondence_partial BPI PO l:
-    forall BPI' (LI: length BPI' = l) (PREFI: prefix BPI' BPI)
-      PI' (BLOCKS: flatten BPI' = PI')
-      tid GI' (EXECI: thread_execution tid PI' GI') (WFLI: Wf_local GI')
-      PO' (PREFO: prefix PO' PO) (COMP': is_thread_block_compiled PO' BPI'),
-    exists GO', Othread_execution tid PO' GO' /\
-           same_behavior_local GO' GI' /\
-           Wf_local GO'.
-  Proof.    
-    induction l.
-    - intros.
-      assert (NO_BPI': BPI' = []) by (apply length_zero_iff_nil; auto). 
-      rewrite NO_BPI' in *. 
-      assert (NO_PO': PO' = []) by (inversion COMP'; auto).
-      assert (GI'_INIT: GI' = init_execution).
-      { red in EXECI.
-        assert (PI' = []) by (simpl in BLOCKS; auto).
-        (* rewrite H in EXECI.  *)
-        destruct EXECI as [FINS REACH]. desc.
-        admit. (* related to init issue *)}
-      exists init_execution. 
-      splits.
-      { red. exists (init PO'). split.
-        { red. apply rt_refl. }
-        split; auto.
-        unfold is_terminal. red.
-        simpl. rewrite NO_PO', length_nil.
-        admit. (* should be strictly larger? *) }
-      { assert (NO_E: E init_execution = ∅) by auto.
-        rewrite GI'_INIT.
-        red; auto.
-        rewrite NO_E. 
-        splits; auto. 
-        { admit. (* cannot rewrite ?*)
-        (* rewrite set_inter_empty_l. *) }
-        admit. admit. admit.  admit. }
-      split.
-      (* unfold init_execution in GI'_INIT. *)
-      all: unfold init_execution; simpl; basic_solver. 
-    - intros.
-      admit.       
-  Admitted.
+  Qed.
 
-  Lemma prefix_extension {A: Type} (l l': list A) (PREF: prefix l' l) len''  (LEN: length l' = S len''): exists l'' x, prefix l'' l /\ l' = l'' ++ [x]. 
-  Proof.
-    remember (length l') as len'. 
-    induction len'.
-    - discriminate.
-    - 
-    
+  Record block_state := 
+    {
+      binstrs : list (list Instr.t);
+      bpc : nat;
+      G' : execution;
+      eindex' : nat;
+      regf' : RegFile.t;
+      depf' : DepsFile.t;
+      ectrl' : actid -> Prop
+    }.
+
+  Definition block_init (binstrs: list (list Instr.t)) :=
+    {|
+      binstrs := binstrs;
+      bpc := 0;
+      G' := init_execution;
+      eindex' := 0;
+      regf' := RegFile.init;
+      depf' := DepsFile.init;
+      ectrl' := ∅ |}. 
+
+  Inductive step_seq : thread_id -> list ((list label)*Prog.Instr.t) -> state -> state -> Prop :=
+  | empty_step_seq tid st: step_seq tid [] st st
+  | next_step_seq
+      tid labels insn cur_st next_st fin_st
+      (STEP: istep_ tid labels cur_st next_st insn)
+      rest (REST: step_seq tid rest next_st fin_st):
+      step_seq tid ((labels,insn)::rest) cur_st fin_st.
+
+  Definition bst2st: block_state -> state.
+  Admitted. 
+
+  (* Definition st2bst st  -> block_state. *)
+  (* Admitted.  *)
+
+  Definition block_istep tid (labels_blocks: list (list label)) bst1 bst2 :=
+    ⟪ INSTRS : bst1.(binstrs) = bst2.(binstrs) ⟫ /\
+    ⟪ ISTEP: exists block labelsblocks_insns st1 st2,
+        Some block = List.nth_error bst1.(binstrs) bst1.(bpc) /\
+        labelsblocks_insns = List.combine labels_blocks block /\
+        st1 = bst2st bst1 /\ st2 = bst2st bst2 /\
+        step_seq tid labelsblocks_insns st1 st2 ⟫. 
+
+  Definition block_step (tid : thread_id) bst1 bst2 :=
+    exists labels_blocks, block_istep tid labels_blocks bst1 bst2.
+
+  Definition block_similar_states (bst: block_state) (st: state) :=
+    flatten bst.(binstrs) = st.(instrs) /\
+    flatten (firstn bst.(bpc) bst.(binstrs)) = firstn st.(pc) st.(instrs) /\
+    bst.(G') = st.(G) /\
+    bst.(regf') = st.(regf). 
+
+  Definition mm_similar_states (sto: state) (bst: block_state) :=
+    is_thread_block_compiled sto.(instrs) bst.(binstrs)  /\
+    is_thread_block_compiled (firstn sto.(pc) sto.(instrs)) (firstn bst.(bpc) bst.(binstrs)) /\
+    same_behavior_local sto.(G) bst.(G') /\
+    sto.(regf) = bst.(regf'). 
+
+  Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
+        tid bsti' (BSTEP: block_step tid bsti bsti'):
+    exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
+  Proof. Admitted.
+
+  Lemma steps_into_blocks tid sti sti' bsti bsti' (BLOCK_SIM: block_similar_states bsti sti) (BLOCK_SIM': block_similar_states bsti' sti'):
+    step tid sti sti' <-> block_step tid bsti bsti'.
+  Proof. Admitted. 
+      
   Lemma restricted_wf SGI tid (TRI: thread_restricted_execution GI tid SGI): Wf SGI. 
   Proof.
-  Admitted. 
+  Admitted.
+
+  Lemma init_blocks_same: forall PI BPI (BLOCK: flatten BPI = PI),
+      block_similar_states (block_init BPI) (init PI).
+  Proof. ins. Qed. 
+    
+  Lemma init_mm_same: forall PO BPI (COMP: is_thread_block_compiled PO BPI),
+      mm_similar_states (init PO) (block_init BPI).
+  Proof.
+    ins. red. simpl. splits; auto.
+    { apply compiled_empty. }
+    red.
+    assert (NO_E: E init_execution ≡₁ ∅) by basic_solver. 
+    (* seq_rewrite NO_E. splits. *)
+    (* { seq_rewrite set_inter_empty_l.  *)
+    (*       basic_solver. red.  *)
+    admit. 
+  Admitted.  
     
   Lemma wf_alt G: Wf G <-> Wf_global G /\ (forall tid SG (TRE: thread_restricted_execution G tid SG), Wf_local SG). 
   Proof.
@@ -486,8 +426,29 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   Lemma tre_idempotent SG tid G (TRE: thread_restricted_execution G tid SG):
     thread_restricted_execution SG tid SG.
-  Proof. Admitted. 
+  Proof. Admitted.
 
+  Lemma crt_num_steps {A: Type} (r: relation A) a b: r＊ a b <-> exists n, n >= 0 /\ r ^^ n a b.
+  Proof.
+    split.
+    { ins. rewrite clos_refl_transE in H. destruct H.
+      { exists 0. split; auto. simpl. basic_solver. }
+      induction H. 
+      { exists 1. split; [auto | simpl; basic_solver]. }
+      destruct IHclos_trans1 as [n1 IH1]. destruct IHclos_trans2 as [n2 IH2]. 
+      exists (n1+n2). split; [omega | ].
+      pose proof (@pow_nm _ n1 n2 r) as POW. destruct POW as [POW _].
+      specialize (POW x z). apply POW.
+      red. exists y. desc. split; auto. }
+    ins. destruct H as [n STEPS].
+    rewrite clos_refl_transE.
+    destruct n.
+    { left. desc. simpl in STEPS0. generalize STEPS0. basic_solver 10. }
+    right. desc.
+    pose proof ctEE. specialize (H _ r). destruct H as [_ POW].
+    apply POW. basic_solver. 
+  Qed. 
+    
   Lemma thread_execs: forall tid PO (THREAD_O: IdentMap.find tid ProgO = Some PO)
                         PI (THREAD_I: IdentMap.find tid ProgI = Some PI)
                         SGI (TRI: thread_restricted_execution GI tid SGI)
@@ -497,9 +458,50 @@ Section OCamlMM_TO_IMM_S_PROG.
              Wf_local SGO. 
   Proof.
     ins.
+    destruct ExI as [sti EXECI]. desc.
     destruct Compiled as [_ COMP_BLOCKS].
     specialize (COMP_BLOCKS tid PO PI THREAD_O THREAD_I).
     destruct COMP_BLOCKS as [BPI [BLOCKS COMP]].
+    set (bsti := {| binstrs := BPI;
+                   bpc := length BPI;
+                   G' := SGI;
+                   eindex' := sti.(eindex);
+                   regf' := sti.(regf);
+                   depf' := sti.(depf);
+                   ectrl' := sti.(ectrl); |}).
+    assert (BLOCK_SIM: block_similar_states bsti sti).
+    { assert (PI_STI: instrs sti = PI).
+      { rewrite clos_refl_transE in STEPS. destruct STEPS.
+        { unfold init in H. rewrite <- H. auto. }
+        admit. (* instructions kept the same during steps *) }
+      red. splits; auto. 
+      all: subst bsti; simpl; auto.
+      { rewrite BLOCKS. auto. }
+      rewrite firstn_all.
+      rewrite firstn_all2; [ rewrite BLOCKS; auto |].
+      red in TERMINAL. intros. omega. }
+    pose proof (init_blocks_same BPI BLOCKS) as INIT_SIM. 
+    assert (BLOCK_STEPS: (block_step tid)＊ (block_init BPI) bsti). 
+    { pose proof (steps_into_blocks tid).
+      apply crt_num_steps in STEPS. destruct STEPS as [nsteps STEPS].
+      induction nsteps.
+      { cut (bsti = block_init BPI).
+        { rewrite clos_refl_transE. auto. }
+        desc. simpl in STEPS0.
+        red in STEPS0. desc.
+        unfold block_init. subst bsti.
+        admit. }
+      admit. }
+    rewrite crt_num_steps in BLOCK_STEPS. destruct BLOCK_STEPS as [nsteps BLOCK_STEPS].
+    assert (exists SGO : execution,
+               Othread_execution tid PO SGO /\ same_behavior_local SGO SGI). 
+    { induction nsteps.
+      - set (sto := init PO). 
+        exists (sto.(G)).
+        split.
+        { red. exists sto. 
+    
+      
     assert (exists l, length BPI = l) as [l L].
     { exists (length BPI); auto. }
     assert (PREF_REFL: prefix BPI BPI).
