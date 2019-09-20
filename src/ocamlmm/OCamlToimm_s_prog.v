@@ -357,9 +357,17 @@ Section OCamlMM_TO_IMM_S_PROG.
       rest (REST: step_seq tid rest next_st fin_st):
       step_seq tid ((labels,insn)::rest) cur_st fin_st.
 
-  Definition bst2st: block_state -> state.
-  Admitted. 
-
+  Definition bst2st bsti := 
+    {|
+      instrs := flatten bsti.(binstrs);
+      pc := length (flatten (firstn bsti.(bpc) bsti.(binstrs)));
+      G := bsti.(G');
+      eindex := bsti.(eindex');
+      regf := bsti.(regf');
+      depf := bsti.(depf');
+      ectrl := bsti.(ectrl');
+    |}. 
+    
   (* Definition st2bst st  -> block_state. *)
   (* Admitted.  *)
 
@@ -369,7 +377,8 @@ Section OCamlMM_TO_IMM_S_PROG.
         Some block = List.nth_error bst1.(binstrs) bst1.(bpc) /\
         labelsblocks_insns = List.combine labels_blocks block /\
         st1 = bst2st bst1 /\ st2 = bst2st bst2 /\
-        step_seq tid labelsblocks_insns st1 st2 ⟫. 
+        step_seq tid labelsblocks_insns st1 st2 ⟫ /\
+    ⟪BPC: bst2.(bpc) = bst1.(bpc) + 1 ⟫. 
 
   Definition block_step (tid : thread_id) bst1 bst2 :=
     exists labels_blocks, block_istep tid labels_blocks bst1 bst2.
@@ -382,14 +391,125 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   Definition mm_similar_states (sto: state) (bst: block_state) :=
     is_thread_block_compiled sto.(instrs) bst.(binstrs)  /\
+    sto.(pc) = bst.(bpc) /\
     is_thread_block_compiled (firstn sto.(pc) sto.(instrs)) (firstn bst.(bpc) bst.(binstrs)) /\
     same_behavior_local sto.(G) bst.(G') /\
-    sto.(regf) = bst.(regf'). 
+    sto.(regf) = bst.(regf').
+
+  (* Lemma block_step_correspondence tid bsti bsti' (BSTEP: block_step tid bsti bsti') *)
+  (*       block (BLOCK: Some block = List.nth_error bsti.(binstrs) bsti.(bpc)): *)
+  (* exists instr, is_thread_block_compiled [instr] [block].  *)
+  (* Proof. *)
+  Lemma block_step_correspondence i sto bsti (MM_SIM: mm_similar_states sto bsti) (INDEX: i < length bsti.(binstrs)) block (BLOCK: Some block = List.nth_error bsti.(binstrs) i):
+    exists instr, is_thread_block_compiled [instr] [block] /\
+             Some instr = List.nth_error sto.(instrs) i. 
+  Proof.
+    (* red in MM_SIM. desc. *)
+    (* induction MM_SIM. *)
+    (* - simpl in INDEX. omega. *)
+    (* - apply IHMM_SIM.  *)
+  Admitted. 
 
   Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
         tid bsti' (BSTEP: block_step tid bsti bsti'):
     exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
-  Proof. Admitted.
+  Proof.
+    assert (LT: bsti.(bpc) < length bsti.(binstrs)) by admit. 
+    pose proof (block_step_correspondence MM_SIM LT).  (* as [instr CORR].  *)
+    (* [lbl_bs [sti [sti' [BLOCK [YYY [CONV [CONV' ZZZ]]]]]]] *)
+    destruct BSTEP as [labels_blocks [XXXX [[block [lbl_bs [sti [sti' [BLOCK [YYY [CONV [CONV' ZZZ]]]]]]]] BPC']]]. 
+    destruct (H block BLOCK) as [oinstr [BLOCK_COMP OINDEX]].
+    inversion BLOCK_COMP.
+    - assert (ONLYO: ro = []).
+      { destruct ro; auto.
+        simpl in H1. inversion H1.
+        apply app_eq_nil in H4. desc. discriminate. }
+      assert (ri = []) by admit.
+      rewrite ONLYO in H1. rewrite H0 in H2. simpl in *.
+      injection H1. injection H2. intros.
+      assert (LEN_MATCH: length labels_blocks = length block) by admit. 
+      rewrite <- H3 in YYY.
+      assert (exists lbls, lbl_bs = [ (lbls, ld) ]).
+      { unfold combine in YYY. destruct labels_blocks.
+        - rewrite <- H3 in LEN_MATCH. simpl in LEN_MATCH. discriminate.
+        - simpl in YYY. simpl in YYY.
+          rewrite <- H3 in LEN_MATCH. simpl in LEN_MATCH.
+          injection LEN_MATCH. intros. apply length_zero_iff_nil in H5.
+          rewrite H5 in YYY.
+          exists l. auto. }
+      destruct H5 as [lbls H5]. rewrite H5 in ZZZ. 
+      inversion ZZZ.
+      inversion REST.
+      rewrite H15 in STEP.
+      inversion STEP; try discriminate.
+      
+      (* eexists. *)
+      set (sto' := {|
+          instrs := sto.(instrs);
+          pc := sto.(pc)+1;
+          G := add (G sto) tid (eindex sto)
+                   (Aload false ord (RegFile.eval_lexpr (regf sto) lexpr) val) ∅
+                   (DepsFile.lexpr_deps (depf sto) lexpr) (ectrl sto) ∅;
+          eindex := sto.(eindex) + 1; 
+          regf := RegFun.add reg val (regf sto);
+          depf := RegFun.add reg (eq (ThreadEvent tid (eindex sto))) (depf sto);
+          ectrl := ectrl sto
+                  |}).
+      exists sto'. 
+      split.
+      { red. exists lbls. red. split; [admit| ].
+        red. exists ld. exists 1.
+        split; [admit | ].
+        assert (EQlocs: forall loc, RegFile.eval_lexpr (regf sto) loc = RegFile.eval_lexpr (regf sti) loc).
+        { intros. unfold bst2st in CONV.
+          assert (regf' bsti = regf sti).
+          { rewrite CONV. simpl. auto. }
+          rewrite <- H13.
+          red in MM_SIM. desc. rewrite MM_SIM3. auto. } 
+        assert (EQl: l = RegFile.eval_lexpr (regf sto) lexpr).
+        { rewrite (EQlocs lexpr). auto.  }
+        assert (EQlabels: lbls = [Aload false ord (RegFile.eval_lexpr (regf sto) lexpr) val]).
+        { rewrite (EQlocs lexpr). auto. }
+        assert (PC': pc sto' = pc sto + 1) by intuition.
+        assert (G': G sto' =
+                    add (G sto) tid (eindex sto)
+                        (Aload false ord (RegFile.eval_lexpr (regf sto) lexpr) val) ∅
+                        (DepsFile.lexpr_deps (depf sto) lexpr) (ectrl sto) ∅).
+        { subst sto'. auto. }
+        assert (EI': eindex sto' = eindex sto + 1) by intuition.
+        assert (REG': regf sto' = RegFun.add reg val (regf sto)) by intuition.
+        assert (DEPF': depf sto' = RegFun.add reg (eq (ThreadEvent tid (eindex sto))) (depf sto)) by intuition.
+        assert (CTRL': ectrl sto' = ectrl sto) by intuition.
+        pose proof (@load tid lbls sto sto' ld 1 ord reg lexpr val l EQl II EQlabels PC' G' EI' REG' DEPF' CTRL').
+        auto. }
+      red.
+      splits.
+      { assert (instrs sto' = instrs sto) by intuition.
+        assert (binstrs bsti' = binstrs bsti) by intuition.
+        rewrite H13, H16.
+        red in MM_SIM. desc. auto. }
+      { replace (pc sto') with (pc sto + 1); [| intuition]. 
+        replace (bpc bsti') with (bpc bsti + 1).
+        { red in MM_SIM. desc. rewrite MM_SIM0. auto. } } 
+      { assert (first_end: forall {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n), firstn (n + 1) l = firstn n l ++ [x]). 
+        { admit. }
+        rewrite <- H4 in OINDEX.
+        replace (bpc bsti) with (pc sto) in OINDEX.
+        2: { red in MM_SIM. intuition. }
+        replace (pc sto') with (pc sto + 1); [| intuition]. 
+        replace (bpc bsti') with (bpc bsti + 1).
+        rewrite (first_end _ (instrs sto') (pc sto) ld OINDEX).
+        rewrite <- H3 in BLOCK.
+        replace (binstrs bsti') with (binstrs bsti). 
+        rewrite (first_end _ (binstrs bsti) (bpc bsti) [ld] BLOCK).
+        replace (instrs sto') with (instrs sto) by intuition. 
+        apply compiled_Rna.
+        red in MM_SIM. desc. auto. }
+      { red. 
+        
+        
+      
+  Admitted.
 
   Lemma steps_into_blocks tid sti sti' bsti bsti' (BLOCK_SIM: block_similar_states bsti sti) (BLOCK_SIM': block_similar_states bsti' sti'):
     step tid sti sti' <-> block_step tid bsti bsti'.
