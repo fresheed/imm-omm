@@ -366,8 +366,22 @@ Section OCamlMM_TO_IMM_S_PROG.
       regf := bsti.(regf');
       depf := bsti.(depf');
       ectrl := bsti.(ectrl');
-    |}. 
-    
+    |}.
+
+  Definition ost2st_instrs : list (Prog.Instr.t) -> list (Prog.Instr.t). Admitted.
+  Definition ost2st_pc : nat -> nat. Admitted.
+  Definition ost2st_g : execution -> execution. Admitted.
+  Definition ost2sti ost := 
+    {|
+      instrs := ost2st_instrs (ost.(instrs));
+      pc := ost2st_pc (ost.(pc));
+      G := ost2st_g (ost.(G));
+      eindex := ost.(eindex);
+      regf := ost.(regf);
+      depf := ost.(depf);
+      ectrl := ost.(ectrl);
+    |}.
+
   (* Definition st2bst st  -> block_state. *)
   (* Admitted.  *)
 
@@ -375,6 +389,7 @@ Section OCamlMM_TO_IMM_S_PROG.
     ⟪ INSTRS : bst1.(binstrs) = bst2.(binstrs) ⟫ /\
     ⟪ ISTEP: exists block labelsblocks_insns st1 st2,
         Some block = List.nth_error bst1.(binstrs) bst1.(bpc) /\
+        length labels_blocks = length block /\
         labelsblocks_insns = List.combine labels_blocks block /\
         st1 = bst2st bst1 /\ st2 = bst2st bst2 /\
         step_seq tid labelsblocks_insns st1 st2 ⟫ /\
@@ -394,8 +409,35 @@ Section OCamlMM_TO_IMM_S_PROG.
     sto.(pc) = bst.(bpc) /\
     is_thread_block_compiled (firstn sto.(pc) sto.(instrs)) (firstn bst.(bpc) bst.(binstrs)) /\
     same_behavior_local sto.(G) bst.(G') /\
-    sto.(regf) = bst.(regf').
+    sto.(regf) = bst.(regf') /\
+    sto.(eindex) = bst.(eindex'). 
 
+  Lemma ost2bst2st_regf bst ost sti (B2s: sti = bst2st bst) (MM_SIM: mm_similar_states ost bst): regf ost = regf sti. 
+  Proof.
+    red in MM_SIM. desc.
+    rewrite MM_SIM3.
+    unfold bst2st in B2s. subst sti. auto.
+  Qed. 
+
+  Lemma ost2bst2st_eindex bst ost sti (B2s: sti = bst2st bst) (MM_SIM: mm_similar_states ost bst): eindex ost = eindex sti. 
+  Proof.
+    red in MM_SIM. desc.
+    rewrite MM_SIM4.
+    unfold bst2st in B2s. subst sti. auto.
+  Qed. 
+
+  Lemma prepend_events_alt S i:
+    prepend_events S i ≡₁ (fun e => S (ThreadEvent (tid e) (index e + i))). 
+  Proof.
+    (* unfold prepend_events, tid, index. simpl.  auto. *)
+  Admitted.
+
+  Lemma PE_DIST_E: forall i U U1 U2 S (UNION: U ≡₁ U1 ∪₁ U2), prepend_events (U ∩₁ S) i ≡₁ prepend_events (U1 ∩₁ S ∪₁ U2 ∩₁ S) i.
+  Proof. Admitted. 
+  Lemma PE_DIST2_E: forall i U U1 U2 S V (UNION: U ≡₁ U1 ∪₁ U2), prepend_events (U ∩₁ S ∩₁ V) i ≡₁ prepend_events (U1 ∩₁ S ∩₁ V ∪₁ U2 ∩₁ S ∩₁ V) i.
+  Proof. Admitted. 
+  
+    
   (* Lemma block_step_correspondence tid bsti bsti' (BSTEP: block_step tid bsti bsti') *)
   (*       block (BLOCK: Some block = List.nth_error bsti.(binstrs) bsti.(bpc)): *)
   (* exists instr, is_thread_block_compiled [instr] [block].  *)
@@ -417,33 +459,35 @@ Section OCamlMM_TO_IMM_S_PROG.
     assert (LT: bsti.(bpc) < length bsti.(binstrs)) by admit. 
     pose proof (block_step_correspondence MM_SIM LT).  (* as [instr CORR].  *)
     (* [lbl_bs [sti [sti' [BLOCK [YYY [CONV [CONV' ZZZ]]]]]]] *)
-    destruct BSTEP as [labels_blocks [XXXX [[block [lbl_bs [sti [sti' [BLOCK [YYY [CONV [CONV' ZZZ]]]]]]]] BPC']]]. 
-    destruct (H block BLOCK) as [oinstr [BLOCK_COMP OINDEX]].
-    inversion BLOCK_COMP.
-    - assert (ONLYO: ro = []).
-      { destruct ro; auto.
-        simpl in H1. inversion H1.
-        apply app_eq_nil in H4. desc. discriminate. }
-      assert (ri = []) by admit.
-      rewrite ONLYO in H1. rewrite H0 in H2. simpl in *.
-      injection H1. injection H2. intros.
-      assert (LEN_MATCH: length labels_blocks = length block) by admit. 
-      rewrite <- H3 in YYY.
-      assert (exists lbls, lbl_bs = [ (lbls, ld) ]).
-      { unfold combine in YYY. destruct labels_blocks.
-        - rewrite <- H3 in LEN_MATCH. simpl in LEN_MATCH. discriminate.
-        - simpl in YYY. simpl in YYY.
-          rewrite <- H3 in LEN_MATCH. simpl in LEN_MATCH.
-          injection LEN_MATCH. intros. apply length_zero_iff_nil in H5.
-          rewrite H5 in YYY.
-          exists l. auto. }
-      destruct H5 as [lbls H5]. rewrite H5 in ZZZ. 
-      inversion ZZZ.
-      inversion REST.
-      rewrite H15 in STEP.
-      inversion STEP; try discriminate.
-      
-      (* eexists. *)
+    destruct BSTEP as [labels_blocks [XXXX [[block [lbl_bs [sti [sti' [BLOCK_POS [LEN_MATCH [COMBINE [CONV [CONV' STEP_SEQ]]]]]]]]] BPC']]]. 
+    destruct (H block BLOCK_POS) as [oinstr [BLOCK_COMP OINDEX]].
+    assert (APP_EQ: forall {A: Type} (x: list A) (y z: A), x ++ [y] = [z] -> y = z).
+    { ins. destruct x.
+      { apply app_eq_unit in H0.
+        destruct H0; [desc; vauto | desc; discriminate]. }
+      simpl in H0. inversion H0.
+      apply app_eq_nil in H3. desc. discriminate. }
+    inversion BLOCK_COMP.    
+    - apply APP_EQ in H1 as LD. apply APP_EQ in H2 as BLOCK. clear H1 H2.
+      rewrite <- LD, BLOCK in *.
+      assert (exists lbls, lbl_bs = [ (lbls, ld) ]) as [lbls LABELS_VALUES]. 
+      { unfold combine in COMBINE. destruct labels_blocks.
+        - simpl in LEN_MATCH. vauto. 
+        - rewrite <- BLOCK in LEN_MATCH. simpl in LEN_MATCH.
+          injection LEN_MATCH. intros EMPTY. apply length_zero_iff_nil in EMPTY.
+          rewrite EMPTY, <- BLOCK in COMBINE. 
+          exists l. vauto. }
+      assert (STEP: istep_ tid lbls sti sti' ld). 
+      { rewrite LABELS_VALUES in STEP_SEQ. 
+        inversion STEP_SEQ.
+        inversion REST.
+        rewrite H9 in STEP.
+        inversion STEP; try discriminate. auto. }
+      inversion STEP; try discriminate. 
+      assert (REGFeq: forall b s (B2S: s = bst2st b), regf' b = regf s).
+      { ins. rewrite B2S. simpl. auto. }
+      assert (EINDEXeq: forall b s (B2S: s = bst2st b), eindex' b = eindex s).
+      { ins. rewrite B2S. simpl. auto. }
       set (sto' := {|
           instrs := sto.(instrs);
           pc := sto.(pc)+1;
@@ -455,17 +499,15 @@ Section OCamlMM_TO_IMM_S_PROG.
           depf := RegFun.add reg (eq (ThreadEvent tid (eindex sto))) (depf sto);
           ectrl := ectrl sto
                   |}).
+      assert (EQlocs: forall loc, RegFile.eval_lexpr (regf sto) loc = RegFile.eval_lexpr (regf sti) loc).
+      { intros. unfold bst2st in CONV.
+        rewrite <- (REGFeq _ _ CONV). 
+        red in MM_SIM. desc. rewrite MM_SIM3. auto. } 
       exists sto'. 
       split.
       { red. exists lbls. red. split; [admit| ].
         red. exists ld. exists 1.
         split; [admit | ].
-        assert (EQlocs: forall loc, RegFile.eval_lexpr (regf sto) loc = RegFile.eval_lexpr (regf sti) loc).
-        { intros. unfold bst2st in CONV.
-          assert (regf' bsti = regf sti).
-          { rewrite CONV. simpl. auto. }
-          rewrite <- H13.
-          red in MM_SIM. desc. rewrite MM_SIM3. auto. } 
         assert (EQl: l = RegFile.eval_lexpr (regf sto) lexpr).
         { rewrite (EQlocs lexpr). auto.  }
         assert (EQlabels: lbls = [Aload false ord (RegFile.eval_lexpr (regf sto) lexpr) val]).
@@ -484,31 +526,95 @@ Section OCamlMM_TO_IMM_S_PROG.
         auto. }
       red.
       splits.
-      { assert (instrs sto' = instrs sto) by intuition.
-        assert (binstrs bsti' = binstrs bsti) by intuition.
-        rewrite H13, H16.
+      { replace (instrs sto') with (instrs sto) by intuition.
+        replace (binstrs bsti') with (binstrs bsti) by intuition.
         red in MM_SIM. desc. auto. }
       { replace (pc sto') with (pc sto + 1); [| intuition]. 
         replace (bpc bsti') with (bpc bsti + 1).
-        { red in MM_SIM. desc. rewrite MM_SIM0. auto. } } 
-      { assert (first_end: forall {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n), firstn (n + 1) l = firstn n l ++ [x]). 
-        { admit. }
-        rewrite <- H4 in OINDEX.
-        replace (bpc bsti) with (pc sto) in OINDEX.
+        red in MM_SIM. desc. auto. } 
+      { replace (bpc bsti) with (pc sto) in OINDEX.
         2: { red in MM_SIM. intuition. }
         replace (pc sto') with (pc sto + 1); [| intuition]. 
         replace (bpc bsti') with (bpc bsti + 1).
-        rewrite (first_end _ (instrs sto') (pc sto) ld OINDEX).
-        rewrite <- H3 in BLOCK.
+        rewrite <- BLOCK in BLOCK_POS.
         replace (binstrs bsti') with (binstrs bsti). 
-        rewrite (first_end _ (binstrs bsti) (bpc bsti) [ld] BLOCK).
+        
+        assert (first_end: forall {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n), firstn (n + 1) l = firstn n l ++ [x]). 
+        { admit. }
+        rewrite (first_end _ (instrs sto') (pc sto) ld OINDEX).
+        rewrite (first_end _ (binstrs bsti) (bpc bsti) [ld] BLOCK_POS).
         replace (instrs sto') with (instrs sto) by intuition. 
         apply compiled_Rna.
         red in MM_SIM. desc. auto. }
-      { red. 
+      {
+        assert (PE_DIST: forall A B C i, prepend_events ((A ∪₁ B) ∩₁ C) i ≡₁ prepend_events (A ∩₁ C) i ∪₁ prepend_events (B ∩₁ C) i) by admit. 
         
-        
-      
+        red. splits. 
+        { (* rewrite prepend_events_alt.  *)
+          assert (EOext: E (G sto') ≡₁ E (G sto) ∪₁ eq (ThreadEvent tid (eindex sto))).
+          { subst sto'. simpl. unfold add. simpl. 
+            unfold acts_set at 1. simpl.
+            basic_solver. }
+          assert (EIext: E (G' bsti') ≡₁ E (G' bsti) ∪₁ eq (ThreadEvent tid (eindex sti))).
+          { replace (G' bsti') with (G sti'); [| vauto].
+            replace (G' bsti) with (G sti); [| vauto]. 
+            rewrite UG. unfold add, acts_set. 
+            basic_solver. }
+          
+          rewrite EOext, EIext at 1.
+          replace (eindex sto) with (eindex sti).
+          2: { subst sti. simpl. red in MM_SIM. intuition. } 
+          rewrite set_unionC. rewrite (set_unionC (E (G sto)) _).
+          assert (union_split: forall {T : Type} (A B C D: T -> Prop), A ≡₁ C -> B ≡₁ D -> A ∪₁ B ≡₁ C ∪₁ D) by basic_solver.
+          rewrite !set_unionA. apply (union_split); [basic_solver |].
+          rewrite (@PE_DIST_E 2 _ _ _ _ EOext).
+          rewrite (@PE_DIST2_E 2 _ _ _ _ _ EOext). 
+          rewrite (@PE_DIST2_E 1 _ _ _ _ _ EOext).          
+          remember (ThreadEvent tid (eindex sto)) as new_event.
+          red in MM_SIM. desc. red in MM_SIM2. desc.
+          rewrite ADD_EVENTS.
+          rewrite !set_unionA. apply (union_split); [basic_solver |].          
+          (* apply (union_split); [basic_solver |]. *)
+          admit. (* finish Ei proof *)}
+        { replace (G' bsti') with (G sti'); [| vauto].
+          subst sto'. simpl.
+          rewrite UG. simpl.
+          replace (eindex sto) with (eindex sti).
+          2: { subst sti. simpl. red in MM_SIM. intuition. } 
+          replace (G sti) with (G' bsti); [| vauto].
+          rewrite (ost2bst2st_regf CONV MM_SIM). 
+          red in MM_SIM. desc. red in MM_SIM2. desc.
+          rewrite EXT_LABELS. auto. }
+        { ins.
+          replace (Afence Oacq) with (lab (G sti) e).
+          2: { admit. }
+          replace (G' bsti') with (G sti'); [| vauto].
+          (* thread_wf *)
+          (* assert (STI_WF: thread_wf tid sti) by admit. *)
+          (* assert (STEP_: (step tid)＊ sti sti'). *)
+          (* { apply rt_step. red. exists lbls. red. split; [admit |]. *)
+          (*   red. exists ld. split; auto. admit. } *)
+          (* apply (same_lab STI_WF STEP_). *)
+          (* red in FACQ. destruct e; [exfalso;auto |]. *)
+          (* destruct FACQ as [orig_num [XXX FACQ]]. *)
+
+                                   
+          (* unfold add in FACQ. simpl in FACQ.  *)
+          (* use same_lab? *)
+          admit. }
+        { admit. }
+        { admit. }
+        { (* use transitive eqs again *)
+          (* use steps_preserves_rmw, then show in other direction *)
+          admit. } }
+      { rewrite (REGFeq _ _ CONV'). 
+        rewrite UREGS.
+        subst sto'. simpl.
+        rewrite (ost2bst2st_regf CONV MM_SIM). auto. }
+      { subst sto'. simpl. rewrite (EINDEXeq _ _ CONV').
+        rewrite UINDEX.
+        rewrite (ost2bst2st_eindex CONV MM_SIM). auto. }
+    - admit. 
   Admitted.
 
   Lemma steps_into_blocks tid sti sti' bsti bsti' (BLOCK_SIM: block_similar_states bsti sti) (BLOCK_SIM': block_similar_states bsti' sti'):
