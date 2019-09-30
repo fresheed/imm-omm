@@ -442,7 +442,19 @@ Section OCaml_Program.
     Proof.
       red in MM_SIM. desc.
       rewrite MM_SIM0 in *.    
-    Admitted. 
+    Admitted.
+
+    Lemma PREP_NOT_LAST' e sto (PREPS: exists S i, prepend_events S i e /\ S ⊆₁ E (G sto)) (EXISTING_INDICES: forall e', E (G sto) e' -> index e' < eindex sto):
+      index e <> eindex sto.
+    Proof. 
+      intros INDEQ. 
+      destruct PREPS as [S [i [PREPS INE]]].
+      do 2 red in PREPS. 
+      specialize (INE (ThreadEvent (tid e) (index e + i)) PREPS).
+      apply EXISTING_INDICES in INE.
+      simpl in INE.
+      omega.
+    Qed. 
 
     Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
           tid bsti' (BSTEP: block_step tid bsti bsti'):
@@ -612,16 +624,6 @@ Section OCaml_Program.
                 destruct (labfun e); simpl; auto. }
               unfold id. simpl. rewrite Heqnev.
               rewrite upds. auto. } }
-          assert (PREP_NOT_LAST: forall e (PREPS: exists S i, prepend_events S i e /\ S ⊆₁ E (G sto)), e <> (ThreadEvent tid (eindex sti))).
-          { red. intros e [S [i [PREPS INE]]]. 
-            do 2 red in PREPS.
-            specialize (INE (ThreadEvent (Events.tid e) (index e + i)) PREPS). 
-            apply EXISTING_INDICES in INE.
-            simpl in INE. 
-            replace (eindex sto) with (eindex sti) in INE. 
-            2: { subst sti. simpl. red in MM_SIM. intuition. }
-            intros CONTRA. rewrite CONTRA in INE. simpl in INE. 
-            omega. }
 
           red. splits. 
           { rewrite EOext, EIext at 1.
@@ -673,14 +675,17 @@ Section OCaml_Program.
             red. 
             unfold is_f, is_acq, Events.mod at 1. rewrite UG.
             unfold add. simpl.
-            specialize (PREP_NOT_LAST x).
-            forward eapply PREP_NOT_LAST.
+            pose proof (@PREP_NOT_LAST' x sto) as PREP_NOT_LAST'. 
+            forward eapply PREP_NOT_LAST'.
             { exists (E (G sto) ∩₁ Sc (G sto)). exists 2.
               split; [auto | basic_solver]. }
-            intros NEQ. 
+            { auto. } 
+            intros NEQ. replace (eindex sto) with (eindex sti) in NEQ. 
+            2: { subst sti. simpl. red in MM_SIM. intuition. } 
             rewrite updo; auto. simpl. 
             replace (G sti) with (G' bsti); [| vauto].
-            rewrite PREV_LAB. auto. } 
+            rewrite PREV_LAB; auto.
+            intros CONTRA. vauto. } 
           { cut (prepend_events (E (G sto') ∩₁ W (G sto') ∩₁ ORlx (G sto')) 2 ⊆₁ F (G' bsti') ∩₁ Acqrel (G' bsti')).
             { admit. }
             rewrite <- (@rel_compose_arg_rewrite _ _ _ (shift 2) E_W_RLX_eq). 
@@ -700,16 +705,21 @@ Section OCaml_Program.
             red. 
             unfold is_f, is_acqrel, Events.mod at 1. rewrite UG.
             unfold add. simpl.
-            specialize (PREP_NOT_LAST x).
-            forward eapply PREP_NOT_LAST.
+            pose proof (@PREP_NOT_LAST' x sto) as PREP_NOT_LAST'. 
+            forward eapply PREP_NOT_LAST'.
             { exists (E (G sto) ∩₁ W (G sto) ∩₁ ORlx (G sto)). exists 2.
               split; [auto | basic_solver]. }
-            intros NEQ. 
+            { auto. }
+            intros NEQ. replace (eindex sto) with (eindex sti) in NEQ. 
+            2: { subst sti. simpl. red in MM_SIM. intuition. } 
             rewrite updo; auto. simpl. 
             replace (G sti) with (G' bsti); [| vauto].
-            rewrite PREV_LAB. auto. }
-          { 
-            admit.
+            rewrite PREV_LAB; auto.
+            intros CONTRA. vauto. }
+          { (* intros x PE.  *)
+            (* admit. *)
+            (* not sure which condition is really needed *)
+            admit. 
           }
           { (* use transitive eqs again *)
             (* use steps_preserves_rmw, then show in other direction *)
@@ -727,7 +737,6 @@ Section OCaml_Program.
     Lemma steps_into_blocks tid sti sti' bsti bsti' (BLOCK_SIM: block_similar_states bsti sti) (BLOCK_SIM': block_similar_states bsti' sti'):
       step tid sti sti' <-> block_step tid bsti bsti'.
     Proof.
-      
     Admitted. 
     
     Lemma restricted_wf SGI tid (TRI: thread_restricted_execution GI tid SGI): Wf SGI. 
@@ -747,11 +756,10 @@ Section OCaml_Program.
       assert (NO_E: E init_execution ≡₁ ∅) by basic_solver. 
       assert (PREPEND_E0: forall S i (IN_E: S ⊆₁ E init_execution), prepend_events S i ≡₁ ∅).
       { intros. split; [| basic_solver].
-        red. intros. 
-        unfold prepend_events in H.
-        destruct x; [auto| ].
-        destruct H as [n H]. rewrite NO_E in IN_E. apply IN_E in H. 
-        basic_solver. }
+        red. intros e.
+        intros PREP.
+        do 2 red in PREP. apply IN_E in PREP.
+        unfold acts_set in PREP. simpl in PREP. auto. }
       assert (PREPEND_EAPP: forall S i x (IN_E: S ⊆₁ E init_execution), prepend_events S i x -> False).
       { intros. specialize (PREPEND_E0 S i IN_E). red in PREPEND_E0. desc.
         red in PREPEND_E0. specialize (PREPEND_E0 x H). basic_solver. }      
