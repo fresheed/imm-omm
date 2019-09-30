@@ -611,7 +611,18 @@ Section OCaml_Program.
                 unfold is_w, is_sc, Events.mod. 
                 destruct (labfun e); simpl; auto. }
               unfold id. simpl. rewrite Heqnev.
-              rewrite upds. auto. } } 
+              rewrite upds. auto. } }
+          assert (PREP_NOT_LAST: forall e (PREPS: exists S i, prepend_events S i e /\ S ⊆₁ E (G sto)), e <> (ThreadEvent tid (eindex sti))).
+          { red. intros e [S [i [PREPS INE]]]. 
+            do 2 red in PREPS.
+            specialize (INE (ThreadEvent (Events.tid e) (index e + i)) PREPS). 
+            apply EXISTING_INDICES in INE.
+            simpl in INE. 
+            replace (eindex sto) with (eindex sti) in INE. 
+            2: { subst sti. simpl. red in MM_SIM. intuition. }
+            intros CONTRA. rewrite CONTRA in INE. simpl in INE. 
+            omega. }
+
           red. splits. 
           { rewrite EOext, EIext at 1.
             replace (eindex sto) with (eindex sti).
@@ -662,19 +673,44 @@ Section OCaml_Program.
             red. 
             unfold is_f, is_acq, Events.mod at 1. rewrite UG.
             unfold add. simpl.
-            assert (x <> (ThreadEvent tid (eindex sti))).
-            { red. intros.
-              do 2 red in H0. desc. 
-              apply EXISTING_INDICES in H0.
-              simpl in H0.
-              replace (eindex sto) with (eindex sti) in H0. 
-              2: { subst sti. simpl. red in MM_SIM. intuition. }
-              rewrite H1 in H0. simpl in H0. omega. }
+            specialize (PREP_NOT_LAST x).
+            forward eapply PREP_NOT_LAST.
+            { exists (E (G sto) ∩₁ Sc (G sto)). exists 2.
+              split; [auto | basic_solver]. }
+            intros NEQ. 
             rewrite updo; auto. simpl. 
             replace (G sti) with (G' bsti); [| vauto].
             rewrite PREV_LAB. auto. } 
-          { admit. }
-          { admit. }
+          { cut (prepend_events (E (G sto') ∩₁ W (G sto') ∩₁ ORlx (G sto')) 2 ⊆₁ F (G' bsti') ∩₁ Acqrel (G' bsti')).
+            { admit. }
+            rewrite <- (@rel_compose_arg_rewrite _ _ _ (shift 2) E_W_RLX_eq). 
+            red. intros. 
+            replace (G' bsti') with (G sti'); [| vauto].
+            replace (G' bsti) with (G sti); [| vauto].
+            assert (PREV_LAB: lab (G' bsti) x = Afence Oacqrel).
+            { do 2 red in H0. desc.
+              remember (ThreadEvent (Events.tid x) (index x + 2)) as prepended.
+              red in MM_SIM. desc. red in MM_SIM2. desc.
+              pose proof EXT_LABELS1. (* just to display at bottom *)
+              specialize (H2 x).
+              forward eapply H2.
+              { red. red. red. rewrite <- Heqprepended. split; auto. }
+              intros.
+              auto. }
+            red. 
+            unfold is_f, is_acqrel, Events.mod at 1. rewrite UG.
+            unfold add. simpl.
+            specialize (PREP_NOT_LAST x).
+            forward eapply PREP_NOT_LAST.
+            { exists (E (G sto) ∩₁ W (G sto) ∩₁ ORlx (G sto)). exists 2.
+              split; [auto | basic_solver]. }
+            intros NEQ. 
+            rewrite updo; auto. simpl. 
+            replace (G sti) with (G' bsti); [| vauto].
+            rewrite PREV_LAB. auto. }
+          { 
+            admit.
+          }
           { (* use transitive eqs again *)
             (* use steps_preserves_rmw, then show in other direction *)
             admit. } }
