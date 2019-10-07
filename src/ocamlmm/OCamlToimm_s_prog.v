@@ -341,27 +341,6 @@ Section OCaml_Program.
       all: do 2 rewrite app_length; rewrite IHCOMP; auto.
     Qed.
 
-    Record block_state := 
-      {
-        binstrs : list (list Instr.t);
-        bpc : nat;
-        G' : execution;
-        eindex' : nat;
-        regf' : RegFile.t;
-        depf' : DepsFile.t;
-        ectrl' : actid -> Prop
-      }.
-
-    Definition block_init (binstrs: list (list Instr.t)) :=
-      {|
-        binstrs := binstrs;
-        bpc := 0;
-        G' := init_execution;
-        eindex' := 0;
-        regf' := RegFile.init;
-        depf' := DepsFile.init;
-        ectrl' := ∅ |}. 
-
     Inductive step_seq : thread_id -> list ((list label)*Prog.Instr.t) -> state -> state -> Prop :=
     | empty_step_seq tid st: step_seq tid [] st st
     | next_step_seq
@@ -370,61 +349,131 @@ Section OCaml_Program.
         rest (REST: step_seq tid rest next_st fin_st):
         step_seq tid ((labels,insn)::rest) cur_st fin_st.
 
-    Definition bst2st bsti := 
-      {|
-        instrs := flatten bsti.(binstrs);
-        pc := length (flatten (firstn bsti.(bpc) bsti.(binstrs)));
-        G := bsti.(G');
-        eindex := bsti.(eindex');
-        regf := bsti.(regf');
-        depf := bsti.(depf');
-        ectrl := bsti.(ectrl');
-      |}.
+    Inductive is_instruction_compiled : Prog.Instr.t -> list Prog.Instr.t -> Prop :=
+    | compiled_Rna_alt lhs loc:
+        let ld := (Instr.load Orlx lhs loc) in
+        is_instruction_compiled (ld) ([ld])
+    | compiled_Wna_alt loc val:
+        let st := (Instr.store Orlx loc val) in
+        let f := (Instr.fence Oacqrel) in
+        is_instruction_compiled (st) ([f; st])
+    | compiled_Rat_alt lhs loc:
+        let ld := (Instr.load Osc lhs loc) in
+        let f := (Instr.fence Oacq) in
+        is_instruction_compiled (ld) ([f; ld])
+    | compiled_Wat_alt loc val:
+        let st := (Instr.store Osc loc val) in
+        let exc := (Instr.update (Instr.exchange val) Xpln Osc Osc exchange_reg loc) in
+        let f := (Instr.fence Oacq) in
+        is_instruction_compiled (st) ([f; exc])
+    | compiled_assign_alt lhs rhs:
+        let asn := (Instr.assign lhs rhs) in
+        is_instruction_compiled (asn) ([asn])
+    | compiled_ifgoto_alt e n:
+        let igt := (Instr.ifgoto e n) in
+        is_instruction_compiled (igt) ([igt]). 
+      
 
-    (* Definition st2bst st  -> block_state. *)
-    (* Admitted.  *)
+    Inductive is_thread_compiled_alt : list Prog.Instr.t -> list Prog.Instr.t -> Prop :=
+    | compiled_empty_alt: is_thread_compiled_alt [] []
+    | compiled_add_alt oinstr block ro ri
+                       (instr_compiled: is_instruction_compiled oinstr block)
+                       (rest: is_thread_compiled_alt ro ri):
+        is_thread_compiled_alt (ro ++ [oinstr]) (ri ++ block).
 
-    Definition block_istep tid (labels_blocks: list (list label)) bst1 bst2 :=
-      ⟪ INSTRS : bst1.(binstrs) = bst2.(binstrs) ⟫ /\
-      ⟪ ISTEP: exists block labelsblocks_insns st1 st2,
-          Some block = List.nth_error bst1.(binstrs) bst1.(bpc) /\
-          length labels_blocks = length block /\
+    Definition mm_similar_states_alt (sto sti: state) :=
+      is_thread_compiled_alt sto.(instrs) sti.(instrs)  /\
+      is_thread_compiled_alt (firstn sto.(pc) sto.(instrs)) (firstn sti.(pc) sti.(instrs)) /\
+      same_behavior_local sto.(G) sti.(G) /\
+      sto.(regf) = sti.(regf) /\
+      sto.(eindex) = sti.(eindex). 
+
+    (* Definition next_compilation_block sti (CORR: exists sto, mm_similar_states_alt sto sti) (NOT_END: pc sti < length (instrs sti)) : list Prog.Instr.t. *)
+    (* Admitted. *)
+
+    Definition sublist {A: Type} (l: list A) (start len: nat) : list A.
+    Admitted.
+
+    Definition oseq_istep tid (labels_blocks: list (list label)) sti1 sti2 :=
+      let n_steps := length labels_blocks in
+      let block := sublist (instrs sti1) (pc sti1) n_steps in
+      ⟪ INSTRS : sti1.(instrs) = sti2.(instrs) ⟫ /\
+      ⟪ ISTEP: exists labelsblocks_insns,
           labelsblocks_insns = List.combine labels_blocks block /\
-          st1 = bst2st bst1 /\ st2 = bst2st bst2 /\
-          step_seq tid labelsblocks_insns st1 st2 ⟫ /\
-      ⟪BPC: bst2.(bpc) = bst1.(bpc) + 1 ⟫. 
+          step_seq tid labelsblocks_insns sti1 sti2 ⟫ /\
+      ⟪ COMPILED_BLOCK: exists oinstr, is_instruction_compiled oinstr block ⟫. 
 
-    Definition block_step (tid : thread_id) bst1 bst2 :=
-      exists labels_blocks, block_istep tid labels_blocks bst1 bst2.
+    Definition oseq_step (tid : thread_id) sti1 sti2 :=
+      exists labels_blocks, oseq_istep tid labels_blocks sti1 sti2.
 
-    Definition block_similar_states (bst: block_state) (st: state) :=
-      flatten bst.(binstrs) = st.(instrs) /\
-      flatten (firstn bst.(bpc) bst.(binstrs)) = firstn st.(pc) st.(instrs) /\
-      bst.(G') = st.(G) /\
-      bst.(regf') = st.(regf). 
+    Lemma pair_step_alt sto sti (MM_SIM: mm_similar_states_alt sto sti)
+          tid sti' (SEQ_STEP: oseq_step tid sti sti'):
+      exists sto', Ostep tid sto sto' /\ mm_similar_states_alt sto' sti'.
+    Proof. Admitted.
 
-    Definition mm_similar_states (sto: state) (bst: block_state) :=
-      is_thread_block_compiled sto.(instrs) bst.(binstrs)  /\
-      sto.(pc) = bst.(bpc) /\
-      is_thread_block_compiled (firstn sto.(pc) sto.(instrs)) (firstn bst.(bpc) bst.(binstrs)) /\
-      same_behavior_local sto.(G) bst.(G') /\
-      sto.(regf) = bst.(regf') /\
-      sto.(eindex) = bst.(eindex'). 
-
-    Lemma ost2bst2st_regf bst ost sti (B2s: sti = bst2st bst) (MM_SIM: mm_similar_states ost bst): regf ost = regf sti. 
+    Lemma crt_num_steps {A: Type} (r: relation A) a b: r＊ a b <-> exists n, r ^^ n a b.
     Proof.
-      red in MM_SIM. desc.
-      rewrite MM_SIM3.
-      unfold bst2st in B2s. subst sti. auto.
-    Qed. 
+      split.
+      { ins. rewrite clos_refl_transE in H. destruct H.
+        { exists 0. split; auto. }
+        induction H. 
+        { exists 1. simpl. basic_solver. }
+        destruct IHclos_trans1 as [n1 IH1]. destruct IHclos_trans2 as [n2 IH2]. 
+        exists (n1+n2). (* split; [omega | ]. *)
+        pose proof (@pow_nm _ n1 n2 r) as POW. destruct POW as [POW _].
+        specialize (POW x z). apply POW.
+        red. exists y. desc. split; auto. }
+      ins. destruct H as [n STEPS].
+      rewrite clos_refl_transE.
+      destruct n.
+      { left. desc.  simpl in STEPS. generalize STEPS. basic_solver 10. }
+      right. desc.
+      pose proof ctEE. specialize (H _ r). destruct H as [_ POW].
+      apply POW. basic_solver. 
+    Qed.
 
-    Lemma ost2bst2st_eindex bst ost sti (B2s: sti = bst2st bst) (MM_SIM: mm_similar_states ost bst): eindex ost = eindex sti. 
+
+    Lemma steps_split {A: Type} (r: relation A) n a b (SPLIT: a + b = n) x y: r^^n x y <-> exists z, r^^a x z /\ r^^b z y.
     Proof.
-      red in MM_SIM. desc.
-      rewrite MM_SIM4.
-      unfold bst2st in B2s. subst sti. auto.
+      split. 
+      { ins.
+        pose proof (pow_nm a b r) as STEPS_SPLIT.
+        pose proof (same_relation_exp STEPS_SPLIT x y).
+        rewrite SPLIT in H0. apply H0 in H. destruct H as [z STEPSz ].
+        eauto. }
+      ins. desf.
+      pose proof (pow_nm a b r) as STEPS_SPLIT.
+      pose proof (same_relation_exp STEPS_SPLIT x y).
+      apply H1. red. exists z. auto.     
     Qed. 
+    
+    Lemma steps_sub {A: Type} (r: relation A) n x y m (LEQ: m <= n): r^^n x y -> exists z, r^^m x z. 
+    Proof.
+      ins.
+      pose proof (pow_nm m (n-m) r) as STEPS_SPLIT.
+      pose proof (same_relation_exp STEPS_SPLIT x y).
+      rewrite Const.add_sub_assoc in H0; [| auto]. rewrite minus_plus in H0.
+      apply H0 in H. destruct H as [z STEPSz]. desc. 
+      eauto. 
+    Qed.
 
+    Lemma steps0 {A: Type} (r: relation A) x y: r^^0 x y <-> x = y.
+    Proof. simpl. split; basic_solver. Qed.
+
+    Lemma steps_indices {A: Type} (r: relation A) n x y: r^^n x y -> forall i (INDEX: i < n), exists z1 z2, r^^i x z1 /\ r z1 z2.
+    Proof.
+      intros Rn i LT. 
+      assert (LEQ: i + 1 <= n) by omega. 
+      pose proof (@steps_sub _ r n x y (i+1) LEQ Rn) as [z2 Ri1].
+      pose proof (@steps_split _ r (i+1) i 1 eq_refl x z2).
+      apply H in Ri1. destruct Ri1 as [z1 [Ri R1]].
+      exists z1. exists z2. split; [auto| ]. 
+      apply (same_relation_exp (pow_unit r)). auto.
+    Qed. 
+    
+    Lemma step_prev: forall {A: Type} (r: relation A) x y k, r^^(S k) x y <-> exists z, r^^k x z /\ r z y.
+    Proof. ins. Qed. 
+    
     Lemma first_end {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n):
       firstn (n + 1) l = firstn n l ++ [x].
     Proof.
@@ -436,13 +485,140 @@ Section OCaml_Program.
       rewrite H1. auto. 
     Qed. 
 
-    Lemma block_step_correspondence sto bsti (MM_SIM: mm_similar_states sto bsti) block (BLOCK: Some block = List.nth_error bsti.(binstrs) bsti.(bpc)):
-      exists instr, is_thread_block_compiled [instr] [block] /\
-               Some instr = List.nth_error sto.(instrs) sto.(pc). 
+    Lemma compilation_alt_min_length PO PI (COMP: is_thread_compiled_alt PO PI):
+      length PO <= length PI.
+    Proof. Admitted. 
+
+    
+    Lemma group_steps k sti tid (REACH: (step tid) ^^ k (init (instrs sti)) sti)
+          (BY_GROUPS: exists PO, is_thread_compiled_alt PO (firstn k sti.(instrs))):
+      (oseq_step tid)＊ (init (instrs sti)) sti.
     Proof.
-      red in MM_SIM. desc.
-      rewrite MM_SIM0 in *.    
-    Admitted.
+      (* (* apply crt_num_steps in REACH as [n REACH]. *) *)
+      (* generalize dependent sti. induction k.  *)
+      (* { intros. *)
+      (*   simpl in REACH. red in REACH. desc. rewrite REACH. apply rt_refl. } *)
+      (* intros. rename sti into sti_next. *)
+      (* apply step_prev in REACH as [sti [REACH NEXT]]. *)
+      (* specialize (IHk sti). *)
+      (* replace (instrs sti_next) with (instrs sti) in * by admit. *)
+      (* destruct BY_GROUPS as [PO COMP]. inversion COMP. *)
+      (* { admit. }       *)
+      (* forward eapply IHk. *)
+      (* { auto. } *)
+      (* { (* destruct BY_GROUPS as [POcur COMPcur]. *) *)
+      (*   (* rewrite <- Nat.add_1_r in COMPcur. *) *)
+      (*   (* rewrite first_end in COMPcur.  *) *)
+      (*   (* destruct COMPcur. *) *)
+      (*   (* { discriminate.  *) *)
+      (*   admit. } *)
+      (* intros OSTEPS.  *)
+      (* apply inclusion_t_rt. apply t_rt_step. *)
+      (* exists sti. split; auto. *)
+      (* red. red in NEXT. destruct NEXT as [lbls NEXT].  *)      
+    Admitted. 
+    
+    Lemma init_mm_same: forall PO PI (COMP: is_thread_compiled_alt PO PI),
+        mm_similar_states_alt (init PO) (init PI).
+    Proof.
+      (* should shorten it a lot *)
+      ins. red. simpl. splits; auto.
+      { apply compiled_empty_alt. }
+      assert (NO_E: E init_execution ≡₁ ∅) by basic_solver. 
+      assert (PREPEND_E0: forall S i (IN_E: S ⊆₁ E init_execution), prepend_events S i ≡₁ ∅).
+      { intros. split; [| basic_solver].
+        red. intros e.
+        intros PREP.
+        do 2 red in PREP. apply IN_E in PREP.
+        unfold acts_set in PREP. simpl in PREP. auto. }
+      assert (PREPEND_EAPP: forall S i x (IN_E: S ⊆₁ E init_execution), prepend_events S i x -> False).
+      { intros. specialize (PREPEND_E0 S i IN_E). red in PREPEND_E0. desc.
+        red in PREPEND_E0. specialize (PREPEND_E0 x H). basic_solver. }      
+      red.
+      splits. 
+      { rewrite PREPEND_E0; [| basic_solver]. rewrite PREPEND_E0; [| basic_solver].
+        rewrite PREPEND_E0; [| basic_solver]. basic_solver. }
+      { auto. }
+      { intros. exfalso. apply (PREPEND_EAPP ((E init_execution ∩₁ Sc init_execution)) 2 e); [basic_solver | auto]. }
+      { intros. exfalso. apply (PREPEND_EAPP ((E init_execution ∩₁ W init_execution ∩₁ ORlx init_execution)) 2 e); [basic_solver | auto]. }
+      { intros. exfalso. apply (PREPEND_EAPP (E init_execution ∩₁ W init_execution ∩₁ Sc init_execution) 1 e);  [basic_solver | auto]. }
+      simpl. split; [basic_solver|].
+      red. intros. desc. red in H. desc. red in H. desc. basic_solver. 
+    Qed.
+
+    (* wrong! *)
+    
+    (* Lemma step_increase_pc st st' tid (STEP: (step tid) st st'): pc st' = pc st + 1. *)
+    (* Proof. *)
+    (*   destruct STEP as [lbls STEP]. *)
+    (*   red in STEP. desc. inversion ISTEP0; auto.  *)
+          
+    (* Lemma STEP_PS k tid: forall st, (step tid)^^k (init (instrs st)) st -> pc st = k. *)
+    (* Proof. *)
+    (*   induction k. *)
+    (*   { intros st REACH. do 2 red in REACH. desc. rewrite <- REACH. *)
+    (*     simpl. auto. } *)
+    (*   intros st REACH. apply step_prev in REACH as [st_prev [STEPS_PREV STEP_CUR]]. *)
+    (*   specialize (IHk st_prev). *)
+    (*   replace (instrs st_prev) with (instrs st) in IHk by admit.  *)
+    (*   apply IHk in STEPS_PREV. *)
+      
+    Lemma thread_execs tid PO PI (COMP: is_thread_compiled_alt PO PI)
+          SGI (ExI: thread_execution tid PI SGI):
+      exists SGO, Othread_execution tid PO SGO /\
+             same_behavior_local SGO SGI /\
+             Wf_local SGO. 
+    Proof.
+      (* clear dependent ProgO. clear dependent ProgI. *)
+      (* clear dependent GI. clear dependent sc.  *)
+      intros.
+      destruct ExI as [sti EXECI]. desc.
+      set (lenO := length PO). set (lenI := length PI).
+      assert (STI_INSTRS: instrs sti = PI) by admit. 
+      assert (OSEQ_STEPS: (oseq_step tid)＊ (init PI) sti). 
+      { rewrite <- STI_INSTRS in *. 
+        (* apply (group_steps ???). *)
+        
+        (* { specialize (REACH_TERM sti).  *)
+        (*   subst lenI. rewrite <- STI_INSTRS. apply REACH_TERM; auto. } *)
+        (* exists PO. subst lenI.  *)
+        (* rewrite <- STI_INSTRS.  *)
+        (* rewrite firstn_all. auto. *)
+        admit. 
+      }
+      
+
+      apply crt_num_steps in OSEQ_STEPS as [OSEQ_STEPS_NUM OSEQ_STEPS]. 
+      assert (STO_SEQ: forall k sti_k (INDEX: k <= OSEQ_STEPS_NUM) (CUR_STEPS: (oseq_step tid) ^^ k (init PI) sti_k),
+                 exists sto_k, (Ostep tid) ^^ k (init PO) sto_k
+                          /\ mm_similar_states_alt sto_k sti_k).
+      { intros k.
+        induction k.
+        { exists (init PO). split.
+          - basic_solver.
+          - do 2 red in CUR_STEPS. desc. rewrite <- CUR_STEPS.
+            apply init_mm_same; auto. }
+        intros. 
+        apply step_prev in CUR_STEPS as [sti_cur [OSEQ_CUR OSEQ_NEXT]].
+        forward eapply (IHk sti_cur).
+        { omega. }
+        { auto. }
+        intros [sto_cur [OSTEP_CUR MM_SIM_CUR]].
+        pose proof (pair_step_alt MM_SIM_CUR OSEQ_NEXT) as [sto_next [OSTEP_NEXT MM_SIM_NEXT]].
+        exists sto_next. split; auto.
+        apply step_prev. exists sto_cur. split; auto. } 
+
+      destruct (@STO_SEQ OSEQ_STEPS_NUM sti (Nat.le_refl OSEQ_STEPS_NUM) OSEQ_STEPS) as [sto [OSTEPS_NUM MM_SIM]].
+      exists (G sto).
+      splits.
+      3: { (* Wf_local for derived sto graph *) admit. }
+      2: { red in MM_SIM. desc. vauto. }
+      red. exists sto. splits; auto. 
+      { apply crt_num_steps. basic_solver 10. }
+      red.
+      (* why pc should be strictly larger than l? *) admit.
+    Admitted. 
+
 
     Lemma PREP_NOT_LAST' e sto (PREPS: exists S i, prepend_events S i e /\ S ⊆₁ E (G sto)) (EXISTING_INDICES: forall e', E (G sto) e' -> index e' < eindex sto):
       index e <> eindex sto.
@@ -454,8 +630,17 @@ Section OCaml_Program.
       apply EXISTING_INDICES in INE.
       simpl in INE.
       omega.
-    Qed. 
+    Qed.
 
+
+    
+                                               
+    Lemma pair_step_alt sto bsti (MM_SIM: mm_similar_states sto bsti)
+          tid bsti' (BSTEP: block_step tid bsti bsti'):
+      exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
+
+
+      
     Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
           tid bsti' (BSTEP: block_step tid bsti bsti'):
       exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
@@ -785,68 +970,6 @@ Section OCaml_Program.
     Lemma tre_idempotent SG tid G (TRE: thread_restricted_execution G tid SG):
       thread_restricted_execution SG tid SG.
     Proof. Admitted.
-
-    Lemma crt_num_steps {A: Type} (r: relation A) a b: r＊ a b <-> exists n, n >= 0 /\ r ^^ n a b.
-    Proof.
-      split.
-      { ins. rewrite clos_refl_transE in H. destruct H.
-        { exists 0. split; auto. simpl. basic_solver. }
-        induction H. 
-        { exists 1. split; [auto | simpl; basic_solver]. }
-        destruct IHclos_trans1 as [n1 IH1]. destruct IHclos_trans2 as [n2 IH2]. 
-        exists (n1+n2). split; [omega | ].
-        pose proof (@pow_nm _ n1 n2 r) as POW. destruct POW as [POW _].
-        specialize (POW x z). apply POW.
-        red. exists y. desc. split; auto. }
-      ins. destruct H as [n STEPS].
-      rewrite clos_refl_transE.
-      destruct n.
-      { left. desc. simpl in STEPS0. generalize STEPS0. basic_solver 10. }
-      right. desc.
-      pose proof ctEE. specialize (H _ r). destruct H as [_ POW].
-      apply POW. basic_solver. 
-    Qed.
-
-    Lemma steps_split {A: Type} (r: relation A) n a b (SPLIT: a + b = n) x y: r^^n x y <-> exists z, r^^a x z /\ r^^b z y.
-    Proof.
-      split. 
-      { ins.
-        pose proof (pow_nm a b r) as STEPS_SPLIT.
-        pose proof (same_relation_exp STEPS_SPLIT x y).
-        rewrite SPLIT in H0. apply H0 in H. destruct H as [z STEPSz ].
-        eauto. }
-      ins. desf.
-      pose proof (pow_nm a b r) as STEPS_SPLIT.
-      pose proof (same_relation_exp STEPS_SPLIT x y).
-      apply H1. red. exists z. auto.     
-    Qed. 
-    
-    Lemma steps_sub {A: Type} (r: relation A) n x y m (LEQ: m <= n): r^^n x y -> exists z, r^^m x z. 
-    Proof.
-      ins.
-      pose proof (pow_nm m (n-m) r) as STEPS_SPLIT.
-      pose proof (same_relation_exp STEPS_SPLIT x y).
-      rewrite Const.add_sub_assoc in H0; [| auto]. rewrite minus_plus in H0.
-      apply H0 in H. destruct H as [z STEPSz]. desc. 
-      eauto. 
-    Qed.
-
-    Lemma steps0 {A: Type} (r: relation A) x y: r^^0 x y <-> x = y.
-    Proof. simpl. split; basic_solver. Qed.
-
-    Lemma steps_indices {A: Type} (r: relation A) n x y: r^^n x y -> forall i (INDEX: i < n), exists z1 z2, r^^i x z1 /\ r z1 z2.
-    Proof.
-      intros Rn i LT. 
-      assert (LEQ: i + 1 <= n) by omega. 
-      pose proof (@steps_sub _ r n x y (i+1) LEQ Rn) as [z2 Ri1].
-      pose proof (@steps_split _ r (i+1) i 1 eq_refl x z2).
-      apply H in Ri1. destruct Ri1 as [z1 [Ri R1]].
-      exists z1. exists z2. split; [auto| ]. 
-      apply (same_relation_exp (pow_unit r)). auto.
-    Qed. 
-    
-    Lemma step_prev: forall {A: Type} (r: relation A) x y k, r^^(S k) x y -> exists z, r^^k x z /\ r z y.
-    Proof. ins. Qed. 
 
     Lemma thread_execs: forall tid PO (THREAD_O: IdentMap.find tid ProgO = Some PO)
                           PI (THREAD_I: IdentMap.find tid ProgI = Some PI)
