@@ -576,10 +576,46 @@ Section CompilationCorrectness.
   Hypothesis ExecI: program_execution ProgI GI.
   Hypothesis IPC: imm_s.imm_psc_consistent GI sc.
 
+  Definition merge_thread_graphs (graphs: list (thread_id * execution)) : execution.
+  Admitted. 
+
   Lemma GO_exists: exists GO,
       Oprogram_execution OCamlProgO GO /\
       same_behavior GO GI. 
-  Proof. Admitted.
+  Proof.
+    pose proof thread_execs.
+    assert (ALL_SGO: forall tid PO PI SGI
+                       (THREADO: IdentMap.find tid ProgO = Some PO)
+                       (THREADI: IdentMap.find tid ProgI = Some PI)
+                       (THREAD_EXEC: thread_execution tid PI SGI),
+                 exists SGO, Othread_execution tid PO SGO /\
+                        same_behavior_local SGO SGI /\ Wf_local SGO). 
+    { admit. }
+    (* should somehow get a list of threads and call merge_thread_graphs *)
+    (* also should pass rf and co to resulting graph *)
+    assert (exists GO, forall tid PO PI SGI
+                    (THREADO: IdentMap.find tid ProgO = Some PO)
+                    (THREADI: IdentMap.find tid ProgI = Some PI)
+                    (THREAD_EXEC: thread_execution tid PI SGI),
+                 exists SGO, Othread_execution tid PO SGO /\
+                        same_behavior_local SGO SGI /\ Wf_local SGO /\
+                        thread_restricted_execution GO tid SGO) as [GO SUBGRAPHS]. 
+    { admit. }
+    exists GO.
+    split.
+    { red. split.
+      { admit. }
+      (* red in ExecI. destruct ExecI. specialize (H1 tid  *)
+      (* intros tid PO THREADO. specialize (SUBGRAPHS tid PO).  *)
+      admit. 
+    } 
+    red.
+    splits.
+    { (* should show that if every thread graph is sbl, then the whole graph is sbl*)
+      admit. }
+    { admit. }
+    admit.     
+  Admitted.
 
   Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI):
     ocaml_consistent GO.
@@ -668,8 +704,19 @@ Section CompilationCorrectness.
     desc. auto.
   Admitted.
   
-  Lemma imm_implies_omm: ocaml_consistent GI.
-  Proof. Admitted. 
+  Lemma imm_implies_omm GO (WFO: Wf GO) (SB: same_behavior GO GI) (OC: ocaml_consistent GO): ocaml_consistent GI.
+  Proof.
+    red in SB. desc.
+    forward eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI).
+    { admit. }
+    { admit. }
+    { admit. }
+    { admit. }
+    { admit. }
+    { auto. }
+    { eauto. }
+    auto. 
+  Admitted. 
   
   Theorem compilation_correctness: exists (GO: execution),
       ⟪WFO: Wf GO ⟫ /\
