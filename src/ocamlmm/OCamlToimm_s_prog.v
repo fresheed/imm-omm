@@ -163,6 +163,19 @@ Section OCaml_Program.
   Definition Ostep (tid : thread_id) s1 s2 :=
     exists lbls, Oistep tid lbls s1 s2.
 
+  Definition is_ocaml_mode mode :=
+    match mode with
+    | Orlx | Osc => True
+    | _ => False
+    end. 
+  
+  Definition is_ocaml_instruction instr :=
+    match instr with
+    | Instr.assign _ _ | Instr.ifgoto _ _ => True
+    | Instr.load mode _ _ | Instr.store mode _ _ => is_ocaml_mode mode
+    | _ => False
+    end. 
+
   Definition Othread_execution (tid : thread_id) (insts : list Prog.Instr.t) (pe : execution) :=
     exists s,
       ⟪ STEPS : (Ostep tid)＊ (init insts) s ⟫ /\
@@ -704,7 +717,8 @@ Section CompilationCorrectness.
     desc. auto.
   Admitted.
   
-  Lemma imm_implies_omm GO (WFO: Wf GO) (SB: same_behavior GO GI) (OC: ocaml_consistent GO): ocaml_consistent GI.
+  Lemma imm_implies_omm GO (WFO: Wf GO) (SB: same_behavior GO GI):
+    ocaml_consistent GI.
   Proof.
     red in SB. desc.
     forward eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI).
@@ -725,10 +739,11 @@ Section CompilationCorrectness.
       ⟪SameBeh: same_behavior GO GI⟫.
   Proof.
     pose proof GO_exists as [GO [OPE EVENTS]].
-    exists GO. splits; auto.
-    { apply (Wf_subgraph EVENTS WFI). }
-    apply graph_switch; auto. 
-    apply imm_implies_omm.
+    exists GO.
+    pose proof (Wf_subgraph EVENTS WFI) as WFO. 
+    splits; auto.
+    apply graph_switch; auto.
+    apply (imm_implies_omm WFO); auto.
   Qed. 
 
 End CompilationCorrectness.       
