@@ -442,11 +442,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     rewrite H1. auto. 
   Qed. 
     
-  Lemma group_steps k sti tid (REACH: (step tid) ^^ k (init (instrs sti)) sti)
-        (BY_GROUPS: exists PO, is_thread_compiled PO (firstn k sti.(instrs))):
-    (oseq_step tid)＊ (init (instrs sti)) sti.
-  Proof. Admitted. 
-    
   Lemma init_mm_same: forall PO PI (COMP: is_thread_compiled PO PI),
       mm_similar_states (init PO) (init PI).
   Proof.
@@ -474,8 +469,9 @@ Section OCamlMM_TO_IMM_S_PROG.
   Proof.  Admitted.
       
   Lemma Wf_subgraph G' G (SB: same_behavior G G') (WF: Wf G'): Wf G.
-  Proof. Admitted.
-      
+  Proof. Admitted.     
+    
+  
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
         SGI (ExI: thread_execution tid PI SGI) (WFL: Wf_local SGI):
     exists SGO, Othread_execution tid PO SGO /\
@@ -486,21 +482,25 @@ Section OCamlMM_TO_IMM_S_PROG.
     red in SGI_COMP. destruct SGI_COMP as [_ [ev_blocks [BLOCKS_OF_SGI COMP_EVENTS_BLOCKS]]].
     set (n_osteps := length ev_blocks).
     red in ExI. destruct ExI as [sti_fin ExI]. desc.
-    apply (@crt_num_steps _ (step tid) (init PI) sti_fin) in STEPS as [n_isteps ISTEPS]. 
-    assert (BY_STEPS: forall i j sti_j (INDEX: i <= n_osteps)
-                        (STEPS_TO: (step tid)^^j (init PI) sti_j)
-                        (STEPS_FROM: (step tid)^^(n_isteps - j) sti_j sti_fin),
+    apply (@crt_num_steps _ (step tid) (init PI) sti_fin) in STEPS as [n_isteps ISTEPS].
+    assert ((oseq_step tid) ^^ n_osteps (init PI) sti_fin) as OSEQ_STEPS by admit. 
+    assert (BY_STEPS: forall i sti_i (INDEX: i <= n_osteps)
+                        (STEPS_TO: (oseq_step tid)^^i (init PI) sti_i)
+                        (STEPS_FROM: (oseq_step tid)^^(n_osteps - i) sti_i sti_fin),
                  exists sto_i,
                  (Ostep tid)^^i (init PO) sto_i /\
-                 mm_similar_states sto_i sti_j ).
-    { admit. }
-    forward eapply (BY_STEPS n_osteps n_isteps sti_fin (Nat.le_refl n_osteps)) as [sto_fin [OSTEPS MM_SIM]].
+                 mm_similar_states sto_i sti_i ).
+    { (* induction i. *)
+      (* -  *)
+      admit. }
+    forward eapply (BY_STEPS n_osteps sti_fin (Nat.le_refl n_osteps)) as [sto_fin [OSTEPS MM_SIM]].
     { auto. }
     { rewrite Nat.sub_diag. basic_solver. }
     exists (G sto_fin).
     splits.
     { red. exists sto_fin. splits; auto. 
       { apply crt_num_steps. vauto. }
+      red. 
       admit. (* prove that we've reached a terminal state *) }
     { red in MM_SIM. desc. vauto. }
     red in MM_SIM. desc. 
@@ -616,7 +616,8 @@ Section CompilationCorrectness.
     red.
     splits.
     { apply tl_sbl. intros tid SGO SGI TRE_O TRE_I.
-      (* show that thread restriction gives an unique graph which *)
+      red. 
+      (* show that thread restriction gives an unique graph? *)
       admit. }
     { admit. }
     admit.         
@@ -688,8 +689,19 @@ Section CompilationCorrectness.
       unfold fre. basic_solver. }
     
     arewrite (coe GO ⊆ coe GI).
-    { (* unfold coe. rewrite SB', SAME_CO.  *)
+    { admit. 
+      
+      (* assert (CO_: forall G, coe G ≡ co G \ coi G). *)
+      (* {  *)
+      (*   intros. unfold coe. split.  *)
+
+      (*   pose proof (coi_union_coe G).  *)
+      (*   rewrite minus_union_l.  *)
+      (*   rewrite minusK. basic_solver 10.  *)
+
+      (* unfold coe. rewrite SB', SAME_CO. *)
       (* apply inclusion_minus_l. *)
+
       (* rewrite coi_union_coe at 1.  *)
       (* apply union_mori.         *)
       (* { arewrite (coi GO ⊆ sb GO). *)
@@ -699,8 +711,7 @@ Section CompilationCorrectness.
       (* arewrite (coi GI ⊆ sb GI). *)
       (* apply seq_mori; hahn_frame; apply eqv_rel_mori; apply W_RMW. *)
 
-      (* rewrite as equality? *)
-      admit. }
+      (* rewrite as equality? *) }
     rewrite SC'. 
     arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver.
     desc. auto.
