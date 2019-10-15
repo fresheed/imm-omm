@@ -452,7 +452,17 @@ Section OCamlMM_TO_IMM_S_PROG.
   Qed.
 
   Definition is_sorted_TODO {A: Type} (l: list A) := True.
-  Definition is_events_compilation_block (block: list actid) := True.
+  Inductive are_events_compilation_labels labels :=
+  | labels_Rrlx loc val (R_RLX: labels  = [Aload false Orlx loc val]): are_events_compilation_labels labels
+  | labels_Wrlx loc val (W_RLX: labels = [Afence Oacqrel; Astore Xpln Orlx loc val]): are_events_compilation_labels labels
+  | labels_Rsc loc val (R_SC: labels = [Afence Oacq; Aload false Osc loc val]): are_events_compilation_labels labels
+  | labels_Wsc loc val (W_SC: labels = [Afence Oacq; Aload true Osc loc val; Astore Xpln Osc loc val]): are_events_compilation_labels labels. 
+  
+  Inductive is_events_compilation_block (lab_fun: actid -> label) : list actid -> Prop :=
+  | event_block_init loc: is_events_compilation_block lab_fun [(InitEvent loc)]
+  | event_block_instr block (LABELS: are_events_compilation_labels (map lab_fun block)): is_events_compilation_block lab_fun block. 
+  
+    
   Lemma TODO_COMPILATION_DEFINITIONS : True.
   Proof. Admitted. 
   Definition is_compiled_graph GI :=
