@@ -608,22 +608,8 @@ Section CompilationCorrectness.
   Lemma GI_omm_premises : omm_premises_hold GI.
   Proof.
     apply TMP_tl_omm_premises.
-    intros tid. 
-    (* again, reuse IdentMap access *)
-    destruct (IdentMap.find tid ProgI) as [PI | ] eqn:find. 
-    - destruct ExecI as [_ THREAD_GRAPHS].
-      specialize (THREAD_GRAPHS tid PI (eq_sym find)) as [SGI [TE TRE]]. 
-      forward eapply (compilation_implies_omm_premises); eauto.
-      replace (restrict_to_thread tid GI) with SGI; auto. 
-      (* need to define restrict_to_thread in such way that it will match SGI *)
-      admit.
-    - remember (restrict_to_thread tid GI) as empty_graph.
-      assert (EMPTY: E empty_graph ≡₁ ∅) by admit.
-      red. splits.
-      + admit. (* should show location restriction by program properties *)
-      + 
-    { auto. }
-    auto.
+    intros tid.
+    (* should carefully relate existing single thread graphs and thread_local_property *)
   Admitted. 
       
   Lemma imm_implies_omm:
