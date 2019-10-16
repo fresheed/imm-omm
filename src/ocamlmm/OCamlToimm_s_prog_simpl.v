@@ -361,7 +361,7 @@ Section OCamlMM_TO_IMM_S_PROG.
   Definition omm_premises_hold G :=
     (* have issues with global Loc_ notation *)
     let Loc_ := fun l x => loc G.(lab) x = Some l in
-    ⟪ LSM : forall l, Loc_ l \₁ is_init ⊆₁ (ORlx G)  \/  Loc_ l \₁ is_init ⊆₁ (Sc G) ⟫ /\
+    ⟪ LSM : forall l, (Loc_ l \₁ is_init ⊆₁ (ORlx G)  \/  Loc_ l \₁ is_init ⊆₁ (Sc G)) ⟫ /\
     ⟪ WSCFACQRMW : W G ∩₁ Sc G ≡₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G) ⨾ rmw G) ⟫ /\
     ⟪ RMWSC  : rmw G ≡ ⦗Sc G⦘ ⨾ rmw G⨾ ⦗Sc G⦘ ⟫ /\
     ⟪ WRLXF : W G ∩₁ ORlx G ⊆₁ codom_rel (⦗F G ∩₁ Acqrel G⦘ ⨾ immediate (sb G)) ⟫ /\
@@ -457,19 +457,18 @@ Section OCamlMM_TO_IMM_S_PROG.
   | labels_Wrlx loc val (W_RLX: labels = [Afence Oacqrel; Astore Xpln Orlx loc val]): are_events_compilation_labels labels
   | labels_Rsc loc val (R_SC: labels = [Afence Oacq; Aload false Osc loc val]): are_events_compilation_labels labels
   | labels_Wsc loc val (W_SC: labels = [Afence Oacq; Aload true Osc loc val; Astore Xpln Osc loc val]): are_events_compilation_labels labels. 
-  
+
   Inductive is_events_compilation_block (lab_fun: actid -> label) : list actid -> Prop :=
   | event_block_init loc: is_events_compilation_block lab_fun [(InitEvent loc)]
   | event_block_instr block (LABELS: are_events_compilation_labels (map lab_fun block)): is_events_compilation_block lab_fun block. 
   
     
-  Lemma TODO_COMPILATION_DEFINITIONS : True.
-  Proof. Admitted. 
   Definition is_compiled_graph GI :=
-    is_sorted_TODO (acts GI) /\ (* is it needed? *)
-    (exists events_blocks,
-        flatten events_blocks = acts GI /\
-        Forall is_events_compilation_block events_blocks). 
+    let event_lt x y := Peano.lt (index x) (index y) in
+    StronglySorted event_lt (acts GI) /\
+    exists events_blocks,
+      flatten events_blocks = acts GI /\
+      Forall (is_events_compilation_block (lab GI)) events_blocks. 
       
   Lemma compiled_by_program GI PI (EX: exists tid, thread_execution tid PI GI)
         (COMP: exists PO, is_thread_compiled PO PI) : is_compiled_graph GI. 
@@ -480,7 +479,10 @@ Section OCamlMM_TO_IMM_S_PROG.
       
   Lemma Wf_subgraph G' G (SB: same_behavior G G') (WF: Wf G'): Wf G.
   Proof. Admitted.     
-    
+
+  Lemma oseq_iff_steps PI sti tid (COMP: exists PO, is_thread_compiled PO PI):
+    (step tid)＊ (init PI) sti <-> (oseq_step tid)＊ (init PI) sti.
+  Proof. Admitted. 
   
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
         SGI (ExI: thread_execution tid PI SGI) (WFL: Wf_local SGI):
@@ -546,27 +548,80 @@ Section CompilationCorrectness.
   Hypothesis ExecI: program_execution ProgI GI.
   Hypothesis IPC: imm_s.imm_psc_consistent GI sc.
 
+
+  Lemma OPT_VAL: forall {A: Type} (opt: option A), opt <> None <-> exists o, Some o = opt.
+  Proof. 
+    ins. destruct opt; [vauto | ]. 
+    split; [ins| ]. 
+    intros [o CONTRA]. vauto.
+  Qed.
+  
+  Lemma find_iff_in {A: Type} (M: IdentMap.t A) k: 
+    IdentMap.In k M <-> exists elt, Some elt = IdentMap.find k M. 
+  Proof.
+    pose proof (@UsualFMapPositive.UsualPositiveMap.Facts.in_find_iff _ M k).
+    pose proof OPT_VAL (IdentMap.find k M).
+    eapply iff_stepl.
+    - eapply H0. 
+    - symmetry. eauto.
+  Qed. 
+
   Lemma compilation_implies_omm_premises SGI PI tid
         (EXEC: thread_execution tid PI SGI) (THREAD_PROG: Some PI = IdentMap.find tid ProgI):
     omm_premises_hold SGI.
   Proof.
-  (*   red in Compiled. destruct Compiled.  *)
-    (*   forward eapply (compiled_by_program); eauto.  *)
-    (* reuse existing code for retrieving corresponging ocaml thread program *)
+    red in Compiled. destruct Compiled as [SAME_THREADS COMP_THREADS].
+    assert (exists PO : list Instr.t, is_thread_compiled PO PI) as [PO COMP].
+    { pose proof (find_iff_in ProgO tid) as find_iff.
+      destruct find_iff as [find_iff _].
+      forward eapply find_iff.
+      { apply SAME_THREADS. apply find_iff_in.
+        eauto. }
+      intros [PO THREAD_PO]. exists PO. 
+      eapply COMP_THREADS; eauto. }
+    forward eapply (compiled_by_program); eauto.    
+    intros GRAPH_COMPILED.
+    red in EXEC. destruct EXEC as [sti_fin [STEPS [TERMINAL G_FIN]]]. 
+    apply oseq_iff_steps in STEPS; eauto. 
+    rewrite crt_num_steps in STEPS. destruct STEPS as [n_osteps OSTEPS]. 
+    assert (OMM_PREM_STEPS: forall i sti (INDEX: i <= n_osteps)
+                              (REACH: (oseq_step tid) ^^ i (init PI) sti),
+               omm_premises_hold (G sti)).
+    { admit. }
+    rewrite <- G_FIN. 
+    apply (OMM_PREM_STEPS n_osteps sti_fin (Nat.le_refl n_osteps) OSTEPS). 
+  Admitted.
+
+  Definition restrict_to_thread (tid: thread_id) (G: execution) : execution.
   Admitted. 
 
-  
+  Definition TMP_thread_local_property (P: execution -> Prop) := forall G,
+      (forall tid, P (restrict_to_thread tid G)) -> P G.
+  (* Definition TMP_thread_local_property (P: execution -> Prop) := forall G, *)
+  (*     (forall tid SG (TE: thread_execution G tid SG) (TRE: thread_restricted_execution G tid SG), P SG) -> P G. *)
+
+
+  Lemma TMP_tl_omm_premises : TMP_thread_local_property omm_premises_hold.
+  Proof. Admitted.
+
+
   Lemma GI_omm_premises : omm_premises_hold GI.
   Proof.
-    apply tl_omm_premises.
-    intros tid SGI TRE.
+    apply TMP_tl_omm_premises.
+    intros tid. 
     (* again, reuse IdentMap access *)
-    assert (exists PI, Some PI = IdentMap.find tid ProgI) as [PI THREAD_EXEC] by admit.
-    destruct ExecI as [_ THREAD_GRAPHS].
-    forward eapply compilation_implies_omm_premises.
-    { (* show that if graph can be restricted then there is a thread execution *)
-      assert (TE: thread_execution tid PI SGI) by admit.
-      eauto. }
+    destruct (IdentMap.find tid ProgI) as [PI | ] eqn:find. 
+    - destruct ExecI as [_ THREAD_GRAPHS].
+      specialize (THREAD_GRAPHS tid PI (eq_sym find)) as [SGI [TE TRE]]. 
+      forward eapply (compilation_implies_omm_premises); eauto.
+      replace (restrict_to_thread tid GI) with SGI; auto. 
+      (* need to define restrict_to_thread in such way that it will match SGI *)
+      admit.
+    - remember (restrict_to_thread tid GI) as empty_graph.
+      assert (EMPTY: E empty_graph ≡₁ ∅) by admit.
+      red. splits.
+      + admit. (* should show location restriction by program properties *)
+      + 
     { auto. }
     auto.
   Admitted. 
@@ -577,7 +632,7 @@ Section CompilationCorrectness.
     pose proof GI_omm_premises as GI_OMM_PREM. red in GI_OMM_PREM. desc.
     eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto. 
   Qed.
-
+    
   Lemma GO_exists: exists GO,
       Oprogram_execution OCamlProgO GO /\
       same_behavior GO GI. 
@@ -606,19 +661,12 @@ Section CompilationCorrectness.
       { admit. (* todo: every graph event is either init or from thread*)
       (* should work after precise single thread graph merge definition *)}
       red in ExecI. destruct ExecI as [EVENTS SGIS].
-      (* simplify following code? *)
       intros tid PO THREAD_PO.
-      red in Compiled. destruct Compiled as [SAME_THREADS _].
-      specialize (SAME_THREADS tid). destruct SAME_THREADS as [SAME_THREADS _].
-      forward eapply SAME_THREADS as THREAD_IN_PROGI. 
-      { unfold IdentMap.In. exists PO. auto. }
       assert (exists PI, Some PI = IdentMap.find tid ProgI) as [PI THREAD_PI].
-      { pose proof (UsualFMapPositive.UsualPositiveMap.Facts.in_find_iff) as FOO. 
-        apply FOO in THREAD_IN_PROGI.
-        red in THREAD_IN_PROGI.
-        destruct (IdentMap.find tid ProgI) eqn:ifind.
-        - eauto.
-        - vauto. } 
+      { apply find_iff_in.
+        red in Compiled. destruct Compiled as [SAME_THREADS _].
+        apply SAME_THREADS. apply find_iff_in.
+        eauto. }      
       specialize (SGIS tid PI THREAD_PI) as [SGI [TE_I TRE_I]].
       forward eapply (SUBGRAPHS tid PO PI SGI); auto.
       intros [SGO [TE_O [SAME_BEH [WFO TRE_O]]]].
