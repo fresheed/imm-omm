@@ -581,9 +581,22 @@ Section OCamlMM_TO_IMM_S_PROG.
                  exists sto_i,
                  (Ostep tid)^^i (init PO) sto_i /\
                  mm_similar_states sto_i sti_i ).
-    { (* induction i. *)
-      (* -  *)
-      admit. }
+    { induction i.
+      - intros sti_i _ STEPS_TO STEPS_FROM.
+        exists (init PO). split; [basic_solver| ].
+        replace (sti_i) with (init PI); [apply init_mm_same; auto| ].
+        generalize STEPS_TO. simpl. basic_solver 10.
+      - intros sti_i INDEX STEPS_TO STEPS_FROM.
+        rewrite step_prev in STEPS_TO.
+        destruct STEPS_TO as [sti_i' [STEPS_TO' STEPS_FROM']].
+        forward eapply IHi as [sto' [OSTEPS' MM_SIM']]. 
+        { omega. }
+        { eauto. }
+        { apply (@steps_split _ _ _ 1 (n_osteps - S i)); [omega| ].
+          eexists. split; eauto. simpl. basic_solver. }
+        pose proof (pair_step MM_SIM' STEPS_FROM') as [sto [OSTEP MM_SIM]].
+        eexists. split; eauto.
+        apply step_prev. eexists; eauto.  }
     forward eapply (BY_STEPS n_osteps sti_fin (Nat.le_refl n_osteps)) as [sto_fin [OSTEPS MM_SIM]].
     { auto. }
     { rewrite Nat.sub_diag. basic_solver. }
