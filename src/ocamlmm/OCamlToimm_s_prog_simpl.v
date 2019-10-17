@@ -803,7 +803,7 @@ Section CompilationCorrectness.
     pose proof (Wf_subgraph SAME_BEH WFI) as WFO. (* todo *)
     splits; auto.
     apply graph_switch; auto. (* todo *)
-    apply (imm_implies_omm WFO); auto. 
+    apply (imm_implies_omm). 
   Qed. 
 
 End CompilationCorrectness.       
