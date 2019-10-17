@@ -475,7 +475,9 @@ Section OCamlMM_TO_IMM_S_PROG.
       
   Lemma compiled_by_program GI PI (EX: exists tid, thread_execution tid PI GI)
         (COMP: exists PO, is_thread_compiled PO PI) : is_compiled_graph GI. 
-  Proof. Admitted. 
+  Proof.
+    (*show that every oseq_step adds a block *)
+  Admitted. 
 
   Lemma Wfl_subgraph SG' SG (SB: same_behavior_local SG SG') (WFL: Wf_local SG'): Wf_local SG.
   Proof.  Admitted.
@@ -485,11 +487,16 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   Lemma step_seq_as_ct x y tid labelsblocks_insns (STEP_SEQ: step_seq tid labelsblocks_insns x y):
     (step tid) ^^ (length labelsblocks_insns) x y.
-  Proof. Admitted.
+  Proof.
+    (* use the following list predicate: *)
+    (* is l_i prefix /\ exists state, let L=len state in step^^L x st *)
+    (* /\ step^^(length l_i - L) st y*)
+    (* then apply rev_ind *)
+  Admitted.
 
   Definition at_compilation_block sti i := exists PO, length PO = i /\ is_thread_compiled PO (firstn sti.(pc) sti.(instrs)). 
 
-  Lemma oseq_iff_steps sti tid (COMP: exists k, at_compilation_block sti k):
+  Lemma oseq_iff_steps sti tid (AT_KTH_BLOCK: exists k, at_compilation_block sti k):
     (step tid)＊ (init (instrs sti)) sti <-> (oseq_step tid)＊ (init (instrs sti)) sti.
   Proof.
     split. 
@@ -503,10 +510,18 @@ Section OCamlMM_TO_IMM_S_PROG.
          red in OSEQ. desc. 
          exists (length labelsblocks_insns).
          apply step_seq_as_ct; auto. }
-    (* generalize dependent sti. *)
-    (* - intros sti COMP STEPS. destruct COMP as [PO [EMPTY COMP]]. *)
-    (*   inversion COMP.  *)
-    (*   +   *)         
+    intros STEPS. apply crt_num_steps in STEPS. destruct STEPS as [n_isteps STEPS]. 
+    destruct AT_KTH_BLOCK as [k AT_KTH_BLOCK].
+    assert (OSEQ_INNER_STEPS: forall j sti_j (INDEX: j <= k)
+                                (AT_COMP: exists m, 
+                                    (step tid)^^m (init (instrs sti)) sti_j /\
+                                    (step tid)^^(n_isteps - m) sti_j sti),
+                 (oseq_step tid)^^j (init (instrs sti)) sti_j /\
+                 at_compilation_block sti_j j).
+    { admit. }
+    apply crt_num_steps. 
+    forward eapply (OSEQ_INNER_STEPS) as [OSEQ_FIN _]; eauto.  
+    eexists. split; eauto. rewrite Nat.sub_diag. basic_solver.
   Admitted. 
   
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
@@ -591,6 +606,21 @@ Section CompilationCorrectness.
     - symmetry. eauto.
   Qed. 
 
+  Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
+    instrs sti = instrs sti'.
+  Proof.
+    destruct STEPS as [tid STEPS]. apply crt_num_steps in STEPS.
+    destruct STEPS as [n STEPS].
+    generalize dependent sti'.
+    induction n.
+    - intros sti' STEPS. simpl in STEPS. generalize STEPS. basic_solver 10.
+    - intros sti' STEPS.
+      rewrite step_prev in STEPS. destruct STEPS as [sti'' STEPS'']. desc.
+      replace (instrs sti) with (instrs sti'').
+      { red in STEPS''0. desf. red in STEPS''0. desf. }
+      symmetry. eapply IHn. eauto.
+  Qed. 
+      
   Lemma compilation_implies_omm_premises SGI PI tid
         (EXEC: thread_execution tid PI SGI) (THREAD_PROG: Some PI = IdentMap.find tid ProgI):
     omm_premises_hold SGI.
@@ -607,7 +637,10 @@ Section CompilationCorrectness.
     forward eapply (compiled_by_program); eauto.    
     intros GRAPH_COMPILED.
     red in EXEC. destruct EXEC as [sti_fin [STEPS [TERMINAL G_FIN]]].
-    assert (SAME_INSTRS: PI = instrs sti_fin) by admit. 
+    assert (SAME_INSTRS: PI = instrs sti_fin).
+    { forward eapply steps_same_instrs. 
+      { eexists. eauto. }
+      auto. } 
     rewrite SAME_INSTRS in STEPS. eapply oseq_iff_steps in STEPS; eauto.
     rewrite <- SAME_INSTRS in *. 
     2: { eexists. red. rewrite <- SAME_INSTRS. exists PO. split; auto.
@@ -634,10 +667,10 @@ Section CompilationCorrectness.
   Lemma TMP_tl_omm_premises : TMP_thread_local_property omm_premises_hold.
   Proof. Admitted.
 
-
   Lemma GI_omm_premises : omm_premises_hold GI.
   Proof.
-    apply TMP_tl_omm_premises.
+    (* apply TMP_tl_omm_premises. *)
+    apply tl_omm_premises.
     intros tid.
     (* should carefully relate existing single thread graphs and thread_local_property *)
   Admitted. 
