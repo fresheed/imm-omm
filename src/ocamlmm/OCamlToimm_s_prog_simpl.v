@@ -496,13 +496,27 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   Definition at_compilation_block sti i := exists PO, length PO = i /\ is_thread_compiled PO (firstn sti.(pc) sti.(instrs)). 
 
+  Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
+    instrs sti = instrs sti'.
+  Proof.
+    destruct STEPS as [tid STEPS]. apply crt_num_steps in STEPS.
+    destruct STEPS as [n STEPS].
+    generalize dependent sti'.
+    induction n.
+    - intros sti' STEPS. simpl in STEPS. generalize STEPS. basic_solver 10.
+    - intros sti' STEPS.
+      rewrite step_prev in STEPS. destruct STEPS as [sti'' STEPS'']. desc.
+      replace (instrs sti) with (instrs sti'').
+      { red in STEPS''0. desf. red in STEPS''0. desf. }
+      symmetry. eapply IHn. eauto.
+  Qed. 
+        
   Lemma oseq_iff_steps sti tid (AT_KTH_BLOCK: exists k, at_compilation_block sti k):
     (step tid)＊ (init (instrs sti)) sti <-> (oseq_step tid)＊ (init (instrs sti)) sti.
   Proof.
     split. 
     2: { intros OSEQ_STEPS.
          forward eapply (@hahn_inclusion_exp _ (oseq_step tid)＊ (step tid)＊); eauto.
-         (* 2: { apply crt_num_steps. eauto. } *)
          apply inclusion_rt_rt2.
          unfold oseq_step.
          red. intros x y [lbl_blocks OSEQ]. 
@@ -510,18 +524,43 @@ Section OCamlMM_TO_IMM_S_PROG.
          red in OSEQ. desc. 
          exists (length labelsblocks_insns).
          apply step_seq_as_ct; auto. }
-    intros STEPS. apply crt_num_steps in STEPS. destruct STEPS as [n_isteps STEPS]. 
+    
+    intros STEPS.
+    apply crt_num_steps in STEPS. destruct STEPS as [n_isteps STEPS].    
     destruct AT_KTH_BLOCK as [k AT_KTH_BLOCK].
+    (* assert (OSEQ_INNER_STEPS: forall j sti_j (INDEX: j <= k) *)
+    (*                             (AT_COMP: exists m,  *)
+    (*                                 (step tid)^^m (init (instrs sti)) sti_j /\ *)
+    (*                                 (step tid)^^(n_isteps - m) sti_j sti), *)
+    (*              (oseq_step tid)^^j (init (instrs sti)) sti_j /\ *)
+    (*              at_compilation_block sti_j j). *)
+    (* { induction j. *)
+    (*   - intros sti_j INDEX [m' INNER_STEPS']. admit. *)
+    (*   - intros sti_j INDEX [m' INNER_STEPS'].  *)
+    (* } *)
+    
     assert (OSEQ_INNER_STEPS: forall j sti_j (INDEX: j <= k)
-                                (AT_COMP: exists m, 
-                                    (step tid)^^m (init (instrs sti)) sti_j /\
-                                    (step tid)^^(n_isteps - m) sti_j sti),
-                 (oseq_step tid)^^j (init (instrs sti)) sti_j /\
-                 at_compilation_block sti_j j).
-    { admit. }
-    apply crt_num_steps. 
-    forward eapply (OSEQ_INNER_STEPS) as [OSEQ_FIN _]; eauto.  
-    eexists. split; eauto. rewrite Nat.sub_diag. basic_solver.
+                                (AT_COMP: at_compilation_block sti_j j)
+                                (REACH_TO: (step tid)＊ (init (instrs sti_j)) sti)
+                                (REACH_FROM: (step tid)＊ sti_j sti),  
+               (oseq_step tid)^^j (init (instrs sti)) sti_j). 
+    { (* induction j. *)
+      (* - intros sti_j INDEX AT_COMP REACH_TO REACH_FROM. *)
+      (*   red in AT_COMP. destruct AT_COMP as [PO [EMPTY_PO COMP]]. *)
+      (*   inversion COMP.  *)
+      (*   + replace (instrs sti) with (instrs sti_j). *)
+      (*     2: { eapply steps_same_instrs. exists tid. auto. } *)
+          
+      (*   + admit.  *)
+      admit. 
+    }
+    apply crt_num_steps.
+    forward eapply (OSEQ_INNER_STEPS).
+    { eapply Nat.le_refl. }
+    { eauto. }
+    { apply crt_num_steps. eauto. }
+    { apply rt_refl.  }
+    eauto. 
   Admitted. 
   
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
@@ -606,21 +645,6 @@ Section CompilationCorrectness.
     - symmetry. eauto.
   Qed. 
 
-  Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
-    instrs sti = instrs sti'.
-  Proof.
-    destruct STEPS as [tid STEPS]. apply crt_num_steps in STEPS.
-    destruct STEPS as [n STEPS].
-    generalize dependent sti'.
-    induction n.
-    - intros sti' STEPS. simpl in STEPS. generalize STEPS. basic_solver 10.
-    - intros sti' STEPS.
-      rewrite step_prev in STEPS. destruct STEPS as [sti'' STEPS'']. desc.
-      replace (instrs sti) with (instrs sti'').
-      { red in STEPS''0. desf. red in STEPS''0. desf. }
-      symmetry. eapply IHn. eauto.
-  Qed. 
-      
   Lemma compilation_implies_omm_premises SGI PI tid
         (EXEC: thread_execution tid PI SGI) (THREAD_PROG: Some PI = IdentMap.find tid ProgI):
     omm_premises_hold SGI.
