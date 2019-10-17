@@ -415,10 +415,13 @@ Section OCamlMM_TO_IMM_S_PROG.
       wf_init' : forall l, (exists b, E G b /\ loc G.(lab) b = Some l) -> E G (InitEvent l) ;
       wf_init_lab' : forall l, G.(lab) (InitEvent l) = Astore Xpln Opln l 0 ;       
     }.
+
+  (* Definition at_compilation_block sti := exists PO, is_thread_compiled PO (firstn sti.(pc) sti.(instrs)).  *)
       
   Definition mm_similar_states (sto sti: state) :=
     is_thread_compiled sto.(instrs) sti.(instrs)  /\
-    is_thread_compiled (firstn sto.(pc) sto.(instrs)) (firstn sti.(pc) sti.(instrs)) /\
+     is_thread_compiled (firstn sto.(pc) sto.(instrs)) (firstn sti.(pc) sti.(instrs)) /\
+    (* at_compilation_block sti /\ *)
     same_behavior_local sto.(G) sti.(G) /\
     sto.(regf) = sti.(regf) /\
     sto.(eindex) = sti.(eindex). 
@@ -478,11 +481,33 @@ Section OCamlMM_TO_IMM_S_PROG.
   Proof.  Admitted.
       
   Lemma Wf_subgraph G' G (SB: same_behavior G G') (WF: Wf G'): Wf G.
-  Proof. Admitted.     
+  Proof. Admitted.
 
-  Lemma oseq_iff_steps PI sti tid (COMP: exists PO, is_thread_compiled PO PI):
-    (step tid)＊ (init PI) sti <-> (oseq_step tid)＊ (init PI) sti.
-  Proof. Admitted. 
+  Lemma step_seq_as_ct x y tid labelsblocks_insns (STEP_SEQ: step_seq tid labelsblocks_insns x y):
+    (step tid) ^^ (length labelsblocks_insns) x y.
+  Proof. Admitted.
+
+  Definition at_compilation_block sti i := exists PO, length PO = i /\ is_thread_compiled PO (firstn sti.(pc) sti.(instrs)). 
+
+  Lemma oseq_iff_steps sti tid (COMP: exists k, at_compilation_block sti k):
+    (step tid)＊ (init (instrs sti)) sti <-> (oseq_step tid)＊ (init (instrs sti)) sti.
+  Proof.
+    split. 
+    2: { intros OSEQ_STEPS.
+         forward eapply (@hahn_inclusion_exp _ (oseq_step tid)＊ (step tid)＊); eauto.
+         (* 2: { apply crt_num_steps. eauto. } *)
+         apply inclusion_rt_rt2.
+         unfold oseq_step.
+         red. intros x y [lbl_blocks OSEQ]. 
+         apply crt_num_steps.
+         red in OSEQ. desc. 
+         exists (length labelsblocks_insns).
+         apply step_seq_as_ct; auto. }
+    (* generalize dependent sti. *)
+    (* - intros sti COMP STEPS. destruct COMP as [PO [EMPTY COMP]]. *)
+    (*   inversion COMP.  *)
+    (*   +   *)         
+  Admitted. 
   
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
         SGI (ExI: thread_execution tid PI SGI) (WFL: Wf_local SGI):
@@ -581,8 +606,13 @@ Section CompilationCorrectness.
       eapply COMP_THREADS; eauto. }
     forward eapply (compiled_by_program); eauto.    
     intros GRAPH_COMPILED.
-    red in EXEC. destruct EXEC as [sti_fin [STEPS [TERMINAL G_FIN]]]. 
-    apply oseq_iff_steps in STEPS; eauto. 
+    red in EXEC. destruct EXEC as [sti_fin [STEPS [TERMINAL G_FIN]]].
+    assert (SAME_INSTRS: PI = instrs sti_fin) by admit. 
+    rewrite SAME_INSTRS in STEPS. eapply oseq_iff_steps in STEPS; eauto.
+    rewrite <- SAME_INSTRS in *. 
+    2: { eexists. red. rewrite <- SAME_INSTRS. exists PO. split; auto.
+         rewrite firstn_all2; auto.
+         do 2 red in TERMINAL. rewrite SAME_INSTRS. omega. }
     rewrite crt_num_steps in STEPS. destruct STEPS as [n_osteps OSTEPS]. 
     assert (OMM_PREM_STEPS: forall i sti (INDEX: i <= n_osteps)
                               (REACH: (oseq_step tid) ^^ i (init PI) sti),
