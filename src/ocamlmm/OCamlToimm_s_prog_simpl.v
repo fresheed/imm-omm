@@ -509,7 +509,12 @@ Section OCamlMM_TO_IMM_S_PROG.
       replace (instrs sti) with (instrs sti'').
       { red in STEPS''0. desf. red in STEPS''0. desf. }
       symmetry. eapply IHn. eauto.
-  Qed. 
+  Qed.
+
+  Fixpoint seq_nats n := match n with
+                         | 0 => []
+                         | S n' => seq_nats n' ++ [n']
+                         end.
         
   Lemma oseq_iff_steps sti tid (AT_KTH_BLOCK: exists k, at_compilation_block sti k):
     (step tid)＊ (init (instrs sti)) sti <-> (oseq_step tid)＊ (init (instrs sti)) sti.
@@ -526,41 +531,43 @@ Section OCamlMM_TO_IMM_S_PROG.
          apply step_seq_as_ct; auto. }
     
     intros STEPS.
+    remember (init (instrs sti)) as init_st. 
     apply crt_num_steps in STEPS. destruct STEPS as [n_isteps STEPS].    
     destruct AT_KTH_BLOCK as [k AT_KTH_BLOCK].
-    (* assert (OSEQ_INNER_STEPS: forall j sti_j (INDEX: j <= k) *)
-    (*                             (AT_COMP: exists m,  *)
-    (*                                 (step tid)^^m (init (instrs sti)) sti_j /\ *)
-    (*                                 (step tid)^^(n_isteps - m) sti_j sti), *)
-    (*              (oseq_step tid)^^j (init (instrs sti)) sti_j /\ *)
-    (*              at_compilation_block sti_j j). *)
-    (* { induction j. *)
-    (*   - intros sti_j INDEX [m' INNER_STEPS']. admit. *)
-    (*   - intros sti_j INDEX [m' INNER_STEPS'].  *)
-    (* } *)
-    
-    assert (OSEQ_INNER_STEPS: forall j sti_j (INDEX: j <= k)
-                                (AT_COMP: at_compilation_block sti_j j)
-                                (REACH_TO: (step tid)＊ (init (instrs sti_j)) sti)
-                                (REACH_FROM: (step tid)＊ sti_j sti),  
-               (oseq_step tid)^^j (init (instrs sti)) sti_j). 
-    { (* induction j. *)
-      (* - intros sti_j INDEX AT_COMP REACH_TO REACH_FROM. *)
-      (*   red in AT_COMP. destruct AT_COMP as [PO [EMPTY_PO COMP]]. *)
-      (*   inversion COMP.  *)
-      (*   + replace (instrs sti) with (instrs sti_j). *)
-      (*     2: { eapply steps_same_instrs. exists tid. auto. } *)
-          
-      (*   + admit.  *)
+    assert (STEPS_LIST: forall {A: Type} (r: relation A) n a b,
+               r ^^ n a b <->
+               exists l, length l = n + 1
+                    /\ (forall i (INDEX: i < n) s s' (ITH: Some s = nth_error l i)
+                        (I'TH: Some s' = nth_error l (i+1)), r s s')
+                    /\ (Some a = nth_error l 0) /\ (Some b = nth_error l n)).
+    admit.
+    pose proof STEPS as STEPS'. 
+    apply STEPS_LIST in STEPS' as [states [LEN_STATES [BY_STEP [ST0 STFIN]]]].
+    set (is_acb := fun i => exists b st, Some st = nth_error states i /\
+                                 at_compilation_block st b). 
+    set (acb_step := fun i j => i < j /\ j <= (length states) /\ is_acb i /\ is_acb j).
+    apply clos_refl_transE.
+    destruct n_isteps eqn:n_isteps_. 
+    { left. rewrite <- (steps0 (step tid)). vauto. }
+    right.
+    assert (ACB_ENDS: acb_step 0 n_isteps).
+    { red. splits; try omega; auto.
+      { red. exists 0. exists init_st. split; auto. red.
+        exists []. split; auto. subst init_st. simpl. vauto. }
+      red. exists k. exists sti. rewrite n_isteps_. splits; auto. }
+    forward eapply (@fsupp_imm_t _ acb_step) as ACB_AS_IMD. 
+    { red. intros j. exists (seq_nats (length states)). intros i acb_ij.
       admit. 
-    }
-    apply crt_num_steps.
-    forward eapply (OSEQ_INNER_STEPS).
-    { eapply Nat.le_refl. }
-    { eauto. }
-    { apply crt_num_steps. eauto. }
-    { apply rt_refl.  }
-    eauto. 
+      (* apply nth_In.  *)
+      (* red in acb_ij. desc.  *)
+    (* eapply nth_error_In.  *) }
+    { red. intros i acb_ii. red in acb_ii. desc. omega. }
+    { red. intros x y z acb_xy acb_yz.
+      unfold acb_step in *. desc. splits; auto. omega. }
+    apply ACB_AS_IMD in ACB_ENDS.
+    cut (immediate acb_step ⊆ oseq_step tid). 
+      
+    
   Admitted. 
   
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
