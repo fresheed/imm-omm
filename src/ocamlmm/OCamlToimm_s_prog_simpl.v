@@ -235,28 +235,19 @@ End OCaml_IMM_Compilation.
 
 Section SEQ_STEPS.
   
-  Inductive step_seq : thread_id -> list ((list label)*Prog.Instr.t) -> state -> state -> Prop :=
-  | empty_step_seq tid st: step_seq tid [] st st
-  | next_step_seq
-      tid labels insn cur_st next_st fin_st
-      (STEP: istep_ tid labels cur_st next_st insn)
-      rest (REST: step_seq tid rest next_st fin_st):
-      step_seq tid ((labels,insn)::rest) cur_st fin_st.
+  Definition sublist {A: Type} (l: list A) (start len: nat) := firstn len (skipn start l). 
 
-  Definition sublist {A: Type} (l: list A) (start len: nat) : list A.
-  Admitted.
-  
-  Definition oseq_istep tid (labels_blocks: list (list label)) sti1 sti2 :=
-    let n_steps := length labels_blocks in
-    let block := sublist (instrs sti1) (pc sti1) n_steps in
-    ⟪ INSTRS : sti1.(instrs) = sti2.(instrs) ⟫ /\
-    ⟪ ISTEP: exists labelsblocks_insns,
-        labelsblocks_insns = List.combine labels_blocks block /\
-        step_seq tid labelsblocks_insns sti1 sti2 ⟫ /\
-    ⟪ COMPILED_BLOCK: exists oinstr, is_instruction_compiled oinstr block ⟫.
-  
+  Definition on_block st block :=
+    block = sublist (instrs st) (pc st) (length block) /\
+    (exists oinstr, is_instruction_compiled oinstr block). 
+
+  Definition at_compilation_block st :=
+    (exists block, on_block st block) \/ is_terminal st. 
+
   Definition oseq_step (tid : thread_id) sti1 sti2 :=
-    exists labels_blocks, oseq_istep tid labels_blocks sti1 sti2.
+    exists block, on_block sti1 block /\
+             (step tid) ^^ (length block) sti1 sti2. 
+  
   
 End SEQ_STEPS. 
   
@@ -420,8 +411,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       
   Definition mm_similar_states (sto sti: state) :=
     is_thread_compiled sto.(instrs) sti.(instrs)  /\
-     is_thread_compiled (firstn sto.(pc) sto.(instrs)) (firstn sti.(pc) sti.(instrs)) /\
-    (* at_compilation_block sti /\ *)
+    is_thread_compiled (firstn sto.(pc) sto.(instrs)) (firstn sti.(pc) sti.(instrs)) /\
     same_behavior_local sto.(G) sti.(G) /\
     sto.(regf) = sti.(regf) /\
     sto.(eindex) = sti.(eindex). 
@@ -485,17 +475,6 @@ Section OCamlMM_TO_IMM_S_PROG.
   Lemma Wf_subgraph G' G (SB: same_behavior G G') (WF: Wf G'): Wf G.
   Proof. Admitted.
 
-  Lemma step_seq_as_ct x y tid labelsblocks_insns (STEP_SEQ: step_seq tid labelsblocks_insns x y):
-    (step tid) ^^ (length labelsblocks_insns) x y.
-  Proof.
-    (* use the following list predicate: *)
-    (* is l_i prefix /\ exists state, let L=len state in step^^L x st *)
-    (* /\ step^^(length l_i - L) st y*)
-    (* then apply rev_ind *)
-  Admitted.
-
-  Definition at_compilation_block sti i := exists PO, length PO = i /\ is_thread_compiled PO (firstn sti.(pc) sti.(instrs)). 
-
   Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
     instrs sti = instrs sti'.
   Proof.
@@ -516,58 +495,102 @@ Section OCamlMM_TO_IMM_S_PROG.
                          | S n' => seq_nats n' ++ [n']
                          end.
         
-  Lemma oseq_iff_steps sti tid (AT_KTH_BLOCK: exists k, at_compilation_block sti k):
-    (step tid)＊ (init (instrs sti)) sti <-> (oseq_step tid)＊ (init (instrs sti)) sti.
+  Lemma lt_ind: forall (P: nat -> Prop), P 0 -> (forall n, (forall y, y < n -> P y) -> P n) -> (forall n, P n).
+  Proof. 
+    intros.
+    assert (forall y : nat, y < n -> P y).
+    { induction n; [intros; omega| ]. 
+      intros. pose proof (H0 n IHn) as Pn.
+      apply H0. intros.
+      assert (y0 < n) by omega.
+      apply IHn. auto. }
+    apply H0. auto.
+  Qed.
+
+  (* had to define it separately since otherwise Coq doesn't understand what P is *)
+
+  Lemma block_steps_selection st1 st2 tid n (STEPS: (step tid) ^^ n st1 st2)
+        block (BLOCK: on_block st1 block) (ENOUGH: n >= length block):
+    exists st', (oseq_step tid) st1 st' /\ (step tid) ^^ (n - length block) st' st2.
+  Admitted.
+
+  Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
+        (COMP: exists PO, is_thread_compiled PO (instrs st1)):
+    at_compilation_block st2.
+  Admitted.
+
+  Lemma no_acb_between st1 st2 tid block n (STEPS: (step tid) ^^ n st1 st2)
+        (BLOCK: on_block st1 block) (LT: n < length block):
+    not (at_compilation_block st2).
+  Proof.
+  Admitted. 
+  
+  Definition StepProp n := forall st1 st2 tid (STEPS: (step tid) ^^ n st1 st2)
+                             (COMP: exists PO, is_thread_compiled PO (instrs st1))
+                             (ACB1: at_compilation_block st1)
+                             (ACB2: at_compilation_block st2),
+      (oseq_step tid)＊ st1 st2.
+  
+  Lemma oseq_between_acb: forall n, StepProp n. 
+  Proof.
+    apply lt_ind.
+    { red. intros. apply steps0 in STEPS. rewrite STEPS. apply rt_refl. }
+    unfold StepProp in *. intros. desc.
+    unfold at_compilation_block in ACB1. desf. 
+    2: { destruct n.
+         { (* generalize it? *)
+           apply steps0 in STEPS. rewrite STEPS. apply rt_refl. }
+         forward eapply (@steps_sub _ (step tid) (S n) _ _ 1) as [st' STEP];
+           [omega | eauto |].
+         apply (same_relation_exp (pow_unit (step tid))) in STEP.
+         do 2 (red in STEP; desc).
+         cut (None = nth_error (instrs st1) (pc st1)); [congruence| ]. 
+         symmetry. apply nth_error_None. red in ACB1. omega. }
+    pose proof (le_lt_dec (length block) n) as LEN. destruct LEN.
+    { forward eapply block_steps_selection as [st' [OSEQ NEXT_STEPS]]; eauto. 
+      forward eapply (oseq_continuos OSEQ) as ACB'; eauto.
+      forward eapply H as OSEQ'. 
+      2: { eapply NEXT_STEPS. }
+      { cut (length block > 0); try omega.
+        red in ACB1. desc. destruct ACB0; vauto. }
+      { replace (instrs st') with (instrs st1); eauto.
+        apply steps_same_instrs. exists tid.
+        (* remove duplicated proof *)
+        red in OSEQ. desc. rewrite crt_num_steps. eexists. eauto. }
+      { auto. }
+      { auto. }
+      apply inclusion_t_rt. apply ct_begin. red.
+      eexists. split; eauto. }
+    forward eapply (no_acb_between) as NO_ACB2; vauto.
+  Qed.
+        
+  Lemma oseq_iff_steps fin tid (TERM: is_terminal fin)
+        (COMP: exists PO, is_thread_compiled PO (instrs fin)):
+    (step tid)＊ (init (instrs fin)) fin <-> (oseq_step tid)＊ (init (instrs fin)) fin.
   Proof.
     split. 
     2: { intros OSEQ_STEPS.
          forward eapply (@hahn_inclusion_exp _ (oseq_step tid)＊ (step tid)＊); eauto.
          apply inclusion_rt_rt2.
          unfold oseq_step.
-         red. intros x y [lbl_blocks OSEQ]. 
+         red. intros x y [block [_ STEPS]].
          apply crt_num_steps.
-         red in OSEQ. desc. 
-         exists (length labelsblocks_insns).
-         apply step_seq_as_ct; auto. }
-    
-    intros STEPS.
-    remember (init (instrs sti)) as init_st. 
-    apply crt_num_steps in STEPS. destruct STEPS as [n_isteps STEPS].    
-    destruct AT_KTH_BLOCK as [k AT_KTH_BLOCK].
-    assert (STEPS_LIST: forall {A: Type} (r: relation A) n a b,
-               r ^^ n a b <->
-               exists l, length l = n + 1
-                    /\ (forall i (INDEX: i < n) s s' (ITH: Some s = nth_error l i)
-                        (I'TH: Some s' = nth_error l (i+1)), r s s')
-                    /\ (Some a = nth_error l 0) /\ (Some b = nth_error l n)).
-    admit.
-    pose proof STEPS as STEPS'. 
-    apply STEPS_LIST in STEPS' as [states [LEN_STATES [BY_STEP [ST0 STFIN]]]].
-    set (is_acb := fun i => exists b st, Some st = nth_error states i /\
-                                 at_compilation_block st b). 
-    set (acb_step := fun i j => i < j /\ j <= (length states) /\ is_acb i /\ is_acb j).
-    apply clos_refl_transE.
-    destruct n_isteps eqn:n_isteps_. 
-    { left. rewrite <- (steps0 (step tid)). vauto. }
-    right.
-    assert (ACB_ENDS: acb_step 0 n_isteps).
-    { red. splits; try omega; auto.
-      { red. exists 0. exists init_st. split; auto. red.
-        exists []. split; auto. subst init_st. simpl. vauto. }
-      red. exists k. exists sti. rewrite n_isteps_. splits; auto. }
-    forward eapply (@fsupp_imm_t _ acb_step) as ACB_AS_IMD. 
-    { red. intros j. exists (seq_nats (length states)). intros i acb_ij.
-      admit. 
-      (* apply nth_In.  *)
-      (* red in acb_ij. desc.  *)
-    (* eapply nth_error_In.  *) }
-    { red. intros i acb_ii. red in acb_ii. desc. omega. }
-    { red. intros x y z acb_xy acb_yz.
-      unfold acb_step in *. desc. splits; auto. omega. }
-    apply ACB_AS_IMD in ACB_ENDS.
-    cut (immediate acb_step ⊆ oseq_step tid). 
-      
-    
+         eauto. }
+    intros STEPS. apply crt_num_steps in STEPS as [n STEPS]. 
+    eapply oseq_between_acb; eauto.
+    2: { red. auto. }
+    desc. destruct COMP.
+    { red. right. red. simpl.
+      (* TODO: fixed in recent IMM lib *)
+      admit. } 
+    red. left.
+    (* TODO: simplify is_thread_compiled definition *)
+    replace (ri ++ block) with (block ++ ri) in * by admit.
+    exists block. red. split; eauto.
+    simpl. unfold sublist. simpl.
+    rewrite <- (Nat.add_0_r (length block)).
+    rewrite firstn_app_2. simpl.
+    rewrite <- app_nil_end. auto.     
   Admitted. 
   
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
@@ -685,11 +708,10 @@ Section CompilationCorrectness.
     { forward eapply steps_same_instrs. 
       { eexists. eauto. }
       auto. } 
-    rewrite SAME_INSTRS in STEPS. eapply oseq_iff_steps in STEPS; eauto.
-    rewrite <- SAME_INSTRS in *. 
-    2: { eexists. red. rewrite <- SAME_INSTRS. exists PO. split; auto.
-         rewrite firstn_all2; auto.
-         do 2 red in TERMINAL. rewrite SAME_INSTRS. omega. }
+    rewrite SAME_INSTRS in STEPS.
+    eapply oseq_iff_steps in STEPS; eauto.
+    rewrite <- SAME_INSTRS in *.    
+    2: { eexists. rewrite <- SAME_INSTRS. eauto. }
     rewrite crt_num_steps in STEPS. destruct STEPS as [n_osteps OSTEPS]. 
     assert (OMM_PREM_STEPS: forall i sti (INDEX: i <= n_osteps)
                               (REACH: (oseq_step tid) ^^ i (init PI) sti),
@@ -875,11 +897,11 @@ Section CompilationCorrectness.
       ⟪OC: ocaml_consistent GO ⟫ /\
       ⟪SameBeh: same_behavior GO GI⟫.
   Proof.    
-    pose proof GO_exists as [GO [OMM_EXEC SAME_BEH]]. (* todo*)
+    pose proof GO_exists as [GO [OMM_EXEC SAME_BEH]].
     exists GO.
-    pose proof (Wf_subgraph SAME_BEH WFI) as WFO. (* todo *)
+    pose proof (Wf_subgraph SAME_BEH WFI) as WFO.
     splits; auto.
-    apply graph_switch; auto. (* todo *)
+    apply graph_switch; auto.
     apply (imm_implies_omm). 
   Qed. 
 
