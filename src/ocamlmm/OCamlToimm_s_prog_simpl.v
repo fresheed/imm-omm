@@ -507,7 +507,16 @@ Section OCamlMM_TO_IMM_S_PROG.
     apply H0. auto.
   Qed.
 
-  (* had to define it separately since otherwise Coq doesn't understand what P is *)
+  Lemma oseq_implies_steps st1 st2 tid (OSEQ: (oseq_step tid)＊ st1 st2): 
+    (step tid)＊ st1 st2. 
+  Proof.
+    forward eapply (@hahn_inclusion_exp _ (oseq_step tid)＊ (step tid)＊); eauto.
+    apply inclusion_rt_rt2.
+    unfold oseq_step.
+    red. intros x y [block [_ STEPS]].
+    apply crt_num_steps.
+    eauto.
+  Qed. 
 
   Lemma block_steps_selection st1 st2 tid n (STEPS: (step tid) ^^ n st1 st2)
         block (BLOCK: on_block st1 block) (ENOUGH: n >= length block):
@@ -517,14 +526,34 @@ Section OCamlMM_TO_IMM_S_PROG.
   Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
         (COMP: exists PO, is_thread_compiled PO (instrs st1)):
     at_compilation_block st2.
+  Proof.
+    desc. inversion COMP as [PO_EQ PI_EQ | oinstr block po' pi' PO_EQ PI_EQ]. 
+    - pose proof OSEQ as OSEQ_. 
+      apply rt_step in OSEQ. 
+      pose proof (oseq_implies_steps OSEQ) as STEPS. 
+      apply clos_refl_transE in STEPS. desf.
+      { red in OSEQ_. desc. red. eauto. } 
+      exfalso.
+      apply ct_begin in STEPS. red in STEPS. desc.
+      do 2 (red in STEPS; desc).      
+      rewrite <- PI_EQ in ISTEP.
+      destruct (pc st1); vauto.
+    - (* TODO: change itc definition *)
+      replace (po' ++ [oinstr]) with ([oinstr] ++ po') in * by admit. 
+      replace (pi' ++ block) with (block ++ pi') in * by admit.
+      admit.       
   Admitted.
 
   Lemma no_acb_between st1 st2 tid block n (STEPS: (step tid) ^^ n st1 st2)
-        (BLOCK: on_block st1 block) (LT: n < length block):
+        (BLOCK: on_block st1 block) (LT: n < length block) (NZ: n <> 0):
     not (at_compilation_block st2).
   Proof.
+    red in BLOCK. desc.
+    inversion BLOCK0.
+    - subst block. simpl in *. replace (n) with (0) in *; [| omega]. 
   Admitted. 
   
+  (* had to define it separately since otherwise Coq doesn't understand what P is *)
   Definition StepProp n := forall st1 st2 tid (STEPS: (step tid) ^^ n st1 st2)
                              (COMP: exists PO, is_thread_compiled PO (instrs st1))
                              (ACB1: at_compilation_block st1)
@@ -561,7 +590,10 @@ Section OCamlMM_TO_IMM_S_PROG.
       { auto. }
       apply inclusion_t_rt. apply ct_begin. red.
       eexists. split; eauto. }
+    destruct (NPeano.Nat.eq_0_gt_0_cases n). 
+    { subst. apply steps0 in STEPS. rewrite STEPS. apply rt_refl. }
     forward eapply (no_acb_between) as NO_ACB2; vauto.
+    omega. 
   Qed.
         
   Lemma oseq_iff_steps fin tid (TERM: is_terminal fin)
@@ -569,13 +601,8 @@ Section OCamlMM_TO_IMM_S_PROG.
     (step tid)＊ (init (instrs fin)) fin <-> (oseq_step tid)＊ (init (instrs fin)) fin.
   Proof.
     split. 
-    2: { intros OSEQ_STEPS.
-         forward eapply (@hahn_inclusion_exp _ (oseq_step tid)＊ (step tid)＊); eauto.
-         apply inclusion_rt_rt2.
-         unfold oseq_step.
-         red. intros x y [block [_ STEPS]].
-         apply crt_num_steps.
-         eauto. }
+    2: { (*TODO: remove this part? *)
+      apply oseq_implies_steps. }
     intros STEPS. apply crt_num_steps in STEPS as [n STEPS]. 
     eapply oseq_between_acb; eauto.
     2: { red. auto. }
