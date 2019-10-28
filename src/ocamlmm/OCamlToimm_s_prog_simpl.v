@@ -550,16 +550,35 @@ Section OCamlMM_TO_IMM_S_PROG.
       admit.       
   Admitted.
 
-  Lemma sublist_items {A: Type} (l: list A) start size result (SL: result = sublist l start size) (FULL: length result = size):
-    forall i (INDEX: i < size), nth_error result i = nth_error l (start + i). 
+  (* TODO: update Coq version? *)
+  (* this lemma is mentioned on https://coq.inria.fr/library/Coq.Lists.List.html *)
+  Lemma skipn_all2 {A: Type} (l: list A) n: length l <= n -> skipn n l = [].
+  Proof. Admitted. 
+
+  Lemma sublist_items {A: Type} (whole: list A) start size result (SL: result = sublist whole start size) (FULL: length result = size):
+    forall i (INDEX: i < size), nth_error result i = nth_error whole (start + i). 
   Proof.
+    (* TODO: simplify? *)
     intros.
     unfold sublist in SL.
-    (* forward eapply (firstn_length_le l). *)    
-    (* [f; st] = sublist (instrs st1) (pc st1) 2 *)
-    admit.
-  Admitted.
-
+    assert (forall {A: Type} (pref res suf: list A) i (INDEX: i < length res), nth_error res i = nth_error (pref ++ res ++ suf) (length pref + i)).
+    { intros. induction pref.
+      - simpl. symmetry. apply nth_error_app1. auto.
+      - simpl. apply IHpref. }
+    forward eapply (@H _ (firstn start whole) result (skipn size (skipn start whole))) as H'. 
+    { rewrite FULL. eauto. }
+    assert (STRUCT: whole = firstn start whole ++ result ++ skipn size (skipn start whole)).
+    { rewrite <- (firstn_skipn start whole) at 1.
+      cut (result ++ skipn size (skipn start whole) = skipn start whole).
+      { intros. congruence. }
+      rewrite SL. apply firstn_skipn. }
+    rewrite H'. rewrite STRUCT at 4.
+    cut (length (firstn start whole) = start); auto.
+    apply firstn_length_le.
+    destruct (le_lt_dec start (length whole)); auto.
+    rewrite skipn_all2 in SL; [| omega]. rewrite firstn_nil in SL.
+    rewrite SL in FULL. simpl in FULL. omega. 
+  Qed. 
 
   (* TODO: remove it since exact instruction is known when block_start is called? *)
   Lemma block_start st block instr (BLOCK: on_block st block)
