@@ -521,8 +521,14 @@ Section OCamlMM_TO_IMM_S_PROG.
   Lemma block_steps_selection st1 st2 tid n (STEPS: (step tid) ^^ n st1 st2)
         block (BLOCK: on_block st1 block) (ENOUGH: n >= length block):
     exists st', (oseq_step tid) st1 st' /\ (step tid) ^^ (n - length block) st' st2.
-  Admitted.
-
+  Proof.
+    eapply steps_split in STEPS as [st' [STEPS_TO STEPS_FROM]]. 
+    2: { forward eapply (le_plus_minus (length block) n) as SPLIT; [omega| ].
+         eauto. }
+    exists st'. split; auto.
+    red. eexists. split; eauto. 
+  Qed.
+  
   Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
         (COMP: exists PO, is_thread_compiled PO (instrs st1)):
     at_compilation_block st2.
