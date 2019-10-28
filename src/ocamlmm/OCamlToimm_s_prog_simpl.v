@@ -224,7 +224,7 @@ Section OCaml_IMM_Compilation.
   | compiled_add oinstr block ro ri
                      (instr_compiled: is_instruction_compiled oinstr block)
                      (rest: is_thread_compiled ro ri):
-      is_thread_compiled (ro ++ [oinstr]) (ri ++ block).
+      is_thread_compiled (oinstr :: ro) (block ++ ri).
 
   Definition is_compiled (po: Prog.Prog.t) (pi: Prog.Prog.t) :=
     ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id po <-> IdentMap.In t_id pi ⟫ /\
@@ -544,10 +544,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       do 2 (red in STEPS; desc).      
       rewrite <- PI_EQ in ISTEP.
       destruct (pc st1); vauto.
-    - (* TODO: change itc definition *)
-      replace (po' ++ [oinstr]) with ([oinstr] ++ po') in * by admit. 
-      replace (pi' ++ block) with (block ++ pi') in * by admit.
-      admit.       
+    - admit.       
   Admitted.
 
   (* TODO: update Coq version? *)
@@ -796,6 +793,9 @@ Section OCamlMM_TO_IMM_S_PROG.
     forward eapply (no_acb_between) as NO_ACB2; vauto.
     omega. 
   Qed.
+
+  Lemma is_terminal_new st: pc st >= length (instrs st) <-> is_terminal st.
+  Proof. Admitted. 
         
   Lemma oseq_iff_steps fin tid (TERM: is_terminal fin)
         (COMP: exists PO, is_thread_compiled PO (instrs fin)):
@@ -808,18 +808,17 @@ Section OCamlMM_TO_IMM_S_PROG.
     eapply oseq_between_acb; eauto.
     2: { red. auto. }
     desc. destruct COMP.
-    { red. right. red. simpl.
-      (* TODO: fixed in recent IMM lib *)
-      admit. } 
+    { red. right.
+      apply is_terminal_new. 
+      simpl. omega. } 
     red. left.
     (* TODO: simplify is_thread_compiled definition *)
-    replace (ri ++ block) with (block ++ ri) in * by admit.
     exists block. red. split; eauto.
     simpl. unfold sublist. simpl.
     rewrite <- (Nat.add_0_r (length block)).
     rewrite firstn_app_2. simpl.
     rewrite <- app_nil_end. auto.     
-  Admitted. 
+  Qed. 
   
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
         SGI (ExI: thread_execution tid PI SGI) (WFL: Wf_local SGI):
