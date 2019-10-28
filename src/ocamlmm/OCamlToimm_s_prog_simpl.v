@@ -529,16 +529,29 @@ Section OCamlMM_TO_IMM_S_PROG.
     red. eexists. split; eauto. 
   Qed.
   
+  Lemma is_terminal_new st: pc st >= length (instrs st) <-> is_terminal st.
+  Proof. Admitted. 
+        
   Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
         (COMP: exists PO, is_thread_compiled PO (instrs st1)):
     at_compilation_block st2.
   Proof.
+    (* assert (TC_HELPER: (step tid)⁺ st1 st2 -> at_compilation_block st2). *)
+    (* 1: { pose proof OSEQ as OSEQ_. *)
+    (*      intros TC_ACB. *)
+    (*      apply rt_step, oseq_implies_steps in OSEQ.  *)
+    (*      apply clos_refl_transE in OSEQ. des; [| apply TC_ACB; auto].  *)
+    (*      rewrite <- OSEQ. *)
+    (*      red in OSEQ_. desc.  *)
+    (*      red. eauto. } *)
+    (* intros TC.  *)
+    pose proof OSEQ as OSEQ_.
+    (* red in OSEQ.  *)
     desc. inversion COMP as [PO_EQ PI_EQ | oinstr block po' pi' PO_EQ PI_EQ]. 
-    - pose proof OSEQ as OSEQ_. 
-      apply rt_step in OSEQ. 
+    - apply rt_step in OSEQ. 
       pose proof (oseq_implies_steps OSEQ) as STEPS. 
-      apply clos_refl_transE in STEPS. desf.
-      { red in OSEQ_. desc. red. eauto. } 
+      apply clos_refl_transE in STEPS. des. 
+      { red in OSEQ_. desc. red. rewrite <- STEPS.  eauto. } 
       exfalso.
       apply ct_begin in STEPS. red in STEPS. desc.
       do 2 (red in STEPS; desc).      
@@ -794,9 +807,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     omega. 
   Qed.
 
-  Lemma is_terminal_new st: pc st >= length (instrs st) <-> is_terminal st.
-  Proof. Admitted. 
-        
   Lemma oseq_iff_steps fin tid (TERM: is_terminal fin)
         (COMP: exists PO, is_thread_compiled PO (instrs fin)):
     (step tid)＊ (init (instrs fin)) fin <-> (oseq_step tid)＊ (init (instrs fin)) fin.
@@ -828,10 +838,18 @@ Section OCamlMM_TO_IMM_S_PROG.
   Proof.
     forward eapply (compiled_by_program) as SGI_COMP; eauto.
     red in SGI_COMP. destruct SGI_COMP as [_ [ev_blocks [BLOCKS_OF_SGI COMP_EVENTS_BLOCKS]]].
-    set (n_osteps := length ev_blocks).
     red in ExI. destruct ExI as [sti_fin ExI]. desc.
     apply (@crt_num_steps _ (step tid) (init PI) sti_fin) in STEPS as [n_isteps ISTEPS].
-    assert ((oseq_step tid) ^^ n_osteps (init PI) sti_fin) as OSEQ_STEPS by admit. 
+    assert (SAME_INSTRS: PI = instrs sti_fin). 
+    { replace PI with (instrs (init PI)); auto. 
+      apply steps_same_instrs. exists tid. apply <- crt_num_steps. eauto. }
+    assert (exists n_osteps, (oseq_step tid) ^^ n_osteps (init PI) sti_fin) as [n_osteps OSEQ_STEPS]. 
+    { apply crt_num_steps.
+      forward eapply (oseq_iff_steps tid) as [FOO _]; eauto.
+      { rewrite <- SAME_INSTRS. eauto. }
+      rewrite <- SAME_INSTRS in FOO. apply FOO.
+      apply crt_num_steps. eauto. }
+    
     assert (BY_STEPS: forall i sti_i (INDEX: i <= n_osteps)
                         (STEPS_TO: (oseq_step tid)^^i (init PI) sti_i)
                         (STEPS_FROM: (oseq_step tid)^^(n_osteps - i) sti_i sti_fin),
@@ -861,8 +879,10 @@ Section OCamlMM_TO_IMM_S_PROG.
     splits.
     { red. exists sto_fin. splits; auto. 
       { apply crt_num_steps. vauto. }
-      red. 
-      admit. (* prove that we've reached a terminal state *) }
+      red.
+      (* prove that we've reached a terminal state *)
+      (* maybe show that pco -> pci mapping is monotone *)
+      admit. }
     { red in MM_SIM. desc. vauto. }
     red in MM_SIM. desc. 
     apply (Wfl_subgraph MM_SIM1). vauto.     
