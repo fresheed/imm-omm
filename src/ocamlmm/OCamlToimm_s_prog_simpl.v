@@ -942,7 +942,7 @@ Section CompilationCorrectness.
   (*               (DepsFile.lexpr_deps (depf st') lexpr)  *)
   (*               (ectrl st') ∅)) x *)
   Definition processes_lab (f: (actid -> label) -> actid -> bool) (lbl_matcher: label -> bool) :=
-    forall G ev, f (lab G) ev = lbl_matcher (lab G ev).
+    forall labfun ev, f labfun ev = lbl_matcher (labfun ev).
 
   Definition w_matcher := (fun lbl => match lbl with | Astore _ _ _ _ => true | _ => false end).
   Lemma w_pl: processes_lab (@is_w actid) w_matcher. 
@@ -961,7 +961,7 @@ Section CompilationCorrectness.
   Lemma sc_pl: processes_lab (@is_sc actid) sc_matcher. 
   Proof.
     red. intros. unfold is_sc, Events.mod.
-    destruct (lab G ev); auto. 
+    destruct (labfun ev); auto. 
   Qed. 
   
   Definition f_matcher :=
@@ -972,7 +972,7 @@ Section CompilationCorrectness.
   Lemma f_pl: processes_lab (@is_f actid) f_matcher. 
   Proof.
     red. intros. unfold is_f.
-    destruct (lab G ev); auto. 
+    destruct (labfun ev); auto. 
   Qed. 
   
   Definition acq_matcher :=
@@ -999,71 +999,114 @@ Section CompilationCorrectness.
     red. intros. unfold is_only_rlx, orlx_matcher, Events.mod. auto. 
   Qed. 
     
-  Lemma ADD_UPD f matcher G st tid new_label G'
-        (G'ADD: exists foo bar baz bazz,
-            G' = add (G st) tid (eindex st) new_label foo bar baz bazz)
-        (MATCH: processes_lab f matcher):
-    forall ev, let new_event := (ThreadEvent tid (eindex st)) in
-    f (lab G') ev <-> (ev <> new_event /\ f (lab (G st)) ev)
-                    \/ (ev = new_event /\ matcher new_label). 
-  Proof.
-    desc. red in MATCH.
-    simpl. red. split.
-    { intros. destruct (classic (ev = ThreadEvent tid (eindex st))).
-      { right. split; auto.
-        unfold add in G'ADD. specialize (MATCH G' ev).
-        rewrite MATCH in H. subst. simpl in *.
-        rewrite upds in H. auto. }
-      { left. split; auto.
-        replace (f (lab (G st)) ev) with (f (lab G') ev); auto. 
-         do 2 rewrite MATCH.
-        replace (lab G' ev) with (lab (G st) ev); auto.
-        subst G'. unfold add. simpl. rewrite updo; auto. } }
-    { intros. destruct H.
-      { desc. rewrite MATCH. subst G'. unfold add. simpl.
-        rewrite MATCH in H0.
-        rewrite updo; auto. }
-      desc. rewrite MATCH. subst G'. unfold add. simpl.
-      replace (upd (lab (G st)) (ThreadEvent tid (eindex st)) new_label ev)
-        with new_label; auto.
-      rewrite H. 
-      rewrite upds. auto. }
-  Qed. 
+  (* Lemma ADD_UPD f matcher G st tid new_label G' *)
+  (*       (G'ADD: exists foo bar baz bazz, *)
+  (*           G' = add (G st) tid (eindex st) new_label foo bar baz bazz) *)
+  (*       (MATCH: processes_lab f matcher): *)
+  (*   forall ev, let new_event := (ThreadEvent tid (eindex st)) in *)
+  (*   f (lab G') ev <-> (ev <> new_event /\ f (lab (G st)) ev) *)
+  (*                   \/ (ev = new_event /\ matcher new_label).  *)
+  (* Proof. *)
+  (*   desc. red in MATCH. *)
+  (*   simpl. red. split. *)
+  (*   { intros. destruct (classic (ev = ThreadEvent tid (eindex st))). *)
+  (*     { right. split; auto. *)
+  (*       unfold add in G'ADD. specialize (MATCH G' ev). *)
+  (*       rewrite MATCH in H. subst. simpl in *. *)
+  (*       rewrite upds in H. auto. } *)
+  (*     { left. split; auto. *)
+  (*       replace (f (lab (G st)) ev) with (f (lab G') ev); auto.  *)
+  (*        do 2 rewrite MATCH. *)
+  (*       replace (lab G' ev) with (lab (G st) ev); auto. *)
+  (*       subst G'. unfold add. simpl. rewrite updo; auto. } } *)
+  (*   { intros. destruct H. *)
+  (*     { desc. rewrite MATCH. subst G'. unfold add. simpl. *)
+  (*       rewrite MATCH in H0. *)
+  (*       rewrite updo; auto. } *)
+  (*     desc. rewrite MATCH. subst G'. unfold add. simpl. *)
+  (*     replace (upd (lab (G st)) (ThreadEvent tid (eindex st)) new_label ev) *)
+  (*       with new_label; auto. *)
+  (*     rewrite H.  *)
+  (*     rewrite upds. auto. } *)
+  (* Qed.  *)
 
-  Lemma ADD_UPD_FALSE f matcher G st tid new_label G'
-        (G'ADD: exists foo bar baz bazz,
-            G' = add (G st) tid (eindex st) new_label foo bar baz bazz)
-        (MATCH: processes_lab f matcher)
-        (NOUPD: matcher new_label = false):
-    f (lab (G st)) ∩₁ (fun e : actid => index e < eindex st) ≡₁ f (lab G') ∩₁ (fun e : actid => index e < eindex st + 1). 
-  Proof.
-  Admitted. 
-  (* red. splits. *)
-    (* { red. intros. forward eapply ADD_UPD; eauto. instantiate (1:=x). *)
-    (*   intros ADD_UPD. simpl in *. *)
-    (*   destruct (classic (x = ThreadEvent tid (eindex st))). *)
-    (*   { exfalso. apply ADD_UPD. *)
+  (* Lemma ADD_UPD_FALSE f matcher G st tid new_label G' *)
+  (*       (G'ADD: exists foo bar baz bazz, *)
+  (*           G' = add (G st) tid (eindex st) new_label foo bar baz bazz) *)
+  (*       (MATCH: processes_lab f matcher) *)
+  (*       (NOUPD: matcher new_label = false): *)
+  (*   f (lab (G st)) ∩₁ (fun e : actid => index e < eindex st) ≡₁ f (lab G') ∩₁ (fun e : actid => index e < eindex st + 1).  *)
+  (* Proof. *)
+  (* Admitted.  *)
+  (* (* red. splits. *) *)
+  (*   (* { red. intros. forward eapply ADD_UPD; eauto. instantiate (1:=x). *) *)
+  (*   (*   intros ADD_UPD. simpl in *. *) *)
+  (*   (*   destruct (classic (x = ThreadEvent tid (eindex st))). *) *)
+  (*   (*   { exfalso. apply ADD_UPD. *) *)
 
-  Lemma ADD_UPD_TRUE f matcher G st tid new_label G'
-        (G'ADD: exists foo bar baz bazz,
-            G' = add (G st) tid (eindex st) new_label foo bar baz bazz)
-        (MATCH: processes_lab f matcher)
-        (NOUPD: matcher new_label = true):
-    f (lab (G st)) ∩₁ (fun e : actid => index e < eindex st) ∪₁ eq (ThreadEvent tid (eindex st))
-      ≡₁ f (lab G') ∩₁ (fun e : actid => index e < eindex st + 1).
-  Proof. Admitted.
+  (* Lemma ADD_UPD_TRUE f matcher G st tid new_label G' *)
+  (*       (G'ADD: exists foo bar baz bazz, *)
+  (*           G' = add (G st) tid (eindex st) new_label foo bar baz bazz) *)
+  (*       (MATCH: processes_lab f matcher) *)
+  (*       (NOUPD: matcher new_label = true): *)
+  (*   f (lab (G st)) ∩₁ (fun e : actid => index e < eindex st) ∪₁ eq (ThreadEvent tid (eindex st)) *)
+  (*     ≡₁ f (lab G') ∩₁ (fun e : actid => index e < eindex st + 1). *)
+  (* Proof. Admitted. *)
 
   Definition index_bounded ev_set st :=
-    (* ev_set (lab (G st)) ≡₁ ev_set (lab (G st)) ∩₁ (fun e => index e < eindex st).  *)
     ev_set (lab (G st)) ⊆₁ (fun e => index e < eindex st). 
 
-  Lemma w_step st1 st2 tid new_label
+  Lemma bounded_w n: forall st tid (STEPS: (step tid) ^^ n (init (instrs st)) st),
+      index_bounded (@is_w actid) st. 
+  Proof. 
+    intros. red. generalize dependent st. 
+    induction n.
+    { intros. apply steps0 in STEPS. rewrite <- STEPS.
+      simpl. red. splits; basic_solver. }
+    red. intros st STEPS x Wx.
+    rewrite step_prev in STEPS. destruct STEPS as [st' [STEPS' STEP]].
+    replace (instrs st) with (instrs st') in STEPS'.
+    2: { apply steps_same_instrs. exists tid. apply rt_step. auto. }
+    specialize (IHn st' STEPS').
+    do 2 (red in STEP; desc).
+    red in IHn. specialize (IHn x).
+    remember (ThreadEvent tid (eindex st')) as ev.
+    inversion ISTEP0.
+    - rewrite UG in Wx. rewrite UINDEX. apply IHn. auto.
+    - rewrite UG in Wx. rewrite UINDEX. apply IHn. auto.
+    - rewrite UG in Wx. simpl in Wx. rewrite UINDEX.
+      destruct (classic (x = ev)).
+      + rewrite H, Heqev. simpl. omega.
+      + rewrite w_pl in Wx. rewrite updo in Wx; [| congruence].
+        forward eapply IHn; [auto | omega].
+    - rewrite UG in Wx. simpl in Wx. rewrite UINDEX.
+      destruct (classic (x = ev)).
+      + rewrite H, Heqev. simpl. omega.
+      + rewrite w_pl in Wx. rewrite updo in Wx; [| congruence].
+        forward eapply IHn; [auto | omega].
+    - rewrite UG in Wx. simpl in Wx. rewrite UINDEX.
+      destruct (classic (x = ev)).
+      + rewrite H, Heqev. simpl. omega.
+      + rewrite w_pl in Wx. rewrite updo in Wx; [| congruence].
+        forward eapply IHn; [auto | omega].
+    - (* show there are no CAS instructions in compiled program *)
+      admit.
+    - (* show there are no CAS instructions in compiled program *)
+      admit.
+    - (* show there are no FADD instructions in compiled program *)
+      admit.
+    - (* TODO *)
+      admit.
+  Admitted. 
+      
+    Lemma label_set_step (S: (actid -> label) -> actid -> bool) matcher st1 st2 tid new_label
         (ADD: exists foo bar baz bazz,
             G st2 = add (G st1) tid (eindex st1) new_label foo bar baz bazz)
-        (BOUND: index_bounded (@is_w actid) st1):
-    W (G st2) ≡₁ W (G st1) ∪₁ (if w_matcher new_label
-                     then eq (ThreadEvent tid (eindex st1))
-                     else ∅). 
+        (MATCH: processes_lab S matcher)
+        (BOUND: index_bounded S st1):
+    S (lab (G st2)) ≡₁ S (lab (G st1)) ∪₁ (if matcher new_label
+                               then eq (ThreadEvent tid (eindex st1))
+                               else ∅). 
   Proof.
     assert (SAME_SET_ELT: forall (A : Type) (s s' : A -> Prop),
                s ≡₁ s' <-> (forall x : A, s x <-> s' x)).
@@ -1073,25 +1116,24 @@ Section CompilationCorrectness.
       all: specialize (H x).
       all: apply H; auto. }
     apply SAME_SET_ELT. unfold set_union. intros.
-    pose proof w_pl as W_PL. red in W_PL.
-    rewrite !W_PL.
+    red in MATCH. rewrite !MATCH.
     desc. subst. simpl. 
     remember (ThreadEvent tid (eindex st1)) as ev.
     rewrite ADD. simpl. 
     destruct (classic (x = ev)).
     { rewrite H, <- Heqev. rewrite upds.
-      destruct (w_matcher new_label); auto.
+      destruct (matcher new_label); auto.
       unfold set_empty. 
-      cut (w_matcher (lab (G st1) ev) = false). 
+      cut (matcher (lab (G st1) ev) = false). 
       { intros. rewrite H0. intuition. }
       (* require boundness of a function and restrict ev to be new event*)
       do 2 red in BOUND. specialize (BOUND ev).
-      rewrite W_PL in BOUND.
+      rewrite MATCH in BOUND.
       apply Bool.not_true_is_false. red. intros CONTRA. 
       apply BOUND in CONTRA. vauto. simpl in CONTRA. omega. }
     rewrite updo; auto. split; auto.
     intros. des; auto. 
-    destruct (w_matcher new_label); vauto.
+    destruct (matcher new_label); vauto.
     congruence. 
   Qed. 
     
