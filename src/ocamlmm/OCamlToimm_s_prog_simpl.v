@@ -933,7 +933,289 @@ Section CompilationCorrectness.
     eapply iff_stepl.
     - eapply H0. 
     - symmetry. eauto.
+  Qed.
+
+  (* ISW : is_w *)
+  (*         (lab *)
+  (*            (add (G st') tid (eindex st') *)
+  (*               (Aload false ord (RegFile.eval_lexpr (regf st') lexpr) val) ∅ *)
+  (*               (DepsFile.lexpr_deps (depf st') lexpr)  *)
+  (*               (ectrl st') ∅)) x *)
+  Definition processes_lab (f: (actid -> label) -> actid -> bool) (lbl_matcher: label -> bool) :=
+    forall G ev, f (lab G) ev = lbl_matcher (lab G ev).
+
+  Definition w_matcher := (fun lbl => match lbl with | Astore _ _ _ _ => true | _ => false end).
+  Lemma w_pl: processes_lab (@is_w actid) w_matcher. 
+  Proof.
+    red. 
+    intros. unfold is_w. auto.
   Qed. 
+
+  Definition sc_matcher :=
+    (fun lbl => match lbl with
+             | Astore _ Osc _ _ => true
+             | Aload _ Osc _ _ => true
+             | Afence Osc => true
+             | _ => false
+             end).
+  Lemma sc_pl: processes_lab (@is_sc actid) sc_matcher. 
+  Proof.
+    red. intros. unfold is_sc, Events.mod.
+    destruct (lab G ev); auto. 
+  Qed. 
+  
+  Definition f_matcher :=
+    (fun lbl => match lbl with
+             | Afence _ => true
+             | _ => false
+             end).
+  Lemma f_pl: processes_lab (@is_f actid) f_matcher. 
+  Proof.
+    red. intros. unfold is_f.
+    destruct (lab G ev); auto. 
+  Qed. 
+  
+  Definition acq_matcher :=
+    (fun lbl => let mode := (match lbl with
+                          | Astore _ mode _ _ => mode
+                          | Aload _ mode _ _ => mode
+                          | Afence mode => mode
+                          end)
+             in mode_le Oacq mode).
+  Lemma acq_pl: processes_lab (@is_acq actid) acq_matcher. 
+  Proof.
+    red. intros. unfold is_acq, acq_matcher, Events.mod. auto. 
+  Qed. 
+    
+  Definition orlx_matcher :=
+    (fun lbl => let mode := (match lbl with
+                          | Astore _ mode _ _ => mode
+                          | Aload _ mode _ _ => mode
+                          | Afence mode => mode
+                          end)
+             in match mode with | Orlx => true | _ => false end).
+  Lemma orlx_pl: processes_lab (@is_only_rlx actid) orlx_matcher. 
+  Proof.
+    red. intros. unfold is_only_rlx, orlx_matcher, Events.mod. auto. 
+  Qed. 
+    
+  Lemma ADD_UPD f matcher G st tid new_label G'
+        (G'ADD: exists foo bar baz bazz,
+            G' = add (G st) tid (eindex st) new_label foo bar baz bazz)
+        (MATCH: processes_lab f matcher):
+    forall ev, let new_event := (ThreadEvent tid (eindex st)) in
+    f (lab G') ev <-> (ev <> new_event /\ f (lab (G st)) ev)
+                    \/ (ev = new_event /\ matcher new_label). 
+  Proof.
+    desc. red in MATCH.
+    simpl. red. split.
+    { intros. destruct (classic (ev = ThreadEvent tid (eindex st))).
+      { right. split; auto.
+        unfold add in G'ADD. specialize (MATCH G' ev).
+        rewrite MATCH in H. subst. simpl in *.
+        rewrite upds in H. auto. }
+      { left. split; auto.
+        replace (f (lab (G st)) ev) with (f (lab G') ev); auto. 
+         do 2 rewrite MATCH.
+        replace (lab G' ev) with (lab (G st) ev); auto.
+        subst G'. unfold add. simpl. rewrite updo; auto. } }
+    { intros. destruct H.
+      { desc. rewrite MATCH. subst G'. unfold add. simpl.
+        rewrite MATCH in H0.
+        rewrite updo; auto. }
+      desc. rewrite MATCH. subst G'. unfold add. simpl.
+      replace (upd (lab (G st)) (ThreadEvent tid (eindex st)) new_label ev)
+        with new_label; auto.
+      rewrite H. 
+      rewrite upds. auto. }
+  Qed. 
+
+  Lemma ADD_UPD_FALSE f matcher G st tid new_label G'
+        (G'ADD: exists foo bar baz bazz,
+            G' = add (G st) tid (eindex st) new_label foo bar baz bazz)
+        (MATCH: processes_lab f matcher)
+        (NOUPD: matcher new_label = false):
+    f (lab (G st)) ∩₁ (fun e : actid => index e < eindex st) ≡₁ f (lab G') ∩₁ (fun e : actid => index e < eindex st + 1). 
+  Proof.
+  Admitted. 
+  (* red. splits. *)
+    (* { red. intros. forward eapply ADD_UPD; eauto. instantiate (1:=x). *)
+    (*   intros ADD_UPD. simpl in *. *)
+    (*   destruct (classic (x = ThreadEvent tid (eindex st))). *)
+    (*   { exfalso. apply ADD_UPD. *)
+
+  Lemma ADD_UPD_TRUE f matcher G st tid new_label G'
+        (G'ADD: exists foo bar baz bazz,
+            G' = add (G st) tid (eindex st) new_label foo bar baz bazz)
+        (MATCH: processes_lab f matcher)
+        (NOUPD: matcher new_label = true):
+    f (lab (G st)) ∩₁ (fun e : actid => index e < eindex st) ∪₁ eq (ThreadEvent tid (eindex st))
+      ≡₁ f (lab G') ∩₁ (fun e : actid => index e < eindex st + 1).
+  Proof. Admitted.
+
+  Definition index_bounded ev_set st :=
+    (* ev_set (lab (G st)) ≡₁ ev_set (lab (G st)) ∩₁ (fun e => index e < eindex st).  *)
+    ev_set (lab (G st)) ⊆₁ (fun e => index e < eindex st). 
+
+  Lemma w_step st1 st2 tid new_label
+        (ADD: exists foo bar baz bazz,
+            G st2 = add (G st1) tid (eindex st1) new_label foo bar baz bazz)
+        (BOUND: index_bounded (@is_w actid) st1):
+    W (G st2) ≡₁ W (G st1) ∪₁ (if w_matcher new_label
+                     then eq (ThreadEvent tid (eindex st1))
+                     else ∅). 
+  Proof.
+    assert (SAME_SET_ELT: forall (A : Type) (s s' : A -> Prop),
+               s ≡₁ s' <-> (forall x : A, s x <-> s' x)).
+    { intros. red. split; [apply set_equiv_exp| ].
+      intros. red. split.
+      all: red; intros.
+      all: specialize (H x).
+      all: apply H; auto. }
+    apply SAME_SET_ELT. unfold set_union. intros.
+    pose proof w_pl as W_PL. red in W_PL.
+    rewrite !W_PL.
+    desc. subst. simpl. 
+    remember (ThreadEvent tid (eindex st1)) as ev.
+    rewrite ADD. simpl. 
+    destruct (classic (x = ev)).
+    { rewrite H, <- Heqev. rewrite upds.
+      destruct (w_matcher new_label); auto.
+      unfold set_empty. 
+      cut (w_matcher (lab (G st1) ev) = false). 
+      { intros. rewrite H0. intuition. }
+      (* require boundness of a function and restrict ev to be new event*)
+      do 2 red in BOUND. specialize (BOUND ev).
+      rewrite W_PL in BOUND.
+      apply Bool.not_true_is_false. red. intros CONTRA. 
+      apply BOUND in CONTRA. vauto. simpl in CONTRA. omega. }
+    rewrite updo; auto. split; auto.
+    intros. des; auto. 
+    destruct (w_matcher new_label); vauto.
+    congruence. 
+  Qed. 
+    
+
+  Lemma bounded_w n: forall st tid (STEPS: (step tid) ^^ n (init (instrs st)) st),
+      index_bounded (@is_w actid) st. 
+  Proof. 
+    (* induction n.  *)
+    (* { intros. apply steps0 in STEPS. rewrite <- STEPS. *)
+    (*   simpl. red. splits; basic_solver. } *)
+    (* { intros. red. red. splits; try basic_solver. *)
+    (*   red. intros. *)
+    (*   rewrite step_prev in STEPS. destruct STEPS as [st' [STEPS' STEP]]. *)
+    (*   replace (instrs st) with (instrs st') in STEPS'. *)
+    (*   2: { apply steps_same_instrs. exists tid. apply rt_step. auto. } *)
+    (*   specialize (IHn st' tid STEPS').  *)
+    (*   do 2 (red in STEP; desc). *)
+    (*   inversion ISTEP0. *)
+    (*   -  *)
+    (* } *)
+  Admitted.
+
+  (* Lemma bounded_inter S1 S2 st (B1: index_bounded S1 st): *)
+  (*   index_bounded (S1 ∩₁ S2) st.  *)
+  
+  
+  Lemma OMM_PREM_STEPS n: forall st tid (REACH: (oseq_step tid) ^^ n (init (instrs st)) st),
+      omm_premises_hold (G st).
+  Proof.
+    induction n.
+    { intros. apply steps0 in REACH. rewrite <- REACH. simpl.
+      red. split.
+      { (*reuse the same fact for omm *)
+        admit. }
+      splits.
+      all: try basic_solver. }
+    intros.
+    red. split; [admit | ]. (*reuse the same fact for omm *)
+    rewrite step_prev in REACH. destruct REACH as [st' [STEPS' STEP]].
+    forward eapply (IHn st' tid) as OMM_PREM'.
+    { replace (instrs st') with (instrs st); auto.
+      symmetry. 
+      eapply (steps_same_instrs).
+      exists tid. apply oseq_implies_steps. apply crt_num_steps.
+      exists 1. apply (same_relation_exp (pow_unit (oseq_step tid))). eauto. }
+    red in STEP. desc. red in STEP. desc.
+    inversion COMP_BLOCK.
+    all: subst block.
+    all: simpl in *.
+    - apply (same_relation_exp (seq_id_l (step tid))) in STEP0.
+      do 2 (red in STEP0; desc).
+      assert (AT_PC: Some ld = nth_error (instrs st') (pc st')).
+      { apply eq_trans with (y := nth_error [ld] 0); auto.
+        rewrite <- (Nat.add_0_r (pc st')). 
+        eapply sublist_items; eauto. }
+      rewrite <- AT_PC in ISTEP. inversion ISTEP. subst ld.  
+      inversion ISTEP0; try (rewrite II in H1; discriminate).  
+      assert (SAME_RMW: rmw (G st) ≡ rmw (G st')).
+      { rewrite UG. simpl. auto. }
+      assert (SAME_SC: Sc (G st) ≡₁ Sc (G st')).
+      { admit. }
+      assert (SAME_W: W (G st) ≡₁ W (G st')).
+      { assert (index_bounded (@is_w actid) st) as BW by admit.
+        assert (index_bounded (@is_w actid) st') as BW' by admit. 
+        red in BW. red in BW'. rewrite BW, BW'. 
+        pose proof w_pl. 
+        symmetry. rewrite UINDEX. 
+        eapply ADD_UPD_FALSE; eauto. }
+      assert (SAME_FACQ: F (G st) ∩₁ Acq (G st) ≡₁ F (G st') ∩₁ Acq (G st')).
+      { admit. }
+      assert (SAME_FACQREL: F (G st) ∩₁ Acqrel (G st) ≡₁ F (G st') ∩₁ Acqrel (G st')).
+      { admit. }
+      (* !!! *)
+      (* TODO: it's a wrong definition since there should be only one new sb edge *)
+      (* also for very first thread event there will not be edge *)
+      (* but for now it will suffice since those new edges will be discarded *)
+      assert (EXT_SB: immediate (sb (G st)) ≡ immediate (sb (G st'))
+                                ∪ (fun _ y => y = ThreadEvent tid (eindex st'))) by admit. 
+      (* !!! *)
+      assert (EXT_R: R (G st) ≡₁ R (G st') ∪₁ eq (ThreadEvent tid (eindex st'))) by admit. 
+      forward eapply (@ADD_UPD_TRUE (@is_only_rlx actid) orlx_matcher) as EXT_ORLX; eauto. 
+      { vauto. }
+      { vauto. }
+      assert (ADD_LABEL: lab (G st) (ThreadEvent tid (eindex st')) = (Aload false ord (RegFile.eval_lexpr (regf st') lexpr) val)).
+      { rewrite UG. simpl. apply upds. }      
+      subst. splits.
+      * rewrite SAME_W, SAME_FACQ, SAME_SC, SAME_RMW, EXT_SB. 
+        do 2 case_union _ _. rewrite codom_union.
+        arewrite (W (G st') ∩₁ Sc (G st') ≡₁ W (G st') ∩₁ Sc (G st') ∪₁ ∅) by basic_solver.
+        apply set_equiv_union.        
+        { red in OMM_PREM'. desc. auto. }
+        arewrite ((fun _ y : actid => y = ThreadEvent tid (eindex st')) ⨾ rmw (G st') ≡ ∅₂); [| basic_solver].
+        red. split; try basic_solver. red. intros.
+        red in H. desc.
+        (* show that new event doesn't participate in rmw *)
+        admit.
+      * rewrite SAME_RMW, SAME_SC.
+        red in OMM_PREM'. desc. auto.
+      * rewrite SAME_FACQREL, EXT_SB. 
+        assert (index_bounded (@is_w actid) st) as BW by admit.
+        red in BW. rewrite BW. rewrite SAME_W.
+        rewrite set_interA. rewrite (set_interC _ ORlx (G st)).
+        pose proof orlx_pl. 
+        rewrite UINDEX. seq_rewrite <- EXT_ORLX.
+        case_union _ _.
+        rewrite codom_union. seq_rewrite set_inter_union_r.
+        apply set_subset_union.
+        { red in OMM_PREM'. desc.
+          arewrite (ORlx (G st') ∩₁ (fun e : actid => index e < eindex st') ⊆₁ ORlx (G st')) by basic_solver. }
+        assert (index_bounded (@is_w actid) st') as BW' by admit.
+        red in BW'. rewrite BW'.
+        red. intros. exfalso.
+        red in H0. desc. red in H0. desc. rewrite <- H1 in H2. simpl in H2.
+        omega.
+      * rewrite SAME_FACQ, EXT_SB, SAME_SC, EXT_R.
+        case_union _ _. rewrite codom_union. seq_rewrite set_inter_union_l.
+        apply set_subset_union.
+        { red in OMM_PREM'. desc. auto. }
+        assert (index_bounded (@is_sc actid) st') as BSC' by admit.
+        red in BSC'. rewrite BSC'.
+        red. intros. exfalso.
+        red in H. desc. red in H0. desc. rewrite <- H in H1. simpl in H1.
+        omega.
+    - 
 
   Lemma compilation_implies_omm_premises SGI PI tid
         (EXEC: thread_execution tid PI SGI) (THREAD_PROG: Some PI = IdentMap.find tid ProgI):
