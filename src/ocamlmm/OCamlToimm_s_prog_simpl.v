@@ -1305,8 +1305,8 @@ Section CompilationCorrectness.
         red. intros. exfalso.        
         red in H. desc. rewrite <- H in H0. simpl in H0. 
         omega.
-    - red in OSEQ_STEP0. destruct OSEQ_STEP0 as [st'' STEP2]. desc. 
-      apply (same_relation_exp (seq_id_l (step tid))) in STEP2.
+    - subst. red in OSEQ_STEP0. destruct OSEQ_STEP0 as [st'' [STEP_TO'' STEP_FROM'']].
+      apply (same_relation_exp (seq_id_l (step tid))) in STEP_TO''.
       assert (AT_PC: Some f = nth_error (instrs st') (pc st')).
       { apply eq_trans with (y := nth_error [f; st0] 0); auto.
         rewrite <- (Nat.add_0_r (pc st')). 
@@ -1315,10 +1315,17 @@ Section CompilationCorrectness.
       { apply eq_trans with (y := nth_error [f; st0] 1); auto.
         rewrite <- (Nat.add_0_r (pc st')). 
         eapply sublist_items; eauto. rewrite (Nat.add_0_r). auto. }
-      do 2 (red in STEP2; red in STEP0; desc).
-      
-      rewrite <- AT_PC in ISTEP1. inversion ISTEP1. subst f.  
-      inversion ISTEP1; try (rewrite II in H1; discriminate).
+
+      red in STEP_TO''. desc. red in STEP_TO''. destruct STEP_TO'' as [SAME_INSTR' [instr' [INSTR' ISTEP']]].  
+      rewrite <- AT_PC in INSTR'. inversion INSTR'. subst f.  
+      inversion ISTEP'; try (rewrite II in H0; discriminate).
+
+      red in STEP_FROM''. desc. red in STEP_FROM''. destruct STEP_FROM'' as [SAME_INSTR'' [instr'' [INSTR'' ISTEP'']]].
+      rewrite UPC in INSTR''.
+      replace (instrs st'') with (instrs st') in INSTR''. 
+      rewrite <- AT_PC1 in INSTR''. inversion INSTR''. subst st0.
+      inversion ISTEP''; try (rewrite II0 in H1; discriminate).
+      subst. 
       
 
 
