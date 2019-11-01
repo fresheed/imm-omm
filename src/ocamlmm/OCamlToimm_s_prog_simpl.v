@@ -29,7 +29,7 @@ Proof. Admitted.
 Section OCaml_Program.
 
   Inductive Oistep_ tid labels s1 s2 instr dindex (GT0: dindex > 0): Prop :=
-  | assign reg expr
+  | Oassign reg expr
            (LABELS : labels = nil)
            (II : instr = Instr.assign reg expr)
            (UPC : s2.(pc) = s1.(pc) + 1)
@@ -38,7 +38,7 @@ Section OCaml_Program.
            (UREGS : s2.(regf) = RegFun.add reg (RegFile.eval_expr s1.(regf) expr) s1.(regf))
            (UDEPS : s2.(depf) = RegFun.add reg (DepsFile.expr_deps s1.(depf) expr) s1.(depf))
            (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | if_ expr shift
+  | Oif_ expr shift
         (LABELS : labels = nil)
         (II : instr = Instr.ifgoto expr shift)
         (UPC   : if Const.eq_dec (RegFile.eval_expr s1.(regf) expr) 0
@@ -49,7 +49,7 @@ Section OCaml_Program.
         (UREGS : s2.(regf) = s1.(regf))
         (UDEPS : s2.(depf) = s1.(depf))
         (UECTRL : s2.(ectrl) = (DepsFile.expr_deps s1.(depf) expr) ∪₁ s1.(ectrl))
-  | load ord reg lexpr val l
+  | Oload ord reg lexpr val l
          (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
          (II : instr = Instr.load ord reg lexpr)
          (LABELS : labels = [Aload false ord (RegFile.eval_lexpr s1.(regf) lexpr) val])
@@ -61,7 +61,7 @@ Section OCaml_Program.
          (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
          (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
          (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | store ord lexpr expr l v x
+  | Ostore ord lexpr expr l v x
           (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
           (V: v = RegFile.eval_expr  s1.(regf)  expr)
           (X: x = Xpln)
@@ -76,7 +76,7 @@ Section OCaml_Program.
           (UREGS : s2.(regf) = s1.(regf))
           (UDEPS : s2.(depf) = s1.(depf))
           (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | fence ord 
+  | Ofence ord 
           (LABELS : labels = [Afence ord])
           (II : instr = Instr.fence ord)
           (UPC   : s2.(pc) = s1.(pc) + 1)
@@ -85,7 +85,7 @@ Section OCaml_Program.
           (UREGS : s2.(regf) = s1.(regf))
           (UDEPS : s2.(depf) = s1.(depf))
           (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | cas_un expr_old expr_new xmod ordr ordw reg lexpr val l
+  | Ocas_un expr_old expr_new xmod ordr ordw reg lexpr val l
            (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
            (NEXPECTED : val <> RegFile.eval_expr s1.(regf) expr_old)
            (LABELS : labels = [Aload true ordr l val])
@@ -99,7 +99,7 @@ Section OCaml_Program.
            (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
            (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
            (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | cas_suc expr_old expr_new xmod ordr ordw reg lexpr l expected new_value
+  | Ocas_suc expr_old expr_new xmod ordr ordw reg lexpr l expected new_value
             (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
             (EXPECTED: expected = RegFile.eval_expr s1.(regf) expr_old)
             (NEW: new_value = RegFile.eval_expr s1.(regf) expr_new)
@@ -116,7 +116,7 @@ Section OCaml_Program.
             (UREGS : s2.(regf) = RegFun.add reg expected s1.(regf))
             (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
             (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | inc expr_add xmod ordr ordw reg lexpr val l nval
+  | Oinc expr_add xmod ordr ordw reg lexpr val l nval
         (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
         (NVAL: nval = val + RegFile.eval_expr s1.(regf) expr_add)
         (LABELS : labels = [Astore xmod ordw l nval; Aload true ordr l val])
@@ -133,7 +133,7 @@ Section OCaml_Program.
         (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
         (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
         (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | exchange new_expr xmod ordr ordw reg loc_expr old_value loc new_value
+  | Oexchange new_expr xmod ordr ordw reg loc_expr old_value loc new_value
              (L: loc = RegFile.eval_lexpr s1.(regf) loc_expr)
              (NVAL: new_value = RegFile.eval_expr s1.(regf) new_expr)
              (LABELS : labels = [Astore xmod ordw loc new_value;
@@ -416,15 +416,100 @@ Section OCamlMM_TO_IMM_S_PROG.
     is_thread_compiled (firstn sto.(pc) sto.(instrs)) (firstn sti.(pc) sti.(instrs)) /\
     same_behavior_local sto.(G) sti.(G) /\
     sto.(regf) = sti.(regf) /\
+    sto.(depf) = sti.(depf) /\
+    sto.(ectrl) = sti.(ectrl) /\
     sto.(eindex) = sti.(eindex). 
   
   (* Definition next_compilation_block sti (CORR: exists sto, mm_similar_states sto sti) (NOT_END: pc sti < length (instrs sti)) : list Prog.Instr.t. *)
   (* Admitted. *)
+
+  Lemma skipn_all2 {A: Type} (l: list A) n: length l <= n -> skipn n l = [].
+  Proof. Admitted. 
+
+  Lemma sublist_items {A: Type} (whole: list A) start size result (SL: result = sublist whole start size) (FULL: length result = size):
+    forall i (INDEX: i < size), nth_error result i = nth_error whole (start + i). 
+  Proof.
+    (* TODO: simplify? *)
+    intros.
+    unfold sublist in SL.
+    assert (forall {A: Type} (pref res suf: list A) i (INDEX: i < length res), nth_error res i = nth_error (pref ++ res ++ suf) (length pref + i)).
+    { intros. induction pref.
+      - simpl. symmetry. apply nth_error_app1. auto.
+      - simpl. apply IHpref. }
+    forward eapply (@H _ (firstn start whole) result (skipn size (skipn start whole))) as H'. 
+    { rewrite FULL. eauto. }
+    assert (STRUCT: whole = firstn start whole ++ result ++ skipn size (skipn start whole)).
+    { rewrite <- (firstn_skipn start whole) at 1.
+      cut (result ++ skipn size (skipn start whole) = skipn start whole).
+      { intros. congruence. }
+      rewrite SL. apply firstn_skipn. }
+    rewrite H'. rewrite STRUCT at 4.
+    cut (length (firstn start whole) = start); auto.
+    apply firstn_length_le.
+    destruct (le_lt_dec start (length whole)); auto.
+    rewrite skipn_all2 in SL; [| omega]. rewrite firstn_nil in SL.
+    rewrite SL in FULL. simpl in FULL. omega. 
+  Qed.   
   
   Lemma pair_step sto sti (MM_SIM: mm_similar_states sto sti)
-        tid sti' (SEQ_STEP: oseq_step tid sti sti'):
+        tid sti' (OSEQ_STEP: oseq_step tid sti sti'):
     exists sto', Ostep tid sto sto' /\ mm_similar_states sto' sti'.
-  Proof. Admitted.
+  Proof.
+    red in OSEQ_STEP. destruct OSEQ_STEP as [block [ON_BLOCK STEP]].
+    red in ON_BLOCK. desc.
+    inversion COMP_BLOCK.
+    all: rename H into OINSTR. 
+    all: rename H0 into BLOCK_CONTENTS. 
+    all: subst; simpl in *. 
+    - apply (same_relation_exp (seq_id_l (step tid))) in STEP.
+      assert (AT_PC: Some ld = nth_error (instrs sti) (pc sti)).
+      { apply eq_trans with (y := nth_error [ld] 0); auto.
+        rewrite <- (NPeano.Nat.add_0_r (pc sti)).
+        eapply sublist_items; eauto. }      
+      red in STEP. desc. red in STEP. desc.
+      rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ].
+      inversion ISTEP0.
+      all: rewrite II in EQ.
+      all: try discriminate.      
+      set (sto' :=
+             {| instrs := instrs sto;
+                pc := pc sto + 1;
+                G := add (G sto) tid (eindex sto)
+                         (Aload false ord (RegFile.eval_lexpr (regf sti) lexpr) val) ∅
+                         (DepsFile.lexpr_deps (depf sti) lexpr) (ectrl sti) ∅;
+                         eindex := eindex sto + 1;
+                regf := RegFun.add reg val (regf sto);
+                depf := RegFun.add reg (eq (ThreadEvent tid (eindex sti))) (depf sto);
+                ectrl := ectrl sto |}).
+      red in MM_SIM. desc.
+      exists sto'. splits.
+      { red. exists lbls. red. splits; [subst; simpl; auto| ].
+        exists ld. exists 0. splits; [admit| ].
+        pose proof (@Oload tid lbls sto sto' ld 1 (gt_Sn_O 0) Orlx reg lexpr val l) as OMM_STEP. 
+        assert (ord_eq: ord = Orlx). 
+        { subst ld. congruence. }
+        rewrite ord_eq in *. 
+        forward eapply OMM_STEP; (try auto; try congruence). 
+        { subst sto'. simpl. rewrite MM_SIM2, MM_SIM3, MM_SIM4, ord_eq. auto. }
+        subst sto'. simpl. rewrite MM_SIM5. auto. }
+      red. splits.
+      { subst sto'. simpl. replace (instrs sti') with (instrs sti); auto. }
+      { admit. }
+      { red. splits.
+        { (* subst sto'. unfold add, acts_set. simpl.. simpl. *)
+          (* destruct MM-sim further *)
+          admit. }
+        { subst sto'. rewrite UG. simpl. red in MM_SIM1. desc.
+          congruence. } }
+      { subst sto'. rewrite UREGS. simpl. congruence. }
+      { subst sto'. rewrite UDEPS. simpl. congruence. }
+      { subst sto'. rewrite UECTRL. simpl. congruence. }
+      { subst sto'. rewrite UINDEX. simpl. congruence. }
+    -       
+        
+
+      
+  Admitted.
   
   Lemma first_end {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n):
     firstn (n + 1) l = firstn n l ++ [x].
@@ -573,34 +658,6 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   (* TODO: update Coq version? *)
   (* this lemma is mentioned on https://coq.inria.fr/library/Coq.Lists.List.html *)
-  Lemma skipn_all2 {A: Type} (l: list A) n: length l <= n -> skipn n l = [].
-  Proof. Admitted. 
-
-  Lemma sublist_items {A: Type} (whole: list A) start size result (SL: result = sublist whole start size) (FULL: length result = size):
-    forall i (INDEX: i < size), nth_error result i = nth_error whole (start + i). 
-  Proof.
-    (* TODO: simplify? *)
-    intros.
-    unfold sublist in SL.
-    assert (forall {A: Type} (pref res suf: list A) i (INDEX: i < length res), nth_error res i = nth_error (pref ++ res ++ suf) (length pref + i)).
-    { intros. induction pref.
-      - simpl. symmetry. apply nth_error_app1. auto.
-      - simpl. apply IHpref. }
-    forward eapply (@H _ (firstn start whole) result (skipn size (skipn start whole))) as H'. 
-    { rewrite FULL. eauto. }
-    assert (STRUCT: whole = firstn start whole ++ result ++ skipn size (skipn start whole)).
-    { rewrite <- (firstn_skipn start whole) at 1.
-      cut (result ++ skipn size (skipn start whole) = skipn start whole).
-      { intros. congruence. }
-      rewrite SL. apply firstn_skipn. }
-    rewrite H'. rewrite STRUCT at 4.
-    cut (length (firstn start whole) = start); auto.
-    apply firstn_length_le.
-    destruct (le_lt_dec start (length whole)); auto.
-    rewrite skipn_all2 in SL; [| omega]. rewrite firstn_nil in SL.
-    rewrite SL in FULL. simpl in FULL. omega. 
-  Qed. 
-
   (* TODO: remove it since exact instruction is known when block_start is called? *)
   Lemma block_start st block instr (BLOCK: on_block st block)
         (AT_PC: Some instr = nth_error (instrs st) (pc st)):
