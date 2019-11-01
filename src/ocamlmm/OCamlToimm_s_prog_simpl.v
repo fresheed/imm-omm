@@ -1212,8 +1212,21 @@ Section CompilationCorrectness.
     - rewrite UG, UINDEX. unfold add. simpl. sin_rewrite IHn.
       red. intros. red in H. des; [| omega]. 
       red in H. desc. subst. simpl. omega.
+  Qed.
+
+  Lemma label_set_step_helper st1 st2 n tid new_label foo bar baz bazz
+        (ADD: G st2 = add (G st1) tid (eindex st1) new_label foo bar baz bazz)
+        (STEPS: (step tid) ^^ n (init (instrs st1)) st1):
+    forall (S : (actid -> label) -> actid -> bool) (matcher : label -> bool)
+      (MATCH: processes_lab S matcher)
+      (NONNOP: non_nop matcher),
+    S (lab (G st2)) ≡₁ S (lab (G st1))
+      ∪₁ (if matcher new_label then eq (ThreadEvent tid (eindex st1)) else ∅).
+  Proof.
+    intros. 
+    apply label_set_step; eauto.
+    eapply nonnop_bounded; eauto. 
   Qed. 
-            
 
   Lemma OMM_PREM_STEPS n: forall st tid (REACH: (oseq_step tid) ^^ n (init (instrs st)) st),
       omm_premises_hold (G st).
@@ -1260,15 +1273,17 @@ Section CompilationCorrectness.
       assert (SB_UPD: immediate (sb (G st)) ≡ immediate (sb (G st'))
                                 ∪ (fun x y => Events.tid x = tid /\ Events.tid y = tid /\ index x = index y - 1 /\ index y = eindex st')).
       { admit. } 
-
+      pose proof (@label_set_step_helper st' st m  tid new_label ∅
+                                         (DepsFile.lexpr_deps (depf st') lexpr) (ectrl st') ∅ UG STEPS') as HELPER. 
       splits.
-      all: try (seq_rewrite (@label_set_step (@is_sc actid) sc_matcher st' st tid new_label); [| eauto | apply sc_pl | eapply (nonnop_bounded _ _ _ sc_pl); eauto; red; vauto]). 
-      all: try (seq_rewrite (@label_set_step (@is_w actid) w_matcher st' st tid new_label); [| eauto | apply w_pl | eapply (nonnop_bounded _ _ _ w_pl); eauto; red; vauto]). 
-      all: try (seq_rewrite (@label_set_step (@is_nonnop_f actid) nonnop_f_matcher st' st tid new_label); [| eauto | apply nonnop_f_pl | eapply (nonnop_bounded _ _ _ nonnop_f_pl); eauto; red; vauto]). 
-      all: try (seq_rewrite (@label_set_step (@is_acq actid) acq_matcher st' st tid new_label); [| eauto | apply acq_pl | eapply (nonnop_bounded _ _ _ acq_pl); eauto; red; vauto]). 
-      all: try (seq_rewrite (@label_set_step (@is_acqrel actid) acqrel_matcher st' st tid new_label); [| eauto | apply acqrel_pl | eapply (nonnop_bounded _ _ _ acqrel_pl); eauto; red; vauto]). 
-      all: try (seq_rewrite (@label_set_step (@is_r actid) r_matcher st' st tid new_label); [| eauto | apply r_pl | eapply (nonnop_bounded _ _ _ r_pl); eauto; red; vauto]). 
-      all: try (seq_rewrite (@label_set_step (@is_only_rlx actid) orlx_matcher st' st tid new_label); [| eauto | apply orlx_pl | admit ]). 
+
+      all: try (seq_rewrite (HELPER (@is_sc actid) sc_matcher sc_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER (@is_w actid) w_matcher w_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER (@is_nonnop_f actid) nonnop_f_matcher nonnop_f_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER (@is_acq actid) acq_matcher acq_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER (@is_acqrel actid) acqrel_matcher acqrel_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER (@is_r actid) r_matcher r_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER (@is_only_rlx actid) orlx_matcher orlx_pl); [| admit]). 
       all: rewrite Heqnew_label; simpl.
       all: rewrite !set_union_empty_r. 
       all: try (arewrite (rmw (G st) ≡ rmw (G st')); [rewrite UG; simpl; auto |]). 
@@ -1305,8 +1320,13 @@ Section CompilationCorrectness.
         red. intros. exfalso.        
         red in H. desc. rewrite <- H in H0. simpl in H0. 
         omega.
-    - subst. red in OSEQ_STEP0. destruct OSEQ_STEP0 as [st'' [STEP_TO'' STEP_FROM'']].
+    - subst. red in OSEQ_STEP0.
+      destruct OSEQ_STEP0 as [st'' [STEP_TO'' STEP_FROM'']].        
       apply (same_relation_exp (seq_id_l (step tid))) in STEP_TO''.
+      assert (STEPS'': (step tid) ^^ (S m) (init (instrs st'')) st'').
+      { apply step_prev. exists st'. splits; auto. 
+        replace (instrs st'') with (instrs st'); eauto.
+        apply steps_same_instrs. exists tid. apply rt_step. eauto. }
       assert (AT_PC: Some f = nth_error (instrs st') (pc st')).
       { apply eq_trans with (y := nth_error [f; st0] 0); auto.
         rewrite <- (Nat.add_0_r (pc st')). 
@@ -1319,14 +1339,74 @@ Section CompilationCorrectness.
       red in STEP_TO''. desc. red in STEP_TO''. destruct STEP_TO'' as [SAME_INSTR' [instr' [INSTR' ISTEP']]].  
       rewrite <- AT_PC in INSTR'. inversion INSTR'. subst f.  
       inversion ISTEP'; try (rewrite II in H0; discriminate).
-
+      
       red in STEP_FROM''. desc. red in STEP_FROM''. destruct STEP_FROM'' as [SAME_INSTR'' [instr'' [INSTR'' ISTEP'']]].
       rewrite UPC in INSTR''.
       replace (instrs st'') with (instrs st') in INSTR''. 
       rewrite <- AT_PC1 in INSTR''. inversion INSTR''. subst st0.
-      inversion ISTEP''; try (rewrite II0 in H1; discriminate).
-      subst. 
+      inversion ISTEP''; try (rewrite II0 in H1; discriminate).      
+      subst. inversion II. inversion II0. subst.
+
+      remember (Afence Oacqrel) as new_label'.
+      remember (Astore Xpln Orlx (RegFile.eval_lexpr (regf st'') lexpr)
+             (RegFile.eval_expr (regf st'') expr)) as new_label''. 
       
+      pose proof (@label_set_step_helper st' st'' _ tid new_label'  ∅ ∅ (ectrl st') ∅ UG STEPS') as HELPER'. 
+      pose proof (@label_set_step_helper st'' st _ tid new_label''
+          (DepsFile.expr_deps (depf st'') expr)
+          (DepsFile.lexpr_deps (depf st'') lexpr) (ectrl st'') ∅ UG0 STEPS'') as HELPER''.
+      assert (RMW_SAME: rmw (G st) ≡ rmw (G st')).
+      { rewrite UG0, UG. simpl. auto. }
+      (* !!! *)
+      (* wrong statement! will define correct one later *)
+      assert (SB_UPD: immediate (sb (G st)) ≡ immediate (sb (G st'))
+                                ∪ (fun x y => Events.tid x = tid /\ Events.tid y = tid /\ index x = index y - 1 /\ index y = eindex st')).
+      { admit. } 
+      (* !!! *)
+
+      splits.
+      (* step 1*)
+      all: try (seq_rewrite (HELPER'' (@is_sc actid) sc_matcher sc_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER'' (@is_w actid) w_matcher w_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER'' (@is_nonnop_f actid) nonnop_f_matcher nonnop_f_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER'' (@is_acq actid) acq_matcher acq_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER'' (@is_acqrel actid) acqrel_matcher acqrel_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER'' (@is_r actid) r_matcher r_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER'' (@is_only_rlx actid) orlx_matcher orlx_pl); [| admit]).
+      (*step 2*)
+      all: try (seq_rewrite (HELPER' (@is_sc actid) sc_matcher sc_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER' (@is_w actid) w_matcher w_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER' (@is_nonnop_f actid) nonnop_f_matcher nonnop_f_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER' (@is_acq actid) acq_matcher acq_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER' (@is_acqrel actid) acqrel_matcher acqrel_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER' (@is_r actid) r_matcher r_pl); [| vauto]). 
+      all: try (seq_rewrite (HELPER' (@is_only_rlx actid) orlx_matcher orlx_pl); [| admit]).
+      (* general simplification for both steps*)
+      all: rewrite Heqnew_label', Heqnew_label''; simpl.
+      all: rewrite !set_union_empty_r.
+      all: try rewrite RMW_SAME.
+      (* all: try rewrite SB_UPD. *)
+      + seq_rewrite SB_UPD.
+        arewrite_false (immediate (sb (G st)) ⨾ rmw (G st')).
+        { 
+          sin_rewrite sb_bibounded; [| admit].
+          sin_rewrite rmw_bibounded; [| admit].
+          rewrite UINDEX0, UINDEX.
+          red. intros. red in H. desc. 
+        repeat seq_rewrite set_inter_union_r.
+        repeat seq_rewrite set_inter_union_l.
+        assert (set_union_seq: forall {A: Type} (S1 S2: A -> Prop) (r: relation A),
+                   ⦗S1 ∪₁ S2⦘ ⨾ r ≡ ⦗S1⦘ ⨾ r ∪ ⦗S2⦘ ⨾ r).
+        { intros. basic_solver. }
+        repeat seq_rewrite set_union_seq. repeat seq_rewrite codom_union.
+        seq_rewrite set_unionA. 
+        apply set_equiv_union.
+        { red in OMM_PREM'. desc. auto. }
+        case_union _ _.  
+      
+
+      
+            
 
 
   Lemma compilation_implies_omm_premises SGI PI tid
