@@ -484,7 +484,9 @@ Section OCamlMM_TO_IMM_S_PROG.
       red in MM_SIM. desc.
       exists sto'. splits.
       { red. exists lbls. red. splits; [subst; simpl; auto| ].
-        exists ld. exists 0. splits; [admit| ].
+        exists ld. exists 0. splits.
+        { (* need to establish pc correspondence between compiled programs *)
+          admit. }
         pose proof (@Oload tid lbls sto sto' ld 1 (gt_Sn_O 0) Orlx reg lexpr val l) as OMM_STEP. 
         assert (ord_eq: ord = Orlx). 
         { subst ld. congruence. }
@@ -494,10 +496,11 @@ Section OCamlMM_TO_IMM_S_PROG.
         subst sto'. simpl. rewrite MM_SIM5. auto. }
       red. splits.
       { subst sto'. simpl. replace (instrs sti') with (instrs sti); auto. }
-      { admit. }
+      { (* need to prove that subprograms are compiled too *)
+        admit. }
       { red. splits.
         { (* subst sto'. unfold add, acts_set. simpl.. simpl. *)
-          (* destruct MM-sim further *)
+          (* destruct MM-sim further *)          
           admit. }
         { subst sto'. rewrite UG. simpl. red in MM_SIM1. desc.
           congruence. } }
@@ -505,10 +508,8 @@ Section OCamlMM_TO_IMM_S_PROG.
       { subst sto'. rewrite UDEPS. simpl. congruence. }
       { subst sto'. rewrite UECTRL. simpl. congruence. }
       { subst sto'. rewrite UINDEX. simpl. congruence. }
-    -       
-        
-
-      
+      (* -  *)
+      (* ... *)
   Admitted.
   
   Lemma first_end {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n):
@@ -550,12 +551,6 @@ Section OCamlMM_TO_IMM_S_PROG.
       flatten events_blocks = acts GI /\
       Forall (is_events_compilation_block (lab GI)) events_blocks. 
       
-  Lemma compiled_by_program GI PI (EX: exists tid, thread_execution tid PI GI)
-        (COMP: exists PO, is_thread_compiled PO PI) : is_compiled_graph GI. 
-  Proof.
-    (*show that every oseq_step adds a block *)
-  Admitted. 
-
   Lemma Wfl_subgraph SG' SG (SB: same_behavior_local SG SG') (WFL: Wf_local SG'): Wf_local SG.
   Proof.  Admitted.
       
@@ -904,8 +899,6 @@ Section OCamlMM_TO_IMM_S_PROG.
            same_behavior_local SGO SGI /\
            Wf_local SGO. 
   Proof.
-    forward eapply (compiled_by_program) as SGI_COMP; eauto.
-    red in SGI_COMP. destruct SGI_COMP as [_ [ev_blocks [BLOCKS_OF_SGI COMP_EVENTS_BLOCKS]]].
     red in ExI. destruct ExI as [sti_fin ExI]. desc.
     apply (@crt_num_steps _ (step tid) (init PI) sti_fin) in STEPS as [n_isteps ISTEPS].
     assert (SAME_INSTRS: PI = instrs sti_fin). 
@@ -1392,8 +1385,6 @@ Section CompilationCorrectness.
         eauto. }
       intros [PO THREAD_PO]. exists PO. 
       eapply COMP_THREADS; eauto. }
-    forward eapply (compiled_by_program); eauto.    
-    intros GRAPH_COMPILED.
     red in EXEC. destruct EXEC as [sti_fin [STEPS [TERMINAL G_FIN]]].
     assert (SAME_INSTRS: PI = instrs sti_fin).
     { forward eapply steps_same_instrs. 
@@ -1432,8 +1423,10 @@ Section CompilationCorrectness.
     ocaml_consistent GI.
   Proof.
     pose proof GI_omm_premises as GI_OMM_PREM. red in GI_OMM_PREM. desc.
-    eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto. 
-  Qed.
+    (* show that current F definition is appropriate *)
+    admit. 
+    (* eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto.  *)
+  Admitted. 
     
   Lemma GO_exists: exists GO,
       Oprogram_execution OCamlProgO GO /\
