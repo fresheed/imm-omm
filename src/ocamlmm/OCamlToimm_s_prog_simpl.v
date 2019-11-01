@@ -492,6 +492,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       symmetry. eapply IHn. eauto.
   Qed.
 
+
   Fixpoint seq_nats n := match n with
                          | 0 => []
                          | S n' => seq_nats n' ++ [n']
@@ -518,7 +519,15 @@ Section OCamlMM_TO_IMM_S_PROG.
     red. intros x y [block [_ STEPS]].
     apply crt_num_steps.
     eauto.
+  Qed.
+
+  Lemma oseq_same_instrs st st' (STEPS: exists tid, (oseq_step tid)＊ st st'):
+    instrs st = instrs st'.
+  Proof.
+    apply steps_same_instrs. desc. exists tid.
+    apply oseq_implies_steps. auto.
   Qed. 
+
 
   Lemma block_steps_selection st1 st2 tid n (STEPS: (step tid) ^^ n st1 st2)
         block (BLOCK: on_block st1 block) (ENOUGH: n >= length block):
@@ -1226,187 +1235,91 @@ Section CompilationCorrectness.
     intros. 
     apply label_set_step; eauto.
     eapply nonnop_bounded; eauto. 
-  Qed. 
+  Qed.
 
-  Lemma OMM_PREM_STEPS n: forall st tid (REACH: (oseq_step tid) ^^ n (init (instrs st)) st),
-      omm_premises_hold (G st).
+  Lemma events_continuos n tid: forall st (REACH: (step tid) ^^ n (init (instrs st)) st),
+      forall i (INDEX: i < eindex st), E (G st) (ThreadEvent tid i).
   Proof.
     induction n.
-    { intros. apply steps0 in REACH. rewrite <- REACH. simpl.
-      red. split.
-      { (*reuse the same fact for omm *)
-        admit. }
-      splits.
-      all: try basic_solver. }
+    { intros st REACH. apply steps0 in REACH.
+      rewrite <- REACH. unfold init, init_execution, acts_set.
+      simpl. intros. omega. }
     intros.
-    red. split; [admit | ]. (*reuse the same fact for omm *)
-    rewrite step_prev in REACH. destruct REACH as [st' [OSEQ_STEPS' OSEQ_STEP]].
-    forward eapply (IHn st' tid) as OMM_PREM'.
-    { replace (instrs st') with (instrs st); auto.
-      symmetry. 
-      eapply (steps_same_instrs).
-      exists tid. apply oseq_implies_steps. apply crt_num_steps.
-      exists 1. apply (same_relation_exp (pow_unit (oseq_step tid))). eauto. }
-    red in OSEQ_STEP. desc. red in OSEQ_STEP. desc.
+    remember (ThreadEvent tid i) as ev.
+    rewrite step_prev in REACH. destruct REACH as [st' [STEPS' STEP]].
+    replace (instrs st) with (instrs st') in STEPS'.
+    2: { apply steps_same_instrs. exists tid. apply rt_step. auto. }
+    pose proof (E_bounded n tid st' STEPS') as BOUND.
+    (* use preserve_event.  *)
+    admit.
+  Admitted.
     
-    assert (exists m, (step tid) ^^ m (init (instrs st')) st') as [m STEPS']. 
-    { apply crt_num_steps. apply oseq_implies_steps.
-      apply crt_num_steps. eexists.
-      replace (instrs st') with (instrs st); eauto.
-      symmetry. apply steps_same_instrs. exists tid. apply crt_num_steps. eauto. } 
-    inversion COMP_BLOCK.
-    all: subst block.
-    all: simpl in *.
-    - apply (same_relation_exp (seq_id_l (step tid))) in OSEQ_STEP0.
-      do 2 (red in OSEQ_STEP0; desc).
-      assert (AT_PC: Some ld = nth_error (instrs st') (pc st')).
-      { apply eq_trans with (y := nth_error [ld] 0); auto.
-        rewrite <- (Nat.add_0_r (pc st')). 
-        eapply sublist_items; eauto. }
-      rewrite <- AT_PC in ISTEP. inversion ISTEP. subst ld.  
-      inversion ISTEP0; try (rewrite II in H1; discriminate).
-      subst. inversion II. subst. 
-      remember (Aload false Orlx (RegFile.eval_lexpr (regf st') lexpr) val) as new_label.
-      assert (ADD_LABEL: lab (G st) (ThreadEvent tid (eindex st')) = (Aload false Orlx (RegFile.eval_lexpr (regf st') lexpr) val)).
-      { rewrite UG, Heqnew_label. simpl. apply upds. }
-      (* indices in IMM graph are continuos, so can subtract 1 *)
-      assert (SB_UPD: immediate (sb (G st)) ≡ immediate (sb (G st'))
-                                ∪ (fun x y => Events.tid x = tid /\ Events.tid y = tid /\ index x = index y - 1 /\ index y = eindex st')).
-      { admit. } 
-      pose proof (@label_set_step_helper st' st m  tid new_label ∅
-                                         (DepsFile.lexpr_deps (depf st') lexpr) (ectrl st') ∅ UG STEPS') as HELPER. 
-      splits.
-
-      all: try (seq_rewrite (HELPER (@is_sc actid) sc_matcher sc_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER (@is_w actid) w_matcher w_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER (@is_nonnop_f actid) nonnop_f_matcher nonnop_f_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER (@is_acq actid) acq_matcher acq_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER (@is_acqrel actid) acqrel_matcher acqrel_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER (@is_r actid) r_matcher r_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER (@is_only_rlx actid) orlx_matcher orlx_pl); [| admit]). 
-      all: rewrite Heqnew_label; simpl.
-      all: rewrite !set_union_empty_r. 
-      all: try (arewrite (rmw (G st) ≡ rmw (G st')); [rewrite UG; simpl; auto |]). 
-      all: try rewrite SB_UPD.
-
-      * do 2 case_union _ _. rewrite codom_union.
-        seq_rewrite <- (set_union_empty_r (W (G st') ∩₁ Sc (G st'))). 
-        apply set_equiv_union.        
-        { red in OMM_PREM'. desc. auto. }
-        seq_rewrite <- codom_empty. apply codom_rel_more.  
-        red. split; [ basic_solver | ]. 
-        sin_rewrite (rmw_bibounded _ _ _ STEPS').
-        rewrite inclusion_seq_eqv_l.
-        red. intros. red in H. desc. omega.  
-      * red in OMM_PREM'. desc. auto.
-      * case_union _ _. rewrite codom_union. seq_rewrite set_inter_union_r.
-        apply set_subset_union.
-        { red in OMM_PREM'. desc. auto. }
-        forward eapply (@nonnop_bounded _ (@is_w actid) w_matcher) as BW; eauto. 
-        { apply w_pl. }
-        { red. vauto. }
-        red in BW. rewrite BW. 
-        red. intros. exfalso.        
-        red in H. desc. rewrite <- H0 in H. simpl in H.
-        omega.
-      * case_union _ _. rewrite codom_union. seq_rewrite set_inter_union_l.
-        apply set_subset_union.
-        { red in OMM_PREM'. desc. auto. }
-        (* TODO: join with previous *)
-        forward eapply (@nonnop_bounded _ (@is_sc actid) sc_matcher) as BSC; eauto. 
-        { apply sc_pl. }
-        { red. vauto. }
-        red in BSC. rewrite BSC. 
-        red. intros. exfalso.        
-        red in H. desc. rewrite <- H in H0. simpl in H0. 
-        omega.
-    - subst. red in OSEQ_STEP0.
-      destruct OSEQ_STEP0 as [st'' [STEP_TO'' STEP_FROM'']].        
-      apply (same_relation_exp (seq_id_l (step tid))) in STEP_TO''.
-      assert (STEPS'': (step tid) ^^ (S m) (init (instrs st'')) st'').
-      { apply step_prev. exists st'. splits; auto. 
-        replace (instrs st'') with (instrs st'); eauto.
-        apply steps_same_instrs. exists tid. apply rt_step. eauto. }
-      assert (AT_PC: Some f = nth_error (instrs st') (pc st')).
-      { apply eq_trans with (y := nth_error [f; st0] 0); auto.
-        rewrite <- (Nat.add_0_r (pc st')). 
-        eapply sublist_items; eauto. }
-      assert (AT_PC1: Some st0 = nth_error (instrs st') (pc st' + 1)).
-      { apply eq_trans with (y := nth_error [f; st0] 1); auto.
-        rewrite <- (Nat.add_0_r (pc st')). 
-        eapply sublist_items; eauto. rewrite (Nat.add_0_r). auto. }
-
-      red in STEP_TO''. desc. red in STEP_TO''. destruct STEP_TO'' as [SAME_INSTR' [instr' [INSTR' ISTEP']]].  
-      rewrite <- AT_PC in INSTR'. inversion INSTR'. subst f.  
-      inversion ISTEP'; try (rewrite II in H0; discriminate).
-      
-      red in STEP_FROM''. desc. red in STEP_FROM''. destruct STEP_FROM'' as [SAME_INSTR'' [instr'' [INSTR'' ISTEP'']]].
-      rewrite UPC in INSTR''.
-      replace (instrs st'') with (instrs st') in INSTR''. 
-      rewrite <- AT_PC1 in INSTR''. inversion INSTR''. subst st0.
-      inversion ISTEP''; try (rewrite II0 in H1; discriminate).      
-      subst. inversion II. inversion II0. subst.
-
-      remember (Afence Oacqrel) as new_label'.
-      remember (Astore Xpln Orlx (RegFile.eval_lexpr (regf st'') lexpr)
-             (RegFile.eval_expr (regf st'') expr)) as new_label''. 
-      
-      pose proof (@label_set_step_helper st' st'' _ tid new_label'  ∅ ∅ (ectrl st') ∅ UG STEPS') as HELPER'. 
-      pose proof (@label_set_step_helper st'' st _ tid new_label''
-          (DepsFile.expr_deps (depf st'') expr)
-          (DepsFile.lexpr_deps (depf st'') lexpr) (ectrl st'') ∅ UG0 STEPS'') as HELPER''.
-      assert (RMW_SAME: rmw (G st) ≡ rmw (G st')).
-      { rewrite UG0, UG. simpl. auto. }
-      (* !!! *)
-      (* wrong statement! will define correct one later *)
-      assert (SB_UPD: immediate (sb (G st)) ≡ immediate (sb (G st'))
-                                ∪ (fun x y => Events.tid x = tid /\ Events.tid y = tid /\ index x = index y - 1 /\ index y = eindex st')).
-      { admit. } 
-      (* !!! *)
-
-      splits.
-      (* step 1*)
-      all: try (seq_rewrite (HELPER'' (@is_sc actid) sc_matcher sc_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER'' (@is_w actid) w_matcher w_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER'' (@is_nonnop_f actid) nonnop_f_matcher nonnop_f_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER'' (@is_acq actid) acq_matcher acq_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER'' (@is_acqrel actid) acqrel_matcher acqrel_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER'' (@is_r actid) r_matcher r_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER'' (@is_only_rlx actid) orlx_matcher orlx_pl); [| admit]).
-      (*step 2*)
-      all: try (seq_rewrite (HELPER' (@is_sc actid) sc_matcher sc_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER' (@is_w actid) w_matcher w_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER' (@is_nonnop_f actid) nonnop_f_matcher nonnop_f_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER' (@is_acq actid) acq_matcher acq_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER' (@is_acqrel actid) acqrel_matcher acqrel_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER' (@is_r actid) r_matcher r_pl); [| vauto]). 
-      all: try (seq_rewrite (HELPER' (@is_only_rlx actid) orlx_matcher orlx_pl); [| admit]).
-      (* general simplification for both steps*)
-      all: rewrite Heqnew_label', Heqnew_label''; simpl.
-      all: rewrite !set_union_empty_r.
-      all: try rewrite RMW_SAME.
-      (* all: try rewrite SB_UPD. *)
-      + seq_rewrite SB_UPD.
-        arewrite_false (immediate (sb (G st)) ⨾ rmw (G st')).
-        { 
-          sin_rewrite sb_bibounded; [| admit].
-          sin_rewrite rmw_bibounded; [| admit].
-          rewrite UINDEX0, UINDEX.
-          red. intros. red in H. desc. 
-        repeat seq_rewrite set_inter_union_r.
-        repeat seq_rewrite set_inter_union_l.
-        assert (set_union_seq: forall {A: Type} (S1 S2: A -> Prop) (r: relation A),
-                   ⦗S1 ∪₁ S2⦘ ⨾ r ≡ ⦗S1⦘ ⨾ r ∪ ⦗S2⦘ ⨾ r).
-        { intros. basic_solver. }
-        repeat seq_rewrite set_union_seq. repeat seq_rewrite codom_union.
-        seq_rewrite set_unionA. 
-        apply set_equiv_union.
-        { red in OMM_PREM'. desc. auto. }
-        case_union _ _.  
-      
-
-      
-            
+  Lemma events_generation n tid: forall st ev (REACH: (oseq_step tid) ^^ n (init (instrs st)) st),
+      E (G st) ev -> exists st1 st2, (oseq_step tid) st1 st2
+                               /\ index ev >= eindex st1 /\ index ev < eindex st2. 
+  Proof.
+    induction n.
+    { intros st x REACH Ex. apply steps0 in REACH.
+      rewrite <- REACH in Ex. unfold init, init_execution, acts_set in Ex.
+      simpl in Ex. vauto. }
+    intros st x REACH Ex.
+    forward eapply (oseq_implies_steps) as STEPS.
+    { eapply crt_num_steps. eauto. }
+    apply crt_num_steps in STEPS as [m STEPS].
+    rewrite step_prev in REACH. destruct REACH as [st' [OSEQ_STEPS' OSEQ_STEP]].
+    pose proof (E_bounded m tid st STEPS x Ex) as BOUND. red in BOUND.
+    apply le_S_gt in BOUND. 
+    assert (eindex st' <= eindex st).
+    { apply rt_step, oseq_implies_steps in OSEQ_STEP.
+      apply eindex_steps_mon in OSEQ_STEP. auto. }
+    destruct (le_lt_dec (eindex st') (index x)).
+    { exists st'. exists st. splits; auto. }
+    replace (instrs st) with (instrs st') in OSEQ_STEPS'.
+    2: { apply oseq_same_instrs. exists tid. apply rt_step. auto. }
+    forward eapply (IHn); eauto.
+    forward eapply (@oseq_implies_steps (init (instrs st')) st' tid) as STEPS'.
+    { apply crt_num_steps. eauto. }
+    apply crt_num_steps in STEPS'. destruct STEPS' as [m' STEPS']. 
+    pose proof (events_continuos m' tid st' STEPS' l).
+    replace x with (ThreadEvent tid (index x)); auto.
+    (* need to show that new events has correct tid*)
+    admit. 
+  Admitted.          
+    
+        
+  Lemma OMM_PREM_STEPS' n: forall st tid (REACH: (oseq_step tid) ^^ n (init (instrs st)) st),
+      omm_premises_hold (G st).
+  Proof.
+    intros. 
+    red. split.
+    { admit. }
+    forward eapply (oseq_implies_steps) as STEPS.
+    { eapply crt_num_steps. eauto. }
+    apply crt_num_steps in STEPS as [m STEPS]. 
+    splits.
+    2: { admit. }
+    { cut (W (G st) ∩₁ Sc (G st)
+             ⊆₁ codom_rel (⦗F (G st) ∩₁ Acq (G st)⦘ ⨾ immediate (sb (G st)) ⨾ rmw (G st))); [admit| ].
+      red. intros. red in H. destruct H as [Wx SCx]. 
+      assert (index x < eindex st) as BOUND. 
+      { cut (index_bounded (@is_w actid) st); auto. 
+        eapply nonnop_bounded; eauto. 
+        { instantiate (1:=w_matcher). apply w_pl. }
+        red. vauto. } 
+      pose proof (events_continuos m tid st STEPS BOUND) as Ex. 
+      assert (EQ: x = (ThreadEvent tid (index x))) by admit.
+      rewrite <- EQ in *. 
+      pose proof (events_generation n tid st x REACH Ex) as [st1 [st2 [OSEQ [IND1 IND2]]]]. 
+      do 2 (red in OSEQ; desc).
+      inversion COMP_BLOCK.
+      all: rename H into OINSTR. 
+      all: rename H0 into BLOCK_CONTENTS.
+      all: subst; simpl in *.      
+      (* - exfalso. apply (same_relation_exp (seq_id_l (step tid))) in OSEQ0. *)
+      (*   do 2 (red in OSEQ0; desc). *)
+      (*   inversion ISTEP0. (* ; try (rewrite II in *; discriminate).*) *)
+      all: admit. }
+  Admitted.                
 
 
   Lemma compilation_implies_omm_premises SGI PI tid
@@ -1433,14 +1346,10 @@ Section CompilationCorrectness.
     eapply oseq_iff_steps in STEPS; eauto.
     rewrite <- SAME_INSTRS in *.    
     2: { eexists. rewrite <- SAME_INSTRS. eauto. }
-    rewrite crt_num_steps in STEPS. destruct STEPS as [n_osteps OSTEPS]. 
-    assert (OMM_PREM_STEPS: forall i sti (INDEX: i <= n_osteps)
-                              (REACH: (oseq_step tid) ^^ i (init PI) sti),
-               omm_premises_hold (G sti)).
-    { admit. }
-    rewrite <- G_FIN. 
-    apply (OMM_PREM_STEPS n_osteps sti_fin (Nat.le_refl n_osteps) OSTEPS). 
-  Admitted.
+    rewrite crt_num_steps in STEPS. destruct STEPS as [n_osteps OSTEPS].
+    forward eapply (OMM_PREM_STEPS' n_osteps sti_fin tid); [| intros; congruence].
+    replace (instrs sti_fin) with PI; auto. 
+  Qed. 
 
   Definition restrict_to_thread (tid: thread_id) (G: execution) : execution.
   Admitted. 
