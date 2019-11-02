@@ -1299,14 +1299,53 @@ Section CompilationCorrectness.
     rewrite step_prev in REACH. destruct REACH as [st' [STEPS' STEP]].
     replace (instrs st) with (instrs st') in STEPS'.
     2: { apply steps_same_instrs. exists tid. apply rt_step. auto. }
-    pose proof (E_bounded n tid st' STEPS') as BOUND.
-    (* use preserve_event.  *)
-    admit.
-  Admitted.
+    destruct (le_lt_dec (eindex st') i) as [INDEX' | INDEX'].
+    2: { specialize (IHn st' STEPS' i INDEX').
+         forward eapply (@preserve_event tid st' st); eauto. 
+         { apply rt_step. auto. }
+         intros. congruence. }
+    do 2 (red in STEP; desc). subst.
+    inversion ISTEP0.
+    all: (rewrite UG; unfold acts_set; simpl).
+    all: rewrite UINDEX in INDEX.
+    (* get rid of steps which preserve graph *)
+    all: try (exfalso; omega).
+    (* one event addition *)
+    1-4: (left; replace i with (eindex st'); auto; omega).
+    (* two events addition *)
+    all: cut (i = eindex st' \/ i = eindex st' + 1); [intros; des; vauto | omega]. 
+  Qed.
+
+  Lemma step_events_struct n tid:
+    forall st (REACH: (step tid) ^^ n (init (instrs st)) st),
+      E (G st) ⊆₁ Tid_ tid ∩₁ set_compl (fun e => is_init e). 
+  Proof.
+    induction n.
+    { intros st REACH x. apply steps0 in REACH.
+      rewrite <- REACH. unfold init, init_execution, acts_set. simpl. vauto. }
+    intros st REACH. 
+    rewrite step_prev in REACH. destruct REACH as [st' [STEPS' STEP]].
+    replace (instrs st) with (instrs st') in STEPS'.
+    2: { apply steps_same_instrs. exists tid. apply rt_step. auto. }
+    specialize (IHn st' STEPS').
+    do 2 (red in STEP; desc).
+    assert (OR_SET: forall {A: Type} (X Y Z: A -> Prop), (fun e => X e \/ Y e) ⊆₁ Z <-> X ∪₁ Y ⊆₁ Z).
+    { intros. basic_solver. }
+    inversion ISTEP0.
+    all: rewrite UG. 
+    all: try auto.
+    all: unfold add, acts_set; simpl.
+    (* one event addition *)
+    1-4: apply set_subset_union_l; splits; [ basic_solver | auto ]. 
+    (* two event addition*)
+    all: apply set_subset_union_l; splits; [basic_solver | ].
+    all: apply set_subset_union_l; splits; [ basic_solver | auto ].
+  Qed. 
     
   Lemma events_generation n tid: forall st ev (REACH: (oseq_step tid) ^^ n (init (instrs st)) st),
-      E (G st) ev -> exists st1 st2, (oseq_step tid) st1 st2
-                               /\ index ev >= eindex st1 /\ index ev < eindex st2. 
+      E (G st) ev -> exists st1 st2, (oseq_step tid) st1 st2 /\
+                               index ev >= eindex st1 /\
+                               index ev < eindex st2.
   Proof.
     induction n.
     { intros st x REACH Ex. apply steps0 in REACH.
@@ -1331,10 +1370,13 @@ Section CompilationCorrectness.
     { apply crt_num_steps. eauto. }
     apply crt_num_steps in STEPS'. destruct STEPS' as [m' STEPS']. 
     pose proof (events_continuos m' tid st' STEPS' l).
-    replace x with (ThreadEvent tid (index x)); auto.
-    (* need to show that new events has correct tid*)
-    admit. 
-  Admitted.          
+    apply (step_events_struct m tid st STEPS) in Ex.
+    cut (x = ThreadEvent tid (index x)). 
+    { intros. congruence. }
+    destruct x.
+    { exfalso. red in Ex. desc. apply Ex0. vauto. }
+    red in Ex. desc. simpl in Ex. vauto. 
+  Qed.
     
         
   Lemma OMM_PREM_STEPS' n: forall st tid (REACH: (oseq_step tid) ^^ n (init (instrs st)) st),
