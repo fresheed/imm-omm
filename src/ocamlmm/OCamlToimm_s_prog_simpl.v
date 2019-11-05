@@ -423,6 +423,8 @@ Section OCamlMM_TO_IMM_S_PROG.
   (* Definition next_compilation_block sti (CORR: exists sto, mm_similar_states sto sti) (NOT_END: pc sti < length (instrs sti)) : list Prog.Instr.t. *)
   (* Admitted. *)
 
+  (* TODO: update Coq version? *)
+  (* this lemma is mentioned on https://coq.inria.fr/library/Coq.Lists.List.html *)
   Lemma skipn_all2 {A: Type} (l: list A) n: length l <= n -> skipn n l = [].
   Proof. Admitted. 
 
@@ -621,38 +623,53 @@ Section OCamlMM_TO_IMM_S_PROG.
   Qed.
   
   Lemma is_terminal_new st: pc st >= length (instrs st) <-> is_terminal st.
+  Proof. Admitted.
+
+  (* TODO: finish definition *)
+  Definition is_corrector (corr: list nat) (PO PI: list Prog.Instr.t) :=
+    length corr = length PO + 1 /\
+    True. 
+
+  Lemma compilation_correction PO PI:
+    is_thread_compiled PO PI <-> exists (corrector: list nat),
+      ⟪CORR: is_corrector corrector PO PI  ⟫. 
+  Proof. Admitted.
+
+  Lemma acb_iff_corr PO PI corr (CORR: is_corrector corr PO PI):
+    forall st (INSTRS: instrs st = PI),
+      (exists block, on_block st block) \/ pc st = length PI
+      <-> (exists i, Some (pc st) = nth_error corr i). 
+  Proof. Admitted.
+
+  Lemma next_corr PO PI corr (CORR: is_corrector corr PO PI):
+      forall st (INSTRS: instrs st = PI) block (BLOCK: on_block st block),
+      exists i, Some (pc st + length block) = nth_error corr i.
   Proof. Admitted. 
         
   Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
         (COMP: exists PO, is_thread_compiled PO (instrs st1)):
     at_compilation_block st2.
   Proof.
-    (* assert (TC_HELPER: (step tid)⁺ st1 st2 -> at_compilation_block st2). *)
-    (* 1: { pose proof OSEQ as OSEQ_. *)
-    (*      intros TC_ACB. *)
-    (*      apply rt_step, oseq_implies_steps in OSEQ.  *)
-    (*      apply clos_refl_transE in OSEQ. des; [| apply TC_ACB; auto].  *)
-    (*      rewrite <- OSEQ. *)
-    (*      red in OSEQ_. desc.  *)
-    (*      red. eauto. } *)
-    (* intros TC.  *)
-    pose proof OSEQ as OSEQ_.
-    (* red in OSEQ.  *)
-    desc. inversion COMP as [PO_EQ PI_EQ | oinstr block po' pi' PO_EQ PI_EQ]. 
-    - apply rt_step in OSEQ. 
-      pose proof (oseq_implies_steps OSEQ) as STEPS. 
-      apply clos_refl_transE in STEPS. des. 
-      { red in OSEQ_. desc. red. rewrite <- STEPS.  eauto. } 
-      exfalso.
-      apply ct_begin in STEPS. red in STEPS. desc.
-      do 2 (red in STEPS; desc).      
-      rewrite <- PI_EQ in ISTEP.
-      destruct (pc st1); vauto.
-    - admit.       
+    red in OSEQ. desc.
+    remember (instrs st1) as PI.
+    pose proof COMP as COMP_. 
+    apply (compilation_correction PO PI) in COMP_. desc.
+    pose proof (acb_iff_corr CORR) as IN_CORR'.
+    assert (exists i : nat, Some (pc st1) = nth_error corrector i).
+    { apply IN_CORR'; eauto. }
+    destruct H as [i1 PC1]. 
+    forward eapply (next_corr CORR) as [i1' PC1']; eauto.
+    assert (PC2: pc st2 = pc st1 + length block
+            \/ exists cond adr, block = [Instr.ifgoto cond adr]).
+    { admit. }
+    des.
+    { rewrite <- PC2 in PC1'.
+      red. left. forward eapply (IN_CORR' st2) as [_ IN_CORR2]. 
+      { replace (instrs st2) with (instrs st1); auto.
+        apply steps_same_instrs. exists tid. apply crt_num_steps. eauto. }
+      
   Admitted.
 
-  (* TODO: update Coq version? *)
-  (* this lemma is mentioned on https://coq.inria.fr/library/Coq.Lists.List.html *)
   (* TODO: remove it since exact instruction is known when block_start is called? *)
   Lemma block_start st block instr (BLOCK: on_block st block)
         (AT_PC: Some instr = nth_error (instrs st) (pc st)):
