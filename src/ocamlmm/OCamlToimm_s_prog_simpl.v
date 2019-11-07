@@ -165,15 +165,15 @@ Section OCaml_Program.
 
   Definition is_ocaml_mode mode :=
     match mode with
-    | Orlx | Osc => True
-    | _ => False
+    | Orlx | Osc => true
+    | _ => false
     end. 
   
   Definition is_ocaml_instruction instr :=
     match instr with
-    | Instr.assign _ _ | Instr.ifgoto _ _ => True
+    | Instr.assign _ _ | Instr.ifgoto _ _ => true
     | Instr.load mode _ _ | Instr.store mode _ _ => is_ocaml_mode mode
-    | _ => False
+    | _ => false
     end. 
 
   Definition Othread_execution (tid : thread_id) (insts : list Prog.Instr.t) (pe : execution) :=
@@ -182,7 +182,24 @@ Section OCaml_Program.
       ⟪ TERMINAL : is_terminal s ⟫ /\
       ⟪ PEQ : s.(G) = pe ⟫.
 
-  Definition OCamlProgram (prog: Prog.Prog.t) := True. 
+  (* separation should be consistent across all threads *)
+  
+  Definition is_matching_mode instr mode :=
+    match instr with
+    | Instr.load md _ _ | Instr.store md _ _ => (mode = md)
+    | _ => True
+    end. 
+
+  Definition locations_separated prog := forall (loc : Loc.t), exists mode,
+        is_ocaml_mode mode /\
+        (forall tid PO (INTHREAD: IdentMap.find tid prog = Some PO)
+            instr (INPROG: In instr PO),
+           is_matching_mode instr mode). 
+
+  Definition OCamlProgram (prog: Prog.Prog.t) :=
+    (forall tid PO (INTHREAD: IdentMap.find tid prog = Some PO),
+        forallb is_ocaml_instruction PO) /\
+    locations_separated prog. 
 
   Definition Oprogram_execution prog (OPROG: OCamlProgram prog) (G : execution) :=
     (forall e (IN: G.(acts_set) e), is_init e \/ IdentMap.In (tid e) prog)
