@@ -669,13 +669,15 @@ Section OCamlMM_TO_IMM_S_PROG.
     { admit. }
     assert (SAME_INSTRS: instrs st1 = instrs st2). 
     { apply steps_same_instrs. exists tid. apply crt_num_steps. eauto. }
-    des.
-    { rewrite <- PC2 in PC1'.
+    assert (BLOCK_STEP: pc st2 = pc st1 + length block -> at_compilation_block st2).
+    { intros PC2_BLOCK. rewrite <- PC2_BLOCK in PC1'.
       forward eapply (IN_CORR' st2) as [_ IN_CORR2]; [congruence | ]. 
       forward eapply (IN_CORR2) as IN_CORR2'; eauto.
-      des.
+      destruct IN_CORR2'. 
       { red. left. eauto. }
-      red. right. red. apply is_terminal_new. rewrite IN_CORR2', <- SAME_INSTRS, <- HeqPI. omega. }
+      red. right. red. apply is_terminal_new. rewrite PC2_BLOCK, <- SAME_INSTRS, <- HeqPI. omega. }
+    des.
+    { apply BLOCK_STEP. auto. }
     subst. simpl in *.
     apply (same_relation_exp (seq_id_l (step tid))) in OSEQ0.
     do 2 (red in OSEQ0; desc).
@@ -688,7 +690,7 @@ Section OCamlMM_TO_IMM_S_PROG.
     inversion ISTEP0; try (rewrite II in INSTR_IFGOTO; discriminate).
     subst. injection II. intros. subst. 
     destruct (Const.eq_dec (RegFile.eval_expr (regf st1) expr) 0).
-    { admit. (* reduce to previous case *)}
+    { apply BLOCK_STEP. auto. }
     forward eapply (ifgoto_corr CORR expr shift) as TO_CORR. 
     { eapply nth_error_In. eauto. }
     specialize (IN_CORR' st2 (eq_sym SAME_INSTRS)) as [_ IN_CORR''].
