@@ -646,6 +646,11 @@ Section OCamlMM_TO_IMM_S_PROG.
       exists i, Some (pc st + length block) = nth_error corr i.
   Proof. Admitted. 
         
+  Lemma ifgoto_corr PO PI corr (CORR: is_corrector corr PO PI):
+      forall cond adr (IN_PROG: In (Instr.ifgoto cond adr) PI),
+      In adr corr. 
+  Proof. Admitted. 
+        
   Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
         (COMP: exists PO, is_thread_compiled PO (instrs st1)):
     at_compilation_block st2.
@@ -662,12 +667,38 @@ Section OCamlMM_TO_IMM_S_PROG.
     assert (PC2: pc st2 = pc st1 + length block
             \/ exists cond adr, block = [Instr.ifgoto cond adr]).
     { admit. }
+    assert (SAME_INSTRS: instrs st1 = instrs st2). 
+    { apply steps_same_instrs. exists tid. apply crt_num_steps. eauto. }
     des.
     { rewrite <- PC2 in PC1'.
-      red. left. forward eapply (IN_CORR' st2) as [_ IN_CORR2]. 
-      { replace (instrs st2) with (instrs st1); auto.
-        apply steps_same_instrs. exists tid. apply crt_num_steps. eauto. }
-      
+      forward eapply (IN_CORR' st2) as [_ IN_CORR2]; [congruence | ]. 
+      forward eapply (IN_CORR2) as IN_CORR2'; eauto.
+      des.
+      { red. left. eauto. }
+      red. right. red. apply is_terminal_new. rewrite IN_CORR2', <- SAME_INSTRS, <- HeqPI. omega. }
+    subst. simpl in *.
+    apply (same_relation_exp (seq_id_l (step tid))) in OSEQ0.
+    do 2 (red in OSEQ0; desc).
+    red in OSEQ. desc. 
+    assert (AT_PC1: Some (Instr.ifgoto cond adr) = nth_error (instrs st1) (pc st1)).
+    { apply eq_trans with (y := nth_error [Instr.ifgoto cond adr] 0); auto.
+      rewrite <- (NPeano.Nat.add_0_r (pc st1)).
+      eapply sublist_items; eauto. }
+    rewrite <- AT_PC1 in ISTEP. injection ISTEP as INSTR_IFGOTO. 
+    inversion ISTEP0; try (rewrite II in INSTR_IFGOTO; discriminate).
+    subst. injection II. intros. subst. 
+    destruct (Const.eq_dec (RegFile.eval_expr (regf st1) expr) 0).
+    { admit. (* reduce to previous case *)}
+    forward eapply (ifgoto_corr CORR expr shift) as TO_CORR. 
+    { eapply nth_error_In. eauto. }
+    specialize (IN_CORR' st2 (eq_sym SAME_INSTRS)) as [_ IN_CORR''].
+    forward eapply IN_CORR'' as IN_CORR'''. 
+    { pose proof (In_nth_error corrector shift TO_CORR). desc. 
+      exists n0. congruence. }
+    des.
+    { red. eauto. }
+    red. right. red. apply is_terminal_new. rewrite IN_CORR''',  <- SAME_INSTRS.
+    omega.     
   Admitted.
 
   (* TODO: remove it since exact instruction is known when block_start is called? *)
