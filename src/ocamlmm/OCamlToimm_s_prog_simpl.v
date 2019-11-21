@@ -505,7 +505,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       { red. exists lbls. red. splits; [subst; simpl; auto| ].
         exists ld. exists 0. splits.
         { (* need to establish pc correspondence between compiled programs *)
-          admit. }
+          subst. admit. }
         pose proof (@Oload tid lbls sto sto' ld 1 (gt_Sn_O 0) Orlx reg lexpr val l) as OMM_STEP. 
         assert (ord_eq: ord = Orlx). 
         { subst ld. congruence. }
@@ -587,6 +587,22 @@ Section OCamlMM_TO_IMM_S_PROG.
     - intros sti' STEPS.
       rewrite step_prev in STEPS. destruct STEPS as [sti'' STEPS'']. desc.
       replace (instrs sti) with (instrs sti'').
+      { red in STEPS''0. desf. red in STEPS''0. desf. }
+      symmetry. eapply IHn. eauto.
+  Qed.
+
+  Lemma omm_steps_same_instrs sto sto' (STEPS: exists tid, (Ostep tid)＊ sto sto'):
+    instrs sto = instrs sto'.
+  Proof.
+    (* TODO: join with previous*)
+    destruct STEPS as [tid STEPS]. apply crt_num_steps in STEPS.
+    destruct STEPS as [n STEPS].
+    generalize dependent sto'.
+    induction n.
+    - intros sto' STEPS. simpl in STEPS. generalize STEPS. basic_solver 10.
+    - intros sto' STEPS.
+      rewrite step_prev in STEPS. destruct STEPS as [sto'' STEPS'']. desc.
+      replace (instrs sto) with (instrs sto'').
       { red in STEPS''0. desf. red in STEPS''0. desf. }
       symmetry. eapply IHn. eauto.
   Qed.
@@ -959,6 +975,19 @@ Section OCamlMM_TO_IMM_S_PROG.
     rewrite firstn_app_2. simpl.
     rewrite <- app_nil_end. auto.     
   Qed. 
+
+  Lemma compilation_bijective: forall PI PO PO' (COMP: is_thread_compiled PO PI)
+                                 (COMP': is_thread_compiled PO' PI),
+      PO' = PO. 
+  Proof.
+  Admitted.
+
+  Lemma firstn_injective {A: Type} (l: list A) x y
+        (SAME: firstn x l = firstn y l):
+    x = y \/ (x >= length l /\ y >= length l). 
+  Proof.
+  Admitted. 
+
   
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
         SGI (ExI: thread_execution tid PI SGI) (WFL: Wf_local SGI):
@@ -1003,18 +1032,26 @@ Section OCamlMM_TO_IMM_S_PROG.
     forward eapply (BY_STEPS n_osteps sti_fin (Nat.le_refl n_osteps)) as [sto_fin [OSTEPS MM_SIM]].
     { auto. }
     { rewrite Nat.sub_diag. basic_solver. }
+    assert (SAME_OINSTRS: PO = instrs sto_fin).
+    { replace PO with (instrs (init PO)); auto.
+      apply omm_steps_same_instrs. exists tid. apply <- crt_num_steps. eauto. }
+    
     exists (G sto_fin).
     splits.
     { red. exists sto_fin. splits; auto. 
       { apply crt_num_steps. vauto. }
-      red.
-      (* prove that we've reached a terminal state *)
-      (* maybe show that pco -> pci mapping is monotone *)
-      admit. }
+      apply is_terminal_new.
+      red in MM_SIM. desc. 
+      rewrite (@firstn_all2 _ (pc sti_fin) (instrs sti_fin)) in MM_SIM0; [| auto].
+      2: { red in TERMINAL. omega. }
+      pose proof (compilation_bijective MM_SIM MM_SIM0) as COMP_BIJ. 
+      rewrite <- firstn_all in COMP_BIJ.
+      pose proof (firstn_injective (instrs sto_fin) _ _ COMP_BIJ) as PC_CORR.
+      desf. omega. }
     { red in MM_SIM. desc. vauto. }
     red in MM_SIM. desc. 
     apply (Wfl_subgraph MM_SIM1). vauto.     
-  Admitted. 
+  Qed. 
         
 End OCamlMM_TO_IMM_S_PROG.
   
@@ -1444,8 +1481,24 @@ Section CompilationCorrectness.
     { exfalso. red in Ex. desc. apply Ex0. vauto. }
     red in Ex. desc. simpl in Ex. vauto. 
   Qed.
+
+  Lemma rmw_sc n: forall st tid (REACH: (oseq_step tid) ^^ n (init (instrs st)) st),
+      rmw (G st) ≡ ⦗Sc (G st)⦘ ⨾ rmw (G st) ⨾ ⦗Sc (G st)⦘.
+  Proof. 
+    induction n.
+    { intros. apply steps0 in REACH. rewrite <- REACH. simpl. basic_solver. }
+    intros.
+    rewrite step_prev in REACH. destruct REACH as [st' [REACH' OSEQ]].
+    replace (instrs st) with (instrs st') in REACH'.
+    2: { apply oseq_same_instrs. exists tid. apply rt_step. auto. }
+    specialize (IHn st' tid REACH').
+    red in OSEQ. desc. red in OSEQ. desc.
+    (* inversion COMP_BLOCK. *)
+    (* all: subst; simpl in *. *)
+    (* - apply (same_relation_exp (seq_id_l (step tid))) in OSEQ0. *)
+    (*   do 2 (red in OSEQ0; desc).  *)
+  Admitted. 
     
-        
   Lemma OMM_PREM_STEPS' n: forall st tid (REACH: (oseq_step tid) ^^ n (init (instrs st)) st),
       omm_premises_hold (G st).
   Proof.
@@ -1585,7 +1638,10 @@ Section CompilationCorrectness.
     admit.         
   Admitted.
 
-  Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI):
+  (* Lemma ocaml_no_rmw: GO *)
+
+  Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI)
+        (ExecO: Oprogram_execution OCamlProgO GO):
     ocaml_consistent GO.
   Proof.
     red in SB. desc. red in SAME_LOCAL. desc.
