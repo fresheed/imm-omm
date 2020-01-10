@@ -573,9 +573,6 @@ Section OCamlMM_TO_IMM_S_PROG.
   Lemma Wfl_subgraph SG' SG (SB: same_behavior_local SG SG') (WFL: Wf_local SG'): Wf_local SG.
   Proof.  Admitted.
       
-  Lemma Wf_subgraph G' G (SB: same_behavior G G') (WF: Wf G'): Wf G.
-  Proof. Admitted.
-
   Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
     instrs sti = instrs sti'.
   Proof.
@@ -1051,8 +1048,39 @@ Section OCamlMM_TO_IMM_S_PROG.
     { red in MM_SIM. desc. vauto. }
     red in MM_SIM. desc. 
     apply (Wfl_subgraph MM_SIM1). vauto.     
+  Qed.
+
+  Lemma same_beh_implies_similar_rels GO GI (SB: same_behavior GO GI):
+    ⟪ SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘⟫ /\
+    ⟪ SC': Sc GO ≡₁ Sc GI ⟫ /\
+    ⟪ FR': fr GO ≡ ⦗set_compl (dom_rel (rmw GI))⦘ ⨾ fr GI ⟫.
+  Proof.
+    red in SB. desc. red in SAME_LOCAL. desc. 
+    assert (SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘).
+    { unfold Execution.sb.        
+      rewrite !seqA. do 2 seq_rewrite <- id_inter.
+      rewrite set_interC. 
+      rewrite RESTR_EVENTS. 
+      basic_solver. }
+    splits; auto. 
+    { rewrite SAME_LAB. auto. }
+    { unfold fr. rewrite SAME_CO. rewrite <- seqA. apply seq_more; [| basic_solver].
+      rewrite EXT_RF.  basic_solver. }
   Qed. 
-        
+
+  Lemma Wf_subgraph GO GI (SB: same_behavior GO GI) (WF: Wf GI): Wf GO.
+  Proof.
+    pose proof (same_beh_implies_similar_rels SB). 
+    red in SB. desc. red in SAME_LOCAL. desc.
+    symmetry in SAME_CO.
+    (* TODO: should we include addr, ctrl equality in same_behavior? *)
+    split.
+    (* all: try rewrite RESTR_EVENTS, SAME_LAB, SAME_CO, EXT_RF.  *)
+    (* split; try basic_solver.  *)
+  Admitted.
+
+
+  
 End OCamlMM_TO_IMM_S_PROG.
   
 
@@ -1644,23 +1672,13 @@ Section CompilationCorrectness.
         (ExecO: Oprogram_execution OCamlProgO GO):
     ocaml_consistent GO.
   Proof.
+    pose proof (same_beh_implies_similar_rels SB). 
     red in SB. desc. red in SAME_LOCAL. desc.
-    assert (SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘).
-    { unfold Execution.sb.        
-      rewrite !seqA. do 2 seq_rewrite <- id_inter.
-      rewrite set_interC. 
-      rewrite RESTR_EVENTS. 
-      basic_solver. }
-    assert (SC': Sc GO ≡₁ Sc GI). 
-    { rewrite SAME_LAB. auto. }
     assert (HBO': hbo GO ⊆ hbo GI).
     { unfold OCaml.hb. rewrite SC'. apply clos_trans_mori.
       apply union_mori; [rewrite SB'; basic_solver | ].
       hahn_frame. 
       apply union_mori; [rewrite SAME_CO; basic_solver | rewrite EXT_RF; basic_solver]. }
-    assert (FR': fr GO ≡ ⦗set_compl (dom_rel (rmw GI))⦘ ⨾ fr GI).
-    { unfold fr. rewrite SAME_CO. rewrite <- seqA. apply seq_more; [| basic_solver].
-      rewrite EXT_RF.  basic_solver. }
     red. red in OMM_I.
     splits; auto.
     { red. rewrite RESTR_EVENTS, EXT_RF.
