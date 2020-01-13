@@ -1614,10 +1614,17 @@ Section CompilationCorrectness.
   Proof.
     pose proof GI_omm_premises as GI_OMM_PREM. red in GI_OMM_PREM. desc.
     (* show that current F definition is appropriate *)
-    admit. 
-    (* eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto.  *)
-  Admitted. 
-    
+    (* admit.  *)
+    eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto.
+  Admitted.
+
+  (* Definition split_graph ProgI_ GI_ (ExecI_: program_execution ProgI_ GI_): *)
+  (*   (* fold_right prod True [(list execution); (relation actid); (relation actid); (actid -> Prop)]. *) *)
+  (*   (list execution) * (actid -> Prop).  *)
+  (*   simpl.  *)
+  (*   apply pair. *)
+  (*   2: { *)
+      
   Lemma GO_exists: exists GO,
       Oprogram_execution OCamlProgO GO /\
       same_behavior GO GI. 
@@ -1666,8 +1673,15 @@ Section CompilationCorrectness.
     admit.         
   Admitted.
 
-  (* Lemma ocaml_no_rmw: GO *)
+  Lemma ocaml_no_rmw GO (ExecO: Oprogram_execution OCamlProgO GO):
+    GO.(rmw) ≡ ∅₂.
+  Proof. Admitted.
 
+  Lemma restr_rel_empty_minus {T: Type} (r r': relation T) (A B: T -> Prop)
+        (NO_INTER: A ∩₁ B ≡₁ ∅):
+    restr_rel A r \ restr_rel B r' ≡ r. 
+  Proof. Admitted. 
+    
   Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI)
         (ExecO: Oprogram_execution OCamlProgO GO):
     ocaml_consistent GO.
@@ -1691,7 +1705,7 @@ Section CompilationCorrectness.
       apply set_subset_inter.
       { rewrite set_interC. rewrite SAME_LAB. apply Comp. }
       basic_solver. }
-    { admit.  }
+    { red. seq_rewrite ocaml_no_rmw; auto. basic_solver. }
     { rewrite HBO', (same_relation_sym SAME_CO). desc.  auto. }
     { unfold fr. rewrite HBO', (same_relation_sym SAME_CO). 
       arewrite (rf GO ⊆ rf GI) by rewrite EXT_RF; auto. 
@@ -1724,34 +1738,27 @@ Section CompilationCorrectness.
         hahn_frame. apply eqv_rel_mori. apply W_RMW. }
       unfold fre. basic_solver. }
     
-    arewrite (coe GO ⊆ coe GI).
-    { admit. 
-      
-      (* assert (CO_: forall G, coe G ≡ co G \ coi G). *)
-      (* {  *)
-      (*   intros. unfold coe. split.  *)
+    arewrite (coe GO ≡ coe GI).
+    { unfold coe.      
+      rewrite SB', <- SAME_CO.
+      seq_rewrite <- restr_relE. 
+      rewrite (WFI.(wf_coD)). rewrite <- restr_relE.      
+      rewrite <- restr_minus_alt. rewrite <- restr_minus_alt. 
+      rewrite restr_minus. rewrite restr_minus. 
+      rewrite restr_restr.
+      arewrite ((RW GI \₁ dom_rel (rmw GI)) ∩₁ W GI ≡₁ W GI); auto.       
+      rewrite set_inter_minus_l.
+      arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
+      split; [basic_solver | ].
+      rewrite WFI.(wf_rmwD).
+      rewrite dom_eqv1.
+      red. ins. red. split; auto.
+      red. ins. type_solver. }
 
-      (*   pose proof (coi_union_coe G).  *)
-      (*   rewrite minus_union_l.  *)
-      (*   rewrite minusK. basic_solver 10.  *)
-
-      (* unfold coe. rewrite SB', SAME_CO. *)
-      (* apply inclusion_minus_l. *)
-
-      (* rewrite coi_union_coe at 1.  *)
-      (* apply union_mori.         *)
-      (* { arewrite (coi GO ⊆ sb GO). *)
-      (*   seq_rewrite <- SB'. basic_solver. } *)
-      (* rewrite (same_relation_sym SAME_CO).  *)
-      (* rewrite (WFI.(wf_coiD)).  *)
-      (* arewrite (coi GI ⊆ sb GI). *)
-      (* apply seq_mori; hahn_frame; apply eqv_rel_mori; apply W_RMW. *)
-
-      (* rewrite as equality? *) }
     rewrite SC'. 
     arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver.
     desc. auto.
-  Admitted.
+  Qed. 
 
   
   Theorem compilation_correctness: exists (GO: execution),
