@@ -1607,23 +1607,36 @@ Section CompilationCorrectness.
     apply tl_omm_premises.
     intros tid.
     (* should carefully relate existing single thread graphs and thread_local_property *)
-  Admitted. 
-      
+  Admitted.
+
+  (* currently rlx fences are used as default value for label function *)
+  (* it forces us to (temporarily?) assert that there are no actual rlx fence nodes in a graph *)
+  Lemma only_nontrivial_fences_workaround:
+    F GI ≡₁ (fun a => is_true (is_f GI.(lab) a)). 
+  Proof. Admitted. 
+    
   Lemma imm_implies_omm:
     ocaml_consistent GI.
   Proof.
     pose proof GI_omm_premises as GI_OMM_PREM. red in GI_OMM_PREM. desc.
-    (* show that current F definition is appropriate *)
-    (* admit.  *)
+    rewrite only_nontrivial_fences_workaround in *. 
     eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto.
+  Qed. 
+    
+  Definition split_graph Prog G (ExecI_: program_execution Prog G):
+    (list execution) * (actid -> Prop).
+    (* simpl. *)
+    (* apply pair. *)
+    (* 2: { *)
   Admitted.
 
-  (* Definition split_graph ProgI_ GI_ (ExecI_: program_execution ProgI_ GI_): *)
-  (*   (* fold_right prod True [(list execution); (relation actid); (relation actid); (actid -> Prop)]. *) *)
-  (*   (list execution) * (actid -> Prop).  *)
-  (*   simpl.  *)
-  (*   apply pair. *)
-  (*   2: { *)
+  Definition merge_graph Prog (Gis: IdentMap.t execution)
+             (Exec_is: forall tid, exists Gi Pi,
+                   Some Gi = IdentMap.find tid Gis /\
+                   Some Pi = IdentMap.find tid Prog /\
+                   thread_execution tid Pi Gi):
+    execution.
+  Admitted. 
       
   Lemma GO_exists: exists GO,
       Oprogram_execution OCamlProgO GO /\
