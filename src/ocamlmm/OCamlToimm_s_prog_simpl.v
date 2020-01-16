@@ -159,7 +159,7 @@ Section OCaml_Program.
     ⟪ ISTEP: exists instr dindex', 
         Some instr = List.nth_error s1.(instrs) s1.(pc) /\
         @Oistep_ tid labels s1 s2 instr (S dindex') (gt_Sn_O dindex')⟫.
-
+  
   Definition Ostep (tid : thread_id) s1 s2 :=
     exists lbls, Oistep tid lbls s1 s2.
 
@@ -357,11 +357,8 @@ Section OCamlMM_TO_IMM_S_PROG.
   Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
   Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
     
-  (* Definition prepend_events (A: actid -> Prop) (shift: nat) := compose A (fun e => ThreadEvent (tid e) (index e + shift)). *)
-  (* Notation "f '∙' g" := (compose f g) (at level 1). (* default notation is for other scope*)   *)
-    
-  Definition thread_local_property (P: execution -> Prop) := forall G,
-      (forall tid SG (TRE: thread_restricted_execution G tid SG), P SG) -> P G.
+  (* Definition thread_local_property (P: execution -> Prop) := forall G, *)
+  (*     (forall tid SG (TRE: thread_restricted_execution G tid SG), P SG) -> P G. *)
 
   (* Definition thread_local_biproperty (P: execution -> execution -> Prop) := forall G1 G2, *)
   (*     (forall tid SG1 SG2 (TRE1: thread_restricted_execution G1 tid SG1) *)
@@ -369,9 +366,9 @@ Section OCamlMM_TO_IMM_S_PROG.
   (*     P G1 G2. *)
 
   Definition omm_premises_hold G :=
-    (* have issues with global Loc_ notation *)
-    let Loc_ := fun l x => loc G.(lab) x = Some l in
-    ⟪ LSM : forall l, (Loc_ l \₁ is_init ⊆₁ (ORlx G)  \/  Loc_ l \₁ is_init ⊆₁ (Sc G)) ⟫ /\
+    (* separated *)
+    (* let Loc_ := fun l x => loc G.(lab) x = Some l in *)
+    (* ⟪ LSM : forall l, (Loc_ l \₁ is_init ⊆₁ (ORlx G)  \/  Loc_ l \₁ is_init ⊆₁ (Sc G)) ⟫ /\ *)
     ⟪ WSCFACQRMW : W G ∩₁ Sc G ≡₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G) ⨾ rmw G) ⟫ /\
     ⟪ RMWSC  : rmw G ≡ ⦗Sc G⦘ ⨾ rmw G⨾ ⦗Sc G⦘ ⟫ /\
     ⟪ WRLXF : W G ∩₁ ORlx G ⊆₁ codom_rel (⦗F G ∩₁ Acqrel G⦘ ⨾ immediate (sb G)) ⟫ /\
@@ -386,9 +383,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     ⟪SAME_CO: GI.(co) ≡ GO.(co)⟫ /\
     ⟪EXT_RF: GO.(rf) ≡ GI.(rf) ⨾ ⦗set_compl (dom_rel GI.(rmw))⦘⟫.
         
-  Lemma tl_omm_premises : thread_local_property omm_premises_hold.
-  Proof. Admitted.
-
   (* Lemma tl_sbl: thread_local_biproperty same_behavior_local. *)
   (* Proof. Admitted.  *)
 
@@ -1643,25 +1637,26 @@ Section CompilationCorrectness.
     rewrite crt_num_steps in STEPS. destruct STEPS as [n_osteps OSTEPS].
     forward eapply (OMM_PREM_STEPS' n_osteps sti_fin tid); [| intros; congruence].
     replace (instrs sti_fin) with PI; auto. 
-  Qed. 
+  Qed.
 
-  Definition restrict_to_thread (tid: thread_id) (G: execution) : execution.
-  Admitted. 
-
-  Definition TMP_thread_local_property (P: execution -> Prop) := forall G,
-      (forall tid, P (restrict_to_thread tid G)) -> P G.
-  (* Definition TMP_thread_local_property (P: execution -> Prop) := forall G, *)
-  (*     (forall tid SG (TE: thread_execution G tid SG) (TRE: thread_restricted_execution G tid SG), P SG) -> P G. *)
-
-
-  Lemma TMP_tl_omm_premises : TMP_thread_local_property omm_premises_hold.
-  Proof. Admitted.
+  Lemma omm_premises_thread_local TSG (OMM_PREM_THREADS: forall tid Gi (THREAD_Gi: Some Gi = IdentMap.find tid (Gis TSG)), omm_premises_hold Gi):
+    omm_premises_hold (tsg2g TSG). 
+  Proof. Admitted.  
 
   Lemma GI_omm_premises : omm_premises_hold GI.
   Proof.
-    (* apply TMP_tl_omm_premises. *)
-    apply tl_omm_premises.
-    intros tid.
+    rewrite <- (proj1 tsg_g_bijection). 
+    apply omm_premises_thread_local.
+    ins.
+    apply program_execution_defs_equiv in ExecI.
+    red in ExecI.
+    assert (exists Pi, Some Pi = IdentMap.find tid ProgI) as [Pi Pi_THREAD] by admit.
+    specialize (ExecI tid Pi Pi_THREAD).
+    (* replace E-quantifier with A in program_execution_tsg? *)
+    assert (True) by admit. clear H.
+    destruct ExecI as [Gi' [TMP Gi_EXEC_Pi]].
+    replace Gi' with Gi in *; [| congruence]. clear TMP. clear Gi'.
+    red. 
     (* should carefully relate existing single thread graphs and thread_local_property *)
   Admitted.
 
@@ -1669,12 +1664,20 @@ Section CompilationCorrectness.
   (* it forces us to (temporarily?) assert that there are no actual rlx fence nodes in a graph *)
   Lemma only_nontrivial_fences_workaround:
     F GI ≡₁ (fun a => is_true (is_f GI.(lab) a)). 
+  Proof. Admitted.
+
+  Lemma GI_locations_separated: 
+    let Loc_ := fun l e => loc (lab GI) e = Some l in
+    forall l : location,
+      Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ ORlx GI \/
+      Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ Sc GI.
   Proof. Admitted. 
-    
+
   Lemma imm_implies_omm:
     ocaml_consistent GI.
   Proof.
     pose proof GI_omm_premises as GI_OMM_PREM. red in GI_OMM_PREM. desc.
+    pose proof GI_locations_separated. 
     rewrite only_nontrivial_fences_workaround in *. 
     eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto.
   Qed. 
