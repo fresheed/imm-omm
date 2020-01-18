@@ -1062,15 +1062,107 @@ Section OCamlMM_TO_IMM_S_PROG.
       rewrite EXT_RF.  basic_solver. }
   Qed. 
 
+  Lemma empty_inter_minus_same {A: Type} (X Y: A -> Prop):
+    X ∩₁ Y ≡₁ ∅ -> X \₁ Y ≡₁ X.
+  Proof. 
+    ins. red. split; [basic_solver| ].
+    red. ins.
+    red in H. desc.
+    red. split; auto.
+    red in H. specialize (H x).
+    red. ins. apply H. basic_solver. 
+  Qed. 
+    
   Lemma Wf_subgraph GO GI (SB: same_behavior GO GI) (WF: Wf GI): Wf GO.
   Proof.
     pose proof (same_beh_implies_similar_rels SB). 
     red in SB. desc. red in SAME_LOCAL. desc.
     symmetry in SAME_CO.
+    assert (forall (r1 r2 r3: relation actid), r1 ⊆ r2 -> r1 \ r3 ⊆ r2 \r3) as MINUS_INCL. 
+    { ins. basic_solver. }
+    assert (forall (r1 r3: relation actid) S1 S2, r1 ≡ ⦗S1⦘ ⨾ r1 ⨾ ⦗S2⦘ -> r1 \ r3 ≡ ⦗S1⦘ ⨾ (r1 \ r3) ⨾ ⦗S2⦘) as MINUS_EQUIV. 
+    { ins. seq_rewrite H. basic_solver. }
+    set (exclude_adjacents := fun S (r: relation actid)
+                              => ⦗set_compl S⦘ ⨾ r ⨾ ⦗set_compl S⦘).
     (* TODO: should we include addr, ctrl equality in same_behavior? *)
-    split.
-    (* all: try rewrite RESTR_EVENTS, SAME_LAB, SAME_CO, EXT_RF.  *)
-    (* split; try basic_solver.  *)
+    set (S' := F GI ∪₁ dom_rel (rmw GI)).
+    set (S'' := S' × set_full ∪ set_full × S'). 
+    assert (data GO ≡ data GI \ S'') as DATA_SIM by admit. 
+    assert (ctrl GO ≡ ctrl GI \ S'') as CTRL_SIM by admit. 
+    assert (addr GO ≡ addr GI \ S'') as ADDR_SIM by admit.
+    assert (sb GO ≡ sb GI \ S'') as SB_SIM by admit.
+    inversion WF. 
+    (* either pass it from outside or prove here*)
+    assert (rmw GO ≡ ∅₂) as NO_RMW by admit. 
+    assert (rmw_dep GO ≡ ∅₂) as NO_RMWDEP by admit. 
+    assert (rf GO ≡ rf GI \ (set_full × dom_rel (rmw GI))) as RF_SIM. 
+    { (* seq_rewrite EXT_RF. basic_solver 100.  *)
+      admit. } 
+    split. 
+    all: (try seq_rewrite DATA_SIM; try seq_rewrite CTRL_SIM;
+          try seq_rewrite ADDR_SIM; try seq_rewrite SB_SIM;
+          try seq_rewrite SAME_CO;  try seq_rewrite RF_SIM;
+          try seq_rewrite Rex_SAME;
+          try seq_rewrite NO_RMW; try seq_rewrite NO_RMWDEP;
+          try rewrite SAME_LAB).
+    all: try apply MINUS_INCL.
+    all: try apply MINUS_EQUIV.
+    all: try vauto.
+    2: { seq_rewrite <- (seq_id_r (⦗R GI⦘ ⨾ (ctrl GI \ S''))).
+         rewrite seqA. apply MINUS_EQUIV. 
+         seq_rewrite seq_id_r. auto. }
+    3: { basic_solver. }
+    3: { rewrite RESTR_EVENTS.
+         rewrite id_inter. rewrite seq_eqvC at 2.
+         (* arewrite (rf GI ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ rf GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘) at 1.  *)
+         admit. }
+    3: { basic_solver. }
+    4: { generalize wf_rff. basic_solver. }
+    3: { generalize wf_rfv. basic_solver. }
+    6: { basic_solver. }
+    1: { ins. des.
+         specialize (wf_index a b). forward eapply wf_index; auto.
+         destruct RESTR_EVENTS as [EGO_EGI _]. red in EGO_EGI.
+         splits; auto.
+         { specialize (EGO_EGI a H). red in EGO_EGI. desc. auto. } 
+         specialize (EGO_EGI b H0). red in EGO_EGI. desc. auto. }
+    3: { ins. specialize (wf_co_total ol).
+         forward eapply (@is_total_more _ (E GI ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol)) (E GO ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol))).
+         { apply set_equiv_inter; [| basic_solver].
+           rewrite RESTR_EVENTS.
+           rewrite set_interA. rewrite set_inter_minus_l.
+           arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
+           rewrite empty_inter_minus_same; [auto| ]. 
+           rewrite wf_rmwD. type_solver. }
+         { symmetry. eapply SAME_CO. }
+         intros [impl _]. apply impl. auto. }
+    2: { rewrite RESTR_EVENTS.
+         rewrite wf_coD at 2.
+         rewrite seqA. rewrite <- seqA with (r2 := ⦗W GI⦘).
+         rewrite seqA with (r1 := co GI).
+         rewrite seq_eqvC.
+         rewrite <- id_inter. 
+         arewrite (W GI ∩₁ (E GI ∩₁ (RW GI \₁ dom_rel (rmw GI))) ≡₁ W GI ∩₁ E GI).
+         { rewrite <- set_interC. rewrite set_interA.
+           rewrite set_inter_minus_l.
+           arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
+           rewrite empty_inter_minus_same; [basic_solver| ]. 
+           rewrite wf_rmwD. type_solver. }
+         rewrite set_interC at 2. rewrite !id_inter.
+         rewrite !seqA. seq_rewrite <- wf_coE. auto. }
+    2: { ins.
+         assert (E GO (InitEvent l) <-> E GI (InitEvent l)) as SAME_INIT by admit.
+         apply SAME_INIT.
+         apply wf_init. desc.
+         exists b. split; auto.
+         apply (proj1 RESTR_EVENTS). auto. }
+    red. intros x z [y [[CTRLxy NONS''xy] [SByz NONS''yz]]].
+    red. split.
+    { apply ctrl_sb. red. exists y. split; auto. }
+    red. intros S''xz. red in S''xz.
+    red in S''xz. destruct S''xz.
+    - apply NONS''xy. red. basic_solver.
+    - apply NONS''yz. red. basic_solver.
   Admitted.
 
 
@@ -1086,12 +1178,16 @@ Section ThreadSeparatedGraph.
       rf_tsg: relation actid;
       co_tsg: relation actid;
       rmw_tsg: relation actid;
-    }.  
+    }.
+
+  Definition same_keys {A B: Type} (map1: IdentMap.t A) (map2: IdentMap.t B) := True.
+  Goal True. Admitted. 
   
   Definition program_execution_tsg P tsg :=
-    forall tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid P),
-    exists Gi, Some Gi = IdentMap.find tid tsg.(Gis) /\
-          thread_execution tid Pi Gi.
+    ⟪ SAME_KEYS: same_keys P (Gis tsg) ⟫ /\
+    ⟪ THREAD_GRAPH_EXEC: forall tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid P)
+    Gi (THREAD_GRAPH: Some Gi = IdentMap.find tid tsg.(Gis)),
+      thread_execution tid Pi Gi ⟫. 
 
   Definition Oprogram_execution_tsg P tsg (OCAML_P: OCamlProgram P) :=
     forall tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid P),
@@ -1133,6 +1229,13 @@ Section ThreadSeparatedGraph.
   
 End ThreadSeparatedGraph. 
 
+Section CompCorrHelpers.
+  Lemma GI_1thread_omm_premises tid PO PI (COMP: is_thread_compiled PO PI) Gi
+        (EXEC: thread_execution tid PI Gi):
+    omm_premises_hold Gi.
+  Proof. Admitted.
+
+End CompCorrHelpers. 
 
 Section CompilationCorrectness.
 
@@ -1650,14 +1753,15 @@ Section CompilationCorrectness.
     ins.
     apply program_execution_defs_equiv in ExecI.
     red in ExecI.
-    assert (exists Pi, Some Pi = IdentMap.find tid ProgI) as [Pi Pi_THREAD] by admit.
-    specialize (ExecI tid Pi Pi_THREAD).
-    (* replace E-quantifier with A in program_execution_tsg? *)
+    (* bug? desf hangs here *)
+    destruct ExecI as [SAME_KEYS THREAD_EXEC]. clear ExecI. 
+    assert (exists PIi, Some PIi = IdentMap.find tid ProgI) as [PIi PIi_THREAD] by admit.
+    red in THREAD_EXEC. specialize (THREAD_EXEC tid PIi PIi_THREAD Gi THREAD_Gi).
     assert (True) by admit. clear H.
-    destruct ExecI as [Gi' [TMP Gi_EXEC_Pi]].
-    replace Gi' with Gi in *; [| congruence]. clear TMP. clear Gi'.
-    red. 
-    (* should carefully relate existing single thread graphs and thread_local_property *)
+    destruct Compiled as [SAME_TIDS TID_COMPILED].
+    assert (exists POi, IdentMap.find tid ProgO = Some POi) as [POi POi_THREAD] by admit.
+    specialize (TID_COMPILED tid POi PIi POi_THREAD (eq_sym PIi_THREAD)).
+    eapply GI_1thread_omm_premises; eauto. 
   Admitted.
 
   (* currently rlx fences are used as default value for label function *)
