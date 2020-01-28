@@ -339,14 +339,99 @@ Section ClosuresProperties.
 
 End ClosuresProperties. 
 
-Section OCamlMM_TO_IMM_S_PROG.
-
+  
+Section ThreadSeparatedGraph.
   Notation "'E' G" := G.(acts_set) (at level 1).
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
   Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
   Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
   Definition is_nonnop_f {A: Type} (labfun: A -> label) ev :=
     andb (is_f labfun ev) (is_ra labfun ev). 
+  Notation "'F' G" := (fun a => is_true (is_nonnop_f G.(lab) a)) (at level 1).
+  Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
+  Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
+  Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
+  Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1). 
+  Notation "'R_ex' G" := (fun a => is_true (R_ex G.(lab) a)) (at level 1).
+  Notation "'hbo'" := (OCaml.hb). 
+  Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
+  Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
+    
+
+  Definition same_behavior_local (GO GI: execution) :=
+    ⟪RESTR_EVENTS: E GO ≡₁ E GI ∩₁ (RW GI \₁ dom_rel (GI.(rmw))) ⟫ /\
+    ⟪SAME_LAB: lab GO = lab GI ⟫. 
+
+  Definition same_behavior (GO GI: execution) :=
+    ⟪SAME_LOCAL: same_behavior_local GO GI ⟫ /\
+    ⟪SAME_CO: GI.(co) ≡ GO.(co)⟫ /\
+    ⟪EXT_RF: GO.(rf) ≡ GI.(rf) ⨾ ⦗set_compl (dom_rel GI.(rmw))⦘⟫.        
+
+  Record thread_separated_graph :=
+    {
+      Gis: IdentMap.t execution;
+      Einit_tsg: actid -> Prop;
+      rf_tsg: relation actid;
+      co_tsg: relation actid;
+      rmw_tsg: relation actid;
+    }.
+
+  Definition same_keys {A B: Type} (map1: IdentMap.t A) (map2: IdentMap.t B) := True.
+  Goal True. Admitted. 
+  
+  Definition program_execution_tsg P tsg :=
+    ⟪ SAME_KEYS: same_keys P (Gis tsg) ⟫ /\
+    ⟪ THREAD_GRAPH_EXEC: forall tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid P)
+    Gi (THREAD_GRAPH: Some Gi = IdentMap.find tid tsg.(Gis)),
+      thread_execution tid Pi Gi ⟫. 
+
+  Definition Oprogram_execution_tsg P tsg (OCAML_P: OCamlProgram P) :=
+    forall tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid P),
+    exists Gi, Some Gi = IdentMap.find tid tsg.(Gis) /\
+          Othread_execution tid Pi Gi.
+  
+  Definition same_behavior_tsg TSGO TSGI :=
+    (forall tid (THREAD: IdentMap.In tid (Gis TSGO))
+       GOi GIi
+       (THREAD_GRAPHO: Some GOi = IdentMap.find tid (Gis TSGO))
+       (THREAD_GRAPHI: Some GIi = IdentMap.find tid (Gis TSGI)),
+        same_behavior_local GOi GIi)
+    (* /\ Einit_tsg TSGO ≡₁ Einit_tsg TSGI *)
+    /\ co_tsg TSGO ≡ co_tsg TSGI
+    /\ rf_tsg TSGO ≡ rf_tsg TSGI ⨾ ⦗set_compl (dom_rel (rmw_tsg TSGI))⦘. 
+       
+  Definition g2tsg: execution -> thread_separated_graph. Admitted. 
+  Definition tsg2g: thread_separated_graph -> execution. Admitted. 
+
+  Lemma program_execution_defs_equiv P G:
+    program_execution P G <-> program_execution_tsg P (g2tsg G).
+  Proof. Admitted. 
+
+  Lemma Oprogram_execution_defs_equiv P G (OCAML_P: OCamlProgram P):
+    Oprogram_execution OCAML_P G <-> Oprogram_execution_tsg (g2tsg G) OCAML_P. 
+  Proof. Admitted.
+
+  Lemma same_behavior_defs_equiv GO GI:
+    same_behavior GO GI <-> same_behavior_tsg (g2tsg GO) (g2tsg GI).
+  Proof. Admitted. 
+    
+  Lemma tsg_g_bijection:
+    (forall G, tsg2g (g2tsg G) = G) /\
+    (forall TSG, g2tsg (tsg2g TSG) = TSG).
+  Proof. Admitted. 
+
+  (* tids should be equal *)
+  (* tsg should include a fact that Gis are 1thread *)
+  Lemma tsg_todo: True. Proof. Admitted.
+  
+End ThreadSeparatedGraph. 
+
+Section OCamlMM_TO_IMM_S_PROG.
+
+  Notation "'E' G" := G.(acts_set) (at level 1).
+  Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
+  Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
+  Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
   Notation "'F' G" := (fun a => is_true (is_nonnop_f G.(lab) a)) (at level 1).
   Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
@@ -374,15 +459,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     ⟪ WRLXF : W G ∩₁ ORlx G ⊆₁ codom_rel (⦗F G ∩₁ Acqrel G⦘ ⨾ immediate (sb G)) ⟫ /\
     ⟪ RSCF  : R G ∩₁ Sc G ⊆₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G)) ⟫.
 
-  Definition same_behavior_local (GO GI: execution) :=
-    ⟪RESTR_EVENTS: E GO ≡₁ E GI ∩₁ (RW GI \₁ dom_rel (GI.(rmw))) ⟫ /\
-    ⟪SAME_LAB: lab GO = lab GI ⟫. 
-
-  Definition same_behavior (GO GI: execution) :=
-    ⟪SAME_LOCAL: same_behavior_local GO GI ⟫ /\
-    ⟪SAME_CO: GI.(co) ≡ GO.(co)⟫ /\
-    ⟪EXT_RF: GO.(rf) ≡ GI.(rf) ⨾ ⦗set_compl (dom_rel GI.(rmw))⦘⟫.
-        
   (* Lemma tl_sbl: thread_local_biproperty same_behavior_local. *)
   (* Proof. Admitted.  *)
 
@@ -1071,10 +1147,79 @@ Section OCamlMM_TO_IMM_S_PROG.
     red. split; auto.
     red in H. specialize (H x).
     red. ins. apply H. basic_solver. 
+  Qed.
+
+  Lemma same_relation_exp_iff {A: Type} (r r': relation A):
+    r ≡ r' <-> (forall x y, r x y <-> r' x y).
+  Proof.
+    red. split.
+    { apply same_relation_exp. }
+    ins. red. split.
+    all: red; ins; apply H; auto.
+  Qed.
+
+  Lemma set_equiv_exp_iff {A : Type} (s s' : A -> Prop):
+    s ≡₁ s' <-> forall x : A, s x <-> s' x.
+  Proof.
+    red. split; [apply set_equiv_exp| ].
+    ins. red. split.
+    all: red; ins; apply H; auto.
+  Qed. 
+
+    
+  Lemma seq_compl_helper {A: Type} (r: relation A) (S: A -> Prop):
+    r ⨾ ⦗set_compl S⦘ ≡ r \ set_full × S.
+  Proof.
+    rewrite <- (seq_id_l r) at 1.
+    rewrite seqA. 
+    pose proof (seq_eqv_lr r (fun _ : A => True) (set_compl S)).
+    seq_rewrite H. 
+    apply same_relation_exp_iff. ins.
+    split.
+    { ins. desc. red. splits; auto. red. basic_solver. }
+    ins. red in H0. desc. splits; auto.
+    red. red. red in H1. 
+    ins. apply H1. unfold cross_rel. split; basic_solver. 
   Qed. 
     
+  Lemma MINUS_DISTR_L {A: Type} (r: relation A) (S1 S2: A -> Prop):
+    ⦗S1 \₁ S2⦘ ⨾ r ≡ ⦗S1⦘ ⨾ r \ ⦗S2⦘ ⨾ r.
+  Proof. 
+    ins. red. split; [| basic_solver].
+    red. ins. red. apply seq_eqv_l in H. desc.
+    red in H. desc.
+    split; [basic_solver |].
+    red. ins. apply seq_eqv_l in H2. basic_solver.
+  Qed. 
+
+  Lemma MINUS_DISTR_R {A: Type} (r: relation A) (S1 S2: A -> Prop):
+    r ⨾ ⦗S1 \₁ S2⦘ ≡ r ⨾ ⦗S1⦘ \ r ⨾ ⦗S2⦘.
+  Proof. 
+    ins. red. split; [| basic_solver].            
+    red. ins. red. apply seq_eqv_r in H. desc.
+    red in H0. desc.
+    split; [basic_solver |].
+    red. ins. apply seq_eqv_r in H2. basic_solver.
+  Qed. 
+
+  Lemma MINUS_GROUP {A: Type} (r1 r2 r3: relation A):
+    (r1 \ r2) \ r3 ≡ r1 \ (r2 ∪ r3).
+  Proof. 
+    ins. red. split; [| basic_solver].
+    red. ins. red. red in H. desc. red in H. desc.
+    split; auto. red. ins. red in H2. basic_solver.
+  Qed.
+
+  Lemma SAME_INIT GO GI (SB: same_behavior GO GI): forall l, E GO (InitEvent l) <-> E GI (InitEvent l). 
+  Proof. Admitted. 
+
+  Lemma ocaml_no_rmw_tmp GO GI (SB: same_behavior GO GI):
+    GO.(rmw) ≡ ∅₂.
+  Proof. Admitted.
+
   Lemma Wf_subgraph GO GI (SB: same_behavior GO GI) (WF: Wf GI): Wf GO.
   Proof.
+    pose proof SB as SB'. 
     pose proof (same_beh_implies_similar_rels SB). 
     red in SB. desc. red in SAME_LOCAL. desc.
     symmetry in SAME_CO.
@@ -1090,14 +1235,33 @@ Section OCamlMM_TO_IMM_S_PROG.
     assert (data GO ≡ data GI \ S'') as DATA_SIM by admit. 
     assert (ctrl GO ≡ ctrl GI \ S'') as CTRL_SIM by admit. 
     assert (addr GO ≡ addr GI \ S'') as ADDR_SIM by admit.
-    assert (sb GO ≡ sb GI \ S'') as SB_SIM by admit.
+
+    (* assert (sb GO ≡ sb GI \ S'') as SB_SIM by admit. *)
+    assert (sb GO ≡ sb GI \ S'') as SB_SIM.
+    { unfold sb. rewrite RESTR_EVENTS.
+      arewrite (⦗E GI⦘ ⨾ ext_sb ⨾ ⦗E GI⦘ \ S'' ≡ ⦗E GI⦘ ⨾ (ext_sb \ S'') ⨾ ⦗E GI⦘) by basic_solver.
+      rewrite set_interC at 2.
+      rewrite !id_inter. rewrite !seqA.
+      apply seq_more; [basic_solver |]. 
+      rewrite <- !seqA. apply seq_more; [| basic_solver]. rewrite seqA. 
+      (* rewrite MINUS_DISTR_L, MINUS_DISTR_R. *)
+      (* assert (set_compl S' ≡₁ RW GI \₁ dom_rel (rmw GI)). *)
+      admit. }
+      
     inversion WF. 
     (* either pass it from outside or prove here*)
-    assert (rmw GO ≡ ∅₂) as NO_RMW by admit. 
+    pose proof (ocaml_no_rmw_tmp SB') as NO_RMW. 
     assert (rmw_dep GO ≡ ∅₂) as NO_RMWDEP by admit. 
+    (* { ins. basic_solver.  *)
     assert (rf GO ≡ rf GI \ (set_full × dom_rel (rmw GI))) as RF_SIM. 
-    { (* seq_rewrite EXT_RF. basic_solver 100.  *)
-      admit. } 
+    { rewrite EXT_RF. apply seq_compl_helper. }
+    assert (W GI ∩₁ (E GI ∩₁ (RW GI \₁ dom_rel (rmw GI))) ≡₁ W GI ∩₁ E GI) as W_E_RW_SIMPL. 
+    { rewrite <- set_interC. rewrite set_interA.
+      rewrite set_inter_minus_l.
+      arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
+      rewrite empty_inter_minus_same; [basic_solver| ]. 
+      rewrite wf_rmwD. type_solver. }
+
     split. 
     all: (try seq_rewrite DATA_SIM; try seq_rewrite CTRL_SIM;
           try seq_rewrite ADDR_SIM; try seq_rewrite SB_SIM;
@@ -1105,6 +1269,28 @@ Section OCamlMM_TO_IMM_S_PROG.
           try seq_rewrite Rex_SAME;
           try seq_rewrite NO_RMW; try seq_rewrite NO_RMWDEP;
           try rewrite SAME_LAB).
+    12: { rewrite RESTR_EVENTS.
+          rewrite set_interC at 1.
+          rewrite !id_inter.
+          rewrite <- seqA with (r1 := (rf GI \ set_full × dom_rel (rmw GI))).
+          rewrite seqA. rewrite <- seqA with (r1 := ⦗E GI⦘).
+          rewrite minus_eqv_rel_helper. rewrite <- wf_rfE.
+          rewrite minus_eqv_rel_helper.
+          rewrite wf_rfD at 2.
+          rewrite seqA.
+          rewrite MINUS_DISTR_L.
+          arewrite (⦗dom_rel (rmw GI)⦘ ⨾ ⦗W GI⦘ ≡ ∅₂).
+          { rewrite wf_rmwD. type_solver. }
+          rewrite seq_false_l, minus_false_r.
+          arewrite (⦗RW GI⦘ ⨾ ⦗W GI⦘ ⨾ rf GI ≡ rf GI).
+          { rewrite wf_rfD. basic_solver 10. }
+          arewrite (⦗R GI⦘ ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ≡ ⦗R GI \₁ dom_rel (rmw GI)⦘).
+          { rewrite <- id_inter. rewrite set_inter_minus_r. basic_solver 10. }
+          rewrite MINUS_DISTR_R.
+          rewrite MINUS_GROUP.
+          arewrite ((rf GI ⨾ ⦗dom_rel (rmw GI)⦘ ∪ set_full × dom_rel (rmw GI)) ≡ set_full × dom_rel (rmw GI)) by basic_solver.
+          apply minus_rel_more; [| basic_solver].
+          rewrite wf_rfD. basic_solver. }
     all: try apply MINUS_INCL.
     all: try apply MINUS_EQUIV.
     all: try vauto.
@@ -1112,10 +1298,6 @@ Section OCamlMM_TO_IMM_S_PROG.
          rewrite seqA. apply MINUS_EQUIV. 
          seq_rewrite seq_id_r. auto. }
     3: { basic_solver. }
-    3: { rewrite RESTR_EVENTS.
-         rewrite id_inter. rewrite seq_eqvC at 2.
-         (* arewrite (rf GI ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ rf GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘) at 1.  *)
-         admit. }
     3: { basic_solver. }
     4: { generalize wf_rff. basic_solver. }
     3: { generalize wf_rfv. basic_solver. }
@@ -1142,17 +1324,11 @@ Section OCamlMM_TO_IMM_S_PROG.
          rewrite seqA with (r1 := co GI).
          rewrite seq_eqvC.
          rewrite <- id_inter. 
-         arewrite (W GI ∩₁ (E GI ∩₁ (RW GI \₁ dom_rel (rmw GI))) ≡₁ W GI ∩₁ E GI).
-         { rewrite <- set_interC. rewrite set_interA.
-           rewrite set_inter_minus_l.
-           arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
-           rewrite empty_inter_minus_same; [basic_solver| ]. 
-           rewrite wf_rmwD. type_solver. }
+         rewrite W_E_RW_SIMPL. 
          rewrite set_interC at 2. rewrite !id_inter.
          rewrite !seqA. seq_rewrite <- wf_coE. auto. }
     2: { ins.
-         assert (E GO (InitEvent l) <-> E GI (InitEvent l)) as SAME_INIT by admit.
-         apply SAME_INIT.
+         eapply SAME_INIT; eauto. 
          apply wf_init. desc.
          exists b. split; auto.
          apply (proj1 RESTR_EVENTS). auto. }
@@ -1168,66 +1344,6 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   
 End OCamlMM_TO_IMM_S_PROG.
-  
-Section ThreadSeparatedGraph.
-
-  Record thread_separated_graph :=
-    {
-      Gis: IdentMap.t execution;
-      Einit_tsg: actid -> Prop;
-      rf_tsg: relation actid;
-      co_tsg: relation actid;
-      rmw_tsg: relation actid;
-    }.
-
-  Definition same_keys {A B: Type} (map1: IdentMap.t A) (map2: IdentMap.t B) := True.
-  Goal True. Admitted. 
-  
-  Definition program_execution_tsg P tsg :=
-    ⟪ SAME_KEYS: same_keys P (Gis tsg) ⟫ /\
-    ⟪ THREAD_GRAPH_EXEC: forall tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid P)
-    Gi (THREAD_GRAPH: Some Gi = IdentMap.find tid tsg.(Gis)),
-      thread_execution tid Pi Gi ⟫. 
-
-  Definition Oprogram_execution_tsg P tsg (OCAML_P: OCamlProgram P) :=
-    forall tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid P),
-    exists Gi, Some Gi = IdentMap.find tid tsg.(Gis) /\
-          Othread_execution tid Pi Gi.
-  
-  Definition same_behavior_tsg TSGO TSGI :=
-    (forall tid (THREAD: IdentMap.In tid (Gis TSGO))
-       GOi GIi
-       (THREAD_GRAPHO: Some GOi = IdentMap.find tid (Gis TSGO))
-       (THREAD_GRAPHI: Some GIi = IdentMap.find tid (Gis TSGI)),
-                       same_behavior_local GOi GIi)
-       /\ co_tsg TSGO ≡ co_tsg TSGI
-       /\ rf_tsg TSGO ≡ rf_tsg TSGI ⨾ ⦗set_compl (dom_rel (rmw_tsg TSGI))⦘. 
-       
-  Definition g2tsg: execution -> thread_separated_graph. Admitted. 
-  Definition tsg2g: thread_separated_graph -> execution. Admitted. 
-
-  Lemma program_execution_defs_equiv P G:
-    program_execution P G <-> program_execution_tsg P (g2tsg G).
-  Proof. Admitted. 
-
-  Lemma Oprogram_execution_defs_equiv P G (OCAML_P: OCamlProgram P):
-    Oprogram_execution OCAML_P G <-> Oprogram_execution_tsg (g2tsg G) OCAML_P. 
-  Proof. Admitted.
-
-  Lemma same_behavior_defs_equiv GO GI:
-    same_behavior GO GI <-> same_behavior_tsg (g2tsg GO) (g2tsg GI).
-  Proof. Admitted. 
-    
-  Lemma tsg_g_bijection:
-    (forall G, tsg2g (g2tsg G) = G) /\
-    (forall TSG, g2tsg (tsg2g TSG) = TSG).
-  Proof. Admitted. 
-
-  (* tids should be equal *)
-  (* tsg should include a fact that Gis are 1thread *)
-  Lemma tsg_todo: True. Proof. Admitted.
-  
-End ThreadSeparatedGraph. 
 
 Section CompCorrHelpers.
   Lemma GI_1thread_omm_premises tid PO PI (COMP: is_thread_compiled PO PI) Gi
@@ -1825,15 +1941,15 @@ Section CompilationCorrectness.
     apply TSGO_exists; auto. 
   Qed. 
 
-  Lemma ocaml_no_rmw GO (ExecO: Oprogram_execution OCamlProgO GO):
-    GO.(rmw) ≡ ∅₂.
-  Proof. Admitted.
-
   Lemma restr_rel_empty_minus {T: Type} (r r': relation T) (A B: T -> Prop)
         (NO_INTER: A ∩₁ B ≡₁ ∅):
     restr_rel A r \ restr_rel B r' ≡ r. 
   Proof. Admitted. 
     
+  Lemma ocaml_no_rmw GO (ExecO: Oprogram_execution OCamlProgO GO):
+    GO.(rmw) ≡ ∅₂.
+  Proof. Admitted.
+
   Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI)
         (ExecO: Oprogram_execution OCamlProgO GO):
     ocaml_consistent GO.
@@ -1911,7 +2027,6 @@ Section CompilationCorrectness.
     arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver.
     desc. auto.
   Qed. 
-
   
   Theorem compilation_correctness: exists (GO: execution),
       ⟪WFO: Wf GO ⟫ /\
