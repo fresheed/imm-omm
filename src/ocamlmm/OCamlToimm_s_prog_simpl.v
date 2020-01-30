@@ -183,18 +183,29 @@ Section OCaml_Program.
       ⟪ PEQ : s.(G) = pe ⟫.
 
   (* separation should be consistent across all threads *)
-  
+ 
   Definition is_matching_mode instr mode :=
     match instr with
     | Instr.load md _ _ | Instr.store md _ _ => (mode = md)
     | _ => True
+    end.
+
+  Definition instr_locs instr :=
+    match instr with
+    | Instr.load _ _ lxpr | Instr.store _ lxpr _
+    | Instr.update _ _ _ _ _ lxpr => match lxpr with
+                                  | Instr.lexpr_loc l => [l]
+                                  | Instr.lexpr_choice _ l1 l2 => [l1;  l2]
+                                  end
+    | _ => []
     end. 
 
   Definition locations_separated prog := forall (loc : Loc.t), exists mode,
         is_ocaml_mode mode /\
         (forall tid PO (INTHREAD: IdentMap.find tid prog = Some PO)
-            instr (INPROG: In instr PO),
-           is_matching_mode instr mode). 
+           instr (INPROG: In instr PO)
+           (AT_LOC: In loc (instr_locs instr)),
+            is_matching_mode instr mode). 
 
   Definition OCamlProgram (prog: Prog.Prog.t) :=
     (forall tid PO (INTHREAD: IdentMap.find tid prog = Some PO),
@@ -1874,12 +1885,28 @@ Section CompilationCorrectness.
     F GI ≡₁ (fun a => is_true (is_f GI.(lab) a)). 
   Proof. Admitted.
 
+  (* Definition option_default {A: Type} (opt: option A) (default: A) := *)
+  (*   match opt with *)
+  (*   | Some a => a *)
+  (*   | None => default *)
+  (*   end.  *)
+
   Lemma GI_locations_separated: 
     let Loc_ := fun l e => loc (lab GI) e = Some l in
     forall l : location,
       Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ ORlx GI \/
       Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ Sc GI.
-  Proof. Admitted. 
+  Proof.
+    assert (locations_separated ProgI) as IMM_LOC_SEP by admit.
+    assert (forall Prog G (EXEC: program_execution Prog G),
+               exists (f: actid -> Prog.Instr.t),
+                 forall e (Ee: E G e) l (LOC: Some l = loc (lab G) e),
+                 exists tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid Prog),
+                   In (f e) Pi /\ In l (instr_locs (f e))) as LOC_MAP. 
+    { admit. }
+    specialize (LOC_MAP ProgI GI ExecI). destruct LOC_MAP as [ev2in ev2in_props]. 
+    simpl. ins. 
+  Admitted. 
 
   Lemma imm_implies_omm:
     ocaml_consistent GI.
