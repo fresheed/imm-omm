@@ -245,8 +245,8 @@ Section OCaml_IMM_Compilation.
 
   Definition is_compiled (po: Prog.Prog.t) (pi: Prog.Prog.t) :=
     ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id po <-> IdentMap.In t_id pi ⟫ /\
-    forall thread to ti (TO: IdentMap.find thread po = Some to)
-      (TI: IdentMap.find thread pi = Some ti), is_thread_compiled to ti.
+    forall thread to ti (TO: Some to = IdentMap.find thread po)
+      (TI: Some ti = IdentMap.find thread pi), is_thread_compiled to ti.
 
 End OCaml_IMM_Compilation.   
 
@@ -376,8 +376,8 @@ Section ThreadSeparatedGraph.
       rmw_tsg: relation actid;
     }.
 
-  Definition same_keys {A B: Type} (map1: IdentMap.t A) (map2: IdentMap.t B) := True.
-  Goal True. Admitted. 
+  Definition same_keys {A B: Type} (map1: IdentMap.t A) (map2: IdentMap.t B)
+    := forall key, IdentMap.In key map1 <-> IdentMap.In key map2. 
   
   Definition program_execution_tsg P tsg :=
     ⟪ SAME_KEYS: same_keys P (Gis tsg) ⟫ /\
@@ -386,9 +386,9 @@ Section ThreadSeparatedGraph.
       thread_execution tid Pi Gi ⟫. 
 
   Definition Oprogram_execution_tsg P tsg (OCAML_P: OCamlProgram P) :=
-    forall tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid P),
-    exists Gi, Some Gi = IdentMap.find tid tsg.(Gis) /\
-          Othread_execution tid Pi Gi.
+    forall tid Po (THREAD_PROG: Some Po = IdentMap.find tid P),
+    exists Go, Some Go = IdentMap.find tid tsg.(Gis) /\
+          Othread_execution tid Po Go.
   
   Definition same_behavior_tsg TSGO TSGI :=
     (forall tid (THREAD: IdentMap.In tid (Gis TSGO))
@@ -473,14 +473,14 @@ Section OCamlMM_TO_IMM_S_PROG.
        wf_rmwl' : G.(rmw) ⊆ same_loc G ;
        wf_rmwi' : G.(rmw) ⊆ immediate G.(sb) ;
        wf_rmw_depD' : G.(rmw_dep) ≡ ⦗R G⦘ ⨾ G.(rmw_dep) ⨾ ⦗R_ex G⦘ ;
-    }. 
-  
-  Record Wf_global (G: execution) :=
-    {
       data_in_sb' : G.(data) ⊆ G.(sb) ;
       addr_in_sb' : G.(addr) ⊆ G.(sb) ;
       ctrl_in_sb' : G.(ctrl) ⊆ G.(sb) ;
       rmw_dep_in_sb' : G.(rmw_dep) ⊆ G.(sb) ;
+    }. 
+  
+  Record Wf_global (G: execution) :=
+    {
       wf_rfE' : G.(rf) ≡ ⦗E G⦘ ⨾ G.(rf) ⨾ ⦗E G⦘ ;
       wf_rfD' : G.(rf) ≡ ⦗W G⦘ ⨾ G.(rf) ⨾ ⦗R G⦘ ;
       wf_rfl' : G.(rf) ⊆ same_loc G;
@@ -1858,15 +1858,16 @@ Section CompilationCorrectness.
     red in ExecI.
     (* bug? desf hangs here *)
     destruct ExecI as [SAME_KEYS THREAD_EXEC]. clear ExecI. 
-    assert (exists PIi, Some PIi = IdentMap.find tid ProgI) as [PIi PIi_THREAD] by admit.
+    assert (exists PIi, Some PIi = IdentMap.find tid ProgI) as [PIi PIi_THREAD].
+    { apply find_iff_in. apply SAME_KEYS. apply find_iff_in. eauto. }
     red in THREAD_EXEC. specialize (THREAD_EXEC tid PIi PIi_THREAD Gi THREAD_Gi).
-    assert (True) by admit. clear H.
-    destruct Compiled as [SAME_TIDS TID_COMPILED].
-    assert (exists POi, IdentMap.find tid ProgO = Some POi) as [POi POi_THREAD] by admit.
-    specialize (TID_COMPILED tid POi PIi POi_THREAD (eq_sym PIi_THREAD)).
+    destruct Compiled as [SAME_TIDS TID_COMPILED]. clear Compiled. 
+    assert (exists POi, Some POi = IdentMap.find tid ProgO) as [POi POi_THREAD].
+    { apply find_iff_in. apply SAME_TIDS. apply find_iff_in. eauto. }
+    specialize (TID_COMPILED tid POi PIi POi_THREAD PIi_THREAD).
     eapply GI_1thread_omm_premises; eauto. 
-  Admitted.
-
+  Qed. 
+    
   (* currently rlx fences are used as default value for label function *)
   (* it forces us to (temporarily?) assert that there are no actual rlx fence nodes in a graph *)
   Lemma only_nontrivial_fences_workaround:
@@ -1887,9 +1888,24 @@ Section CompilationCorrectness.
     pose proof GI_locations_separated. 
     rewrite only_nontrivial_fences_workaround in *. 
     eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto.
-  Qed. 
+  Qed.
 
-  Lemma TSGO_exists TSGI (TSG_EXECI : program_execution_tsg ProgI TSGI):
+  Lemma Wf_tsg G:
+    Wf G <-> (forall tid Gi (THREAD_GRAPH: Some Gi = IdentMap.find tid (Gis (g2tsg G))),
+               Wf_local Gi)
+           /\ Wf_global G. 
+  Proof. Admitted.
+
+  Lemma build_GOi_map TSGI (WFG: Wf (tsg2g TSGI)) (TSG_EXECI : program_execution_tsg ProgI TSGI):
+    exists GOis, same_keys GOis (Gis TSGI) /\
+            forall tid GIi (THREAD: Some GIi = IdentMap.find tid (Gis TSGI))
+              Po (THREAD_O: Some Po = IdentMap.find tid ProgO)
+              GOi (THREAD_GRAPH: Some GOi = IdentMap.find tid GOis),
+              same_behavior_local GOi GIi /\
+              Othread_execution tid Po GOi. 
+  Proof. Admitted.
+
+  Lemma TSGO_exists TSGI (WFG: Wf (tsg2g TSGI)) (TSG_EXECI : program_execution_tsg ProgI TSGI):
     exists TSGO,
     Oprogram_execution_tsg TSGO OCamlProgO /\
     co_tsg TSGO ≡ co_tsg TSGI /\
@@ -1900,8 +1916,34 @@ Section CompilationCorrectness.
           Some GOi = IdentMap.find tid (Gis TSGO) ->
           Some GIi = IdentMap.find tid (Gis TSGI) -> same_behavior_local GOi GIi). 
   Proof.
-    
-  Admitted. 
+    pose proof (build_GOi_map WFG TSG_EXECI) as [GOis [SAME_TIDS GOis_PROPS]]. 
+    set (TSGO := {| Gis := GOis;
+                    Einit_tsg := Einit_tsg TSGI;
+                    rf_tsg := rf_tsg TSGI ⨾ ⦗set_compl (dom_rel (rmw_tsg TSGI))⦘;
+                    co_tsg := co_tsg TSGI;
+                    rmw_tsg := ∅₂; |} ).
+    exists TSGO.
+    destruct Compiled as [SAME_THREADS THREADS_COMPILED]. clear Compiled.
+    splits; [| basic_solver | subst TSGO; basic_solver |]. 
+    { red. ins. 
+      specialize (SAME_THREADS tid).
+      assert (exists Pi, Some Pi = IdentMap.find tid ProgI) as [Pi THREAD_PROGI]. 
+      { apply find_iff_in. apply SAME_THREADS. apply find_iff_in. eauto. }
+      assert (exists GIi, Some GIi = IdentMap.find tid (Gis TSGI)) as [Gi THREAD_EXECI].
+      { red in TSG_EXECI. desc. red in SAME_KEYS. specialize (SAME_KEYS tid).
+        apply find_iff_in. apply SAME_KEYS. apply find_iff_in. eauto. }
+      assert (exists GOi, Some GOi = IdentMap.find tid (Gis TSGO)) as [GOi THREAD_EXECO].
+      { simpl. apply find_iff_in, SAME_TIDS, find_iff_in. eauto. }
+      forward eapply GOis_PROPS; eauto.
+      ins. desc. eauto. }
+    ins.
+    assert (exists Pi, Some Pi = IdentMap.find tid ProgI) as [Pi THREAD_PROGI]. 
+    { red in TSG_EXECI. desc. red in SAME_KEYS. apply find_iff_in.
+      apply SAME_KEYS. apply find_iff_in. eauto. }
+    assert (exists Po, Some Po = IdentMap.find tid ProgO) as [Po THREAD_PROGO]. 
+    { apply find_iff_in. apply SAME_THREADS. apply find_iff_in. eauto. }
+    forward eapply GOis_PROPS; eauto. ins. desc. auto. 
+  Qed. 
     
   Lemma GO_exists: exists GO,
       Oprogram_execution OCamlProgO GO /\
@@ -1924,8 +1966,9 @@ Section CompilationCorrectness.
         rewrite ((proj2 tsg_g_bijection) TSGO). auto. }
       apply ((same_behavior_defs_equiv (tsg2g TSGO) GI)).
       rewrite ((proj2 tsg_g_bijection) TSGO). rewrite <- HeqTSGI.
-      red. splits; auto. }    
-    apply TSGO_exists; auto. 
+      red. splits; auto. }
+    apply TSGO_exists; auto.
+    rewrite HeqTSGI, (proj1 tsg_g_bijection). auto. 
   Qed. 
 
   Lemma restr_rel_empty_minus {T: Type} (r r': relation T) (A B: T -> Prop)
