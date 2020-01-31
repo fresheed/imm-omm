@@ -74,8 +74,8 @@ Notation "'Loc_' l" := (fun x => loc x = Some l) (at level 1).
 Notation "'ohb'" := G.(OCaml.hb).
 
 Hypothesis LSM : forall l,
-    ⟪ LM : Loc_ l \₁ is_init ⊆₁ ORlx ⟫ \/
-    ⟪ LM : Loc_ l \₁ is_init ⊆₁ Sc ⟫.
+    ⟪ LM : E ∩₁ Loc_ l \₁ is_init ⊆₁ ORlx ⟫ \/
+    ⟪ LM : E ∩₁ Loc_ l \₁ is_init ⊆₁ Sc ⟫.
 
 Hypothesis WSCFACQRMW : W∩₁Sc ≡₁ codom_rel (⦗F∩₁ Acq⦘ ⨾ immediate sb ⨾ rmw).
 Hypothesis RMWSC  : rmw ≡ ⦗Sc⦘ ⨾ rmw ⨾ ⦗Sc⦘.
@@ -201,11 +201,11 @@ Proof using LSM RMWSC RSCF WRLXF WSCFACQRMW.
   assert (Sc w') as SCW'.
   { specialize (LSM l).
     destruct LSM as [CC|CC].
-    2: { apply CC. split; auto. }
-    exfalso.
+    2: { apply CC. red. splits; auto. red. split; auto. }
+    exfalso. 
     assert (~ is_init r2) as NINITR2.
     { eapply read_or_fence_is_not_init; eauto. }
-    assert ((Loc_ l \₁ is_init) r2) as DD by (by split).
+    assert ((E ∩₁ Loc_ l \₁ is_init) r2) as DD by (by split).
     apply CC in DD. clear -SCR2 DD. mode_solver. }
   
   assert (codom_rel rmw w') as RMWW'.
@@ -275,7 +275,9 @@ Proof using LSM RSCF WRLXF WSCFACQRMW.
     destruct (lab x) eqn:AA; simpls; desf.
     all: eauto. }
   destruct (LSM l) as [LL|LL]; [right|left].
-  all: eapply LL; split; auto.
+  (* cannot do it with all: ?*)
+  { eapply LL. basic_solver. }
+  eapply LL. basic_solver.
 Qed.
 
 Lemma sl_mode (WF: Wf G) r (SL: r ⊆ same_loc):
@@ -292,7 +294,7 @@ Proof using LSM.
   { rewrite <- LX. symmetry. by apply SL. }
   destruct (LSM l) as [LL|LL]; [right|left].
   all: apply seq_eqv_lr; splits; auto.
-  all: eapply LL; split; auto.
+  all: eapply LL; split; basic_solver. 
 Qed.
 
 Lemma sc_ninit (WF: Wf G): Sc ⊆₁ set_compl is_init.
