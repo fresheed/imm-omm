@@ -15,11 +15,11 @@ Require Import OCamlToimm_s.
 Require Import Prog.
 Require Import ProgToExecution.
 Require Import ProgToExecutionProperties.
+Require Import Logic.Decidable. 
 From PromisingLib Require Import Basic Loc.
 Require Import Basics. 
 Set Implicit Arguments.
 Remove Hints plus_n_O.
-
 
 Variable exchange_reg: Reg.t.
 Lemma exchange_reg_dedicated: True.
@@ -184,11 +184,18 @@ Section OCaml_Program.
 
   (* separation should be consistent across all threads *)
  
-  Definition is_matching_mode instr mode :=
+  (* Definition is_matching_mode instr mode := *)
+  (*   match instr with *)
+  (*   | Instr.load md _ _ | Instr.store md _ _ => (mode = md) *)
+  (*   | _ => True *)
+  (*   end. *)
+
+  Definition instr_mode instr :=
     match instr with
-    | Instr.load md _ _ | Instr.store md _ _ => (mode = md)
-    | _ => True
-    end.
+    | Instr.load mode _ _ | Instr.store mode _ _ | Instr.fence mode => Some mode
+    | Instr.update _ _ mode_r mode_w _ _ => Some mode_r (* assume that mode_r = mode_w *)
+    | _ => None
+    end. 
 
   Definition instr_locs instr :=
     match instr with
@@ -205,7 +212,7 @@ Section OCaml_Program.
         (forall tid PO (INTHREAD: IdentMap.find tid prog = Some PO)
            instr (INPROG: In instr PO)
            (AT_LOC: In loc (instr_locs instr)),
-            is_matching_mode instr mode). 
+            Some mode = instr_mode instr). 
 
   Definition OCamlProgram (prog: Prog.Prog.t) :=
     (forall tid PO (INTHREAD: IdentMap.find tid prog = Some PO),
@@ -1891,22 +1898,55 @@ Section CompilationCorrectness.
   (*   | None => default *)
   (*   end.  *)
 
+  Lemma locations_separated_compiled Prog Prog' (COMP: is_compiled Prog Prog')
+        (LOC_SEP: locations_separated Prog): locations_separated Prog'.
+  Proof. Admitted. 
+
+  Lemma instr_of_event Prog G (EXEC: program_execution Prog G):
+    exists (f: actid -> Prog.Instr.t),
+      forall e (Ee: E G e) (NINITe: ~ is_init e)
+        l (LOC: Some l = loc (lab G) e),
+      exists tid Pi, Some Pi = IdentMap.find tid Prog /\
+                In (f e) Pi /\ In l (instr_locs (f e))
+                /\ Some (Events.mod G.(lab) e) = instr_mode (f e). 
+  Proof. Admitted. 
+
   Lemma GI_locations_separated: 
     let Loc_ := fun l e => loc (lab GI) e = Some l in
     forall l : location,
-      Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ ORlx GI \/
-      Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ Sc GI.
+      E GI ∩₁ Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ ORlx GI \/
+      E GI ∩₁ Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ Sc GI.
   Proof.
-    assert (locations_separated ProgI) as IMM_LOC_SEP by admit.
-    assert (forall Prog G (EXEC: program_execution Prog G),
-               exists (f: actid -> Prog.Instr.t),
-                 forall e (Ee: E G e) l (LOC: Some l = loc (lab G) e),
-                 exists tid Pi (THREAD_PROG: Some Pi = IdentMap.find tid Prog),
-                   In (f e) Pi /\ In l (instr_locs (f e))) as LOC_MAP. 
-    { admit. }
-    specialize (LOC_MAP ProgI GI ExecI). destruct LOC_MAP as [ev2in ev2in_props]. 
-    simpl. ins. 
-  Admitted. 
+    pose proof (instr_of_event ExecI) as LOC_MAP. 
+    destruct LOC_MAP as [ev2in ev2in_props]. 
+    simpl. ins.
+    destruct (classic (E GI ∩₁ (fun e : actid => loc (lab GI) e = Some l) \₁
+                         (fun a : actid => is_init a) ⊆₁ ORlx GI \/
+                       E GI ∩₁ (fun e : actid => loc (lab GI) e = Some l) \₁
+                         (fun a : actid => is_init a) ⊆₁ Sc GI)) as [|DECIDE]; auto. 
+    exfalso. apply not_or_and in DECIDE. desc.
+    assert (forall (r1 r2: actid -> Prop), ~ r1 ⊆₁ r2 -> exists e, r1 e /\ ~ r2 e) as NON_SUBSET. 
+    { ins. unfold set_subset in H.
+      apply not_all_ex_not in H. desc. exists n. apply imply_to_and. auto. }
+    apply NON_SUBSET in DECIDE. apply NON_SUBSET in DECIDE0. clear NON_SUBSET. 
+    destruct DECIDE as [e e_props]. destruct DECIDE0 as [e0 e0_props].
+    destruct e_props as [[[Ee Le] NINITe] NRLXe]. 
+    destruct e0_props as [[[Ee0 Le0] NINITe0] NSC0].
+    symmetry in Le, Le0.
+    pose proof (ev2in_props e Ee NINITe l Le) as [tid [PI [THREAD_PI [INSTR_PI INSTR_L]]]].
+    pose proof (ev2in_props e0 Ee0 NINITe0 l Le0) as [tid0 [PI0 [THREAD_PI0 [INSTR0_PI0 INSTR0_L]]]].
+    clear ev2in_props. 
+    remember (ev2in e) as instr. remember (ev2in e0) as instr0.
+    desc. 
+    pose proof (locations_separated_compiled Compiled (proj2 OCamlProgO)) as IMM_LOC_SEP. red in IMM_LOC_SEP. specialize (IMM_LOC_SEP l). 
+    destruct IMM_LOC_SEP as [m [OMMm PROPSm]].
+    pose proof (PROPSm tid PI (eq_sym THREAD_PI) instr INSTR_PI INSTR_L) as INSTR_m. 
+    pose proof (PROPSm tid0 PI0 (eq_sym THREAD_PI0) instr0 INSTR0_PI0 INSTR0_L) as INSTR0_m.
+    unfold is_only_rlx in NRLXe. unfold is_sc in NSC0.
+    replace (Events.mod (lab GI) e) with m in *; [| congruence]. 
+    replace (Events.mod (lab GI) e0) with m in *; [| congruence].
+    type_solver. 
+  Qed. 
 
   Lemma imm_implies_omm:
     ocaml_consistent GI.
