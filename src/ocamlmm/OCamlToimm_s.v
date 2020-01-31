@@ -77,11 +77,11 @@ Hypothesis LSM : forall l,
     ⟪ LM : E ∩₁ Loc_ l \₁ is_init ⊆₁ ORlx ⟫ \/
     ⟪ LM : E ∩₁ Loc_ l \₁ is_init ⊆₁ Sc ⟫.
 
-Hypothesis WSCFACQRMW : W∩₁Sc ≡₁ codom_rel (⦗F∩₁ Acq⦘ ⨾ immediate sb ⨾ rmw).
+Hypothesis WRLXF : E ∩₁ W ∩₁ ORlx ⊆₁ codom_rel (⦗F ∩₁ Acqrel⦘ ⨾ immediate sb).
+Hypothesis RSCF  : E ∩₁ R ∩₁ Sc  ⊆₁ codom_rel (⦗F ∩₁ Acq⦘ ⨾ immediate sb).
+Hypothesis WSCFACQRMW : E ∩₁ W ∩₁ Sc ≡₁ codom_rel (⦗F ∩₁ Acq⦘ ⨾ immediate sb ⨾ rmw).
 Hypothesis RMWSC  : rmw ≡ ⦗Sc⦘ ⨾ rmw ⨾ ⦗Sc⦘.
 
-Hypothesis WRLXF : W∩₁ORlx ⊆₁ codom_rel (⦗F∩₁Acqrel⦘ ⨾ immediate sb).
-Hypothesis RSCF  : R∩₁Sc  ⊆₁ codom_rel (⦗F∩₁Acq⦘ ⨾ immediate sb).
 
 Lemma sc_rf_in_sw (WF: Wf G):
     ⦗Sc⦘ ⨾ rf ⨾ ⦗Sc⦘ ⊆ sw. 
@@ -124,7 +124,7 @@ Proof using LSM RMWSC RSCF WRLXF WSCFACQRMW.
   
   assert (sc_per_loc G) as SPL.
   { apply coherence_sc_per_loc. apply IPC. }
-  assert (W ∩₁ Sc ⊆₁ codom_rel rmw) as WSCRMW. 
+  assert (E ∩₁ W ∩₁ Sc ⊆₁ codom_rel rmw) as WSCRMW. 
   { rewrite WSCFACQRMW. basic_solver. }
            
   apply inclusion_t_ind, hb_trans; auto.
@@ -135,6 +135,9 @@ Proof using LSM RMWSC RSCF WRLXF WSCFACQRMW.
   rewrite (dom_r WF.(wf_coD)).
   rewrite !seqA.
   rewrite <- id_inter.
+  arewrite (co ≡ co ⨾ ⦗E⦘).
+  { rewrite WF.(wf_coE). basic_solver. }
+  rewrite <- id_inter, <- set_interA. 
   rewrite WSCFACQRMW.
   intros w1 w2 [co_rmw_w1_w2 imm_w1_w2].
   apply seq_eqv_l in co_rmw_w1_w2.
@@ -352,10 +355,18 @@ Proof using LSM RSCF WRLXF WSCFACQRMW.
   { unfolder. ins. desf. splits; auto.
     destruct wr_mode with (x:=y); auto.
     basic_solver. }
-  rewrite id_union. rewrite !seq_union_r.
+  rewrite id_union.
+  arewrite (sb ≡ sb ⨾ ⦗E⦘) at 1.
+  { unfold Execution.sb. basic_solver. }
+  seq_rewrite seq_eqv_minus_lr. rewrite seqA.
+  rewrite seq_union_r. 
+  rewrite <- !id_inter with (s:=E). rewrite <- !set_interA with (s:=E). 
+  rewrite !seq_union_r.
   unionL.
   
-  2: { unionR left. rewrite <- (seq_eqvK (W ∩₁ ORlx)). rewrite WRLXF at 1. 
+  2: { unionR left.
+       rewrite <- (seq_eqvK (E ∩₁ W ∩₁ ORlx)).
+       rewrite WRLXF at 1. 
        unfolder. intros e w H'. destruct H' as [H'' [H' [[f' [f U]] T']]].
        desf.
        assert (~is_init f) as NINITf.
@@ -367,7 +378,7 @@ Proof using LSM RSCF WRLXF WSCFACQRMW.
        destruct SB; auto.
        exfalso. specialize (U1 e). auto. }
   unionR right. 
-  rewrite <- (seq_eqvK (W ∩₁ Sc)) at 1. rewrite WSCFACQRMW at 1. 
+  rewrite <- (seq_eqvK (E ∩₁ W ∩₁ Sc)) at 1. rewrite WSCFACQRMW at 1. 
   unfolder. intros e w [H' [w' [[f' [f U]] V]]].
   destruct U as [N [r' Z]]. 
   desf.
