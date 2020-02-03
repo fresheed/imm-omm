@@ -263,8 +263,8 @@ Section OCaml_IMM_Compilation.
 
   Definition is_compiled (po: Prog.Prog.t) (pi: Prog.Prog.t) :=
     ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id po <-> IdentMap.In t_id pi ⟫ /\
-    forall thread to ti (TO: Some to = IdentMap.find thread po)
-      (TI: Some ti = IdentMap.find thread pi), is_thread_compiled to ti.
+    ⟪ THREADS_COMPILED: forall thread to ti (TO: Some to = IdentMap.find thread po)
+      (TI: Some ti = IdentMap.find thread pi), is_thread_compiled to ti ⟫. 
 
 End OCaml_IMM_Compilation.   
 
@@ -472,10 +472,10 @@ Section OCamlMM_TO_IMM_S_PROG.
     (* separated *)
     (* let Loc_ := fun l x => loc G.(lab) x = Some l in *)
     (* ⟪ LSM : forall l, (Loc_ l \₁ is_init ⊆₁ (ORlx G)  \/  Loc_ l \₁ is_init ⊆₁ (Sc G)) ⟫ /\ *)
-    ⟪ WSCFACQRMW : W G ∩₁ Sc G ≡₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G) ⨾ rmw G) ⟫ /\
+    ⟪ WSCFACQRMW : E G ∩₁ W G ∩₁ Sc G ≡₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G) ⨾ rmw G) ⟫ /\
     ⟪ RMWSC  : rmw G ≡ ⦗Sc G⦘ ⨾ rmw G⨾ ⦗Sc G⦘ ⟫ /\
-    ⟪ WRLXF : W G ∩₁ ORlx G ⊆₁ codom_rel (⦗F G ∩₁ Acqrel G⦘ ⨾ immediate (sb G)) ⟫ /\
-    ⟪ RSCF  : R G ∩₁ Sc G ⊆₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G)) ⟫.
+    ⟪ WRLXF : E G ∩₁ W G ∩₁ ORlx G ⊆₁ codom_rel (⦗F G ∩₁ Acqrel G⦘ ⨾ immediate (sb G)) ⟫ /\
+    ⟪ RSCF  : E G ∩₁ R G ∩₁ Sc G ⊆₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G)) ⟫.
 
   (* Lemma tl_sbl: thread_local_biproperty same_behavior_local. *)
   (* Proof. Admitted.  *)
@@ -513,6 +513,12 @@ Section OCamlMM_TO_IMM_S_PROG.
       wf_init' : forall l, (exists b, E G b /\ loc G.(lab) b = Some l) -> E G (InitEvent l) ;
       wf_init_lab' : forall l, G.(lab) (InitEvent l) = Astore Xpln Opln l 0 ;       
     }.
+
+    Lemma Wf_tsg G:
+    Wf G <-> (forall tid Gi (THREAD_GRAPH: Some Gi = IdentMap.find tid (Gis (g2tsg G))),
+               Wf_local Gi)
+           /\ Wf_global G. 
+  Proof. Admitted.
 
   (* Definition at_compilation_block sti := exists PO, is_thread_compiled PO (firstn sti.(pc) sti.(instrs)).  *)
       
@@ -1865,7 +1871,27 @@ Section CompilationCorrectness.
 
   Lemma omm_premises_thread_local TSG (OMM_PREM_THREADS: forall tid Gi (THREAD_Gi: Some Gi = IdentMap.find tid (Gis TSG)), omm_premises_hold Gi):
     omm_premises_hold (tsg2g TSG). 
-  Proof. Admitted.  
+  Proof.
+    remember (tsg2g TSG) as G.
+    (* assert (merge : relation actid -> thread_separated_graph -> relation actid). *)
+    (* { admit. } *)
+    (* assert (forall (P: execution -> actid -> Prop), *)
+    (*            P G ≡₁ fun e => exists tid Gi, Some Gi = IdentMap.find tid (Gis TSG) /\ *)
+    (*                                   P Gi e) as EV_PROPS_UNION by admit.  *)
+    (* pose proof (EV_PROPS_UNION (fun G a => is_true (is_w G.(lab) a))). *)
+    (* pose proof (EV_PROPS_UNION (fun G a => is_true (is_r G.(lab) a))).  *)
+    (* pose proof (EV_PROPS_UNION (fun G a => is_true (is_sc G.(lab) a))). *)
+    (* assert (forall (r1 r2: relation actid), codom_rel (r1 ∪ r2) ≡₁ codom_rel r1 ∪₁ codom_rel r2). *)
+    (* { ins. basic_solver. } *)
+    assert (E G ≡₁ set_bunion (fun _ => True) (fun tid e => exists Gi, Some Gi = IdentMap.find tid (Gis TSG) /\ E (Gi) e)) as E_BUNION by admit.     
+    (* red. splits. *)
+    (* { seq_rewrite H. rewrite H1.  *)
+    (*   rewrite (EV_PROPS_UNION (fun G a => is_true (is_f G.(lab) a))). *)
+    (* assert (E G ≡₁ fun e => exists tid Gi, Some Gi = IdentMap.find tid (Gis TSG) /\ *)
+    (*                                E Gi e) by admit. *)
+    
+    
+  Admitted.  
 
   Lemma GI_omm_premises : omm_premises_hold GI.
   Proof.
@@ -1957,20 +1983,45 @@ Section CompilationCorrectness.
     eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto.
   Qed.
 
-  Lemma Wf_tsg G:
-    Wf G <-> (forall tid Gi (THREAD_GRAPH: Some Gi = IdentMap.find tid (Gis (g2tsg G))),
-               Wf_local Gi)
-           /\ Wf_global G. 
-  Proof. Admitted.
-
+  Lemma IdentMap_explicit {A B: Type} (P: IdentMap.key -> A -> Prop) (orig: IdentMap.t B):
+    (exists (imap: IdentMap.t A),
+        same_keys imap orig
+        /\ forall key value (KEY: Some value = IdentMap.find key imap), P key value)
+    <-> forall key (KEY: IdentMap.In key orig), exists value, P key value. 
+  Proof. Admitted. 
+    
   Lemma build_GOi_map TSGI (WFG: Wf (tsg2g TSGI)) (TSG_EXECI : program_execution_tsg ProgI TSGI):
     exists GOis, same_keys GOis (Gis TSGI) /\
-            forall tid GIi (THREAD: Some GIi = IdentMap.find tid (Gis TSGI))
-              Po (THREAD_O: Some Po = IdentMap.find tid ProgO)
-              GOi (THREAD_GRAPH: Some GOi = IdentMap.find tid GOis),
+            forall tid GOi (THREAD_GRAPH: Some GOi = IdentMap.find tid GOis)
+              GIi (THREAD: Some GIi = IdentMap.find tid (Gis TSGI))
+              Po (THREAD_O: Some Po = IdentMap.find tid ProgO),
               same_behavior_local GOi GIi /\
               Othread_execution tid Po GOi. 
-  Proof. Admitted.
+  Proof.
+    set (P := fun tid GOi =>
+                forall GIi (THREAD: Some GIi = IdentMap.find tid (Gis TSGI))
+                  Po (THREAD_O: Some Po = IdentMap.find tid ProgO),
+                  same_behavior_local GOi GIi /\
+                  Othread_execution tid Po GOi). 
+    apply (@IdentMap_explicit execution execution P (Gis TSGI)).
+    intros tid THREAD.
+    red in TSG_EXECI. desc.
+    red in Compiled. destruct Compiled as [SAME_THREADS THREADS_COMPILED]. clear Compiled.
+    assert (exists Pi, Some Pi = IdentMap.find tid ProgI) as [Pi THREAD_PROGI]. 
+    { apply find_iff_in. apply SAME_KEYS. auto. }
+    assert (exists Po, Some Po = IdentMap.find tid ProgO) as [Po THREAD_PROGO]. 
+    { apply find_iff_in. apply SAME_THREADS. apply find_iff_in. eauto. }
+    apply find_iff_in in THREAD. destruct THREAD as [Gi THREAD_EXEC]. 
+    specialize (THREAD_GRAPH_EXEC tid Pi THREAD_PROGI Gi THREAD_EXEC). 
+    forward eapply thread_execs; eauto.
+    { pose proof (proj1 (Wf_tsg (tsg2g TSGI))). apply H in WFG. desc.
+      eapply WFG. rewrite (proj2 tsg_g_bijection). eauto. }
+    ins. unfold P. destruct H as [GOi GOi_PROPS].
+    exists GOi. ins.
+    (* TODO: correct this duplication? *)
+    replace GIi with Gi; [| congruence]. replace Po0 with Po; [| congruence].
+    desc. split; auto. 
+  Qed. 
 
   Lemma TSGO_exists TSGI (WFG: Wf (tsg2g TSGI)) (TSG_EXECI : program_execution_tsg ProgI TSGI):
     exists TSGO,
