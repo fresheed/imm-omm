@@ -253,14 +253,18 @@ Section OCaml_IMM_Compilation.
   | compiled_ifgoto e n:
       let igt := (Instr.ifgoto e n) in
       is_instruction_compiled (igt) ([igt]).
-  
-  Inductive is_thread_compiled : list Prog.Instr.t -> list Prog.Instr.t -> Prop :=
-  | compiled_empty: is_thread_compiled [] []
-  | compiled_add oinstr block ro ri
-                     (instr_compiled: is_instruction_compiled oinstr block)
-                     (rest: is_thread_compiled ro ri):
-      is_thread_compiled (oinstr :: ro) (block ++ ri).
 
+  Inductive is_thread_block_compiled:
+    list Prog.Instr.t -> list (list Prog.Instr.t) -> Prop := 
+  | compiled_empty: is_thread_block_compiled [] []
+  | compiled_add oinstr block ro ri
+                 (instr_compiled: is_instruction_compiled oinstr block)
+                 (rest: is_thread_block_compiled ro ri):
+      is_thread_block_compiled (oinstr :: ro) (block :: ri).
+
+  Definition is_thread_compiled PO PI :=
+    exists BPI, is_thread_block_compiled PO BPI /\ PI = flatten BPI. 
+      
   Definition is_compiled (po: Prog.Prog.t) (pi: Prog.Prog.t) :=
     ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id po <-> IdentMap.In t_id pi ⟫ /\
     ⟪ THREADS_COMPILED: forall thread to ti (TO: Some to = IdentMap.find thread po)
@@ -460,14 +464,6 @@ Section OCamlMM_TO_IMM_S_PROG.
   Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
   Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
     
-  (* Definition thread_local_property (P: execution -> Prop) := forall G, *)
-  (*     (forall tid SG (TRE: thread_restricted_execution G tid SG), P SG) -> P G. *)
-
-  (* Definition thread_local_biproperty (P: execution -> execution -> Prop) := forall G1 G2, *)
-  (*     (forall tid SG1 SG2 (TRE1: thread_restricted_execution G1 tid SG1) *)
-  (*        (TRE2: thread_restricted_execution G2 tid SG2), P SG1 SG2) ->  *)
-  (*     P G1 G2. *)
-
   Definition omm_premises_hold G :=
     (* separated *)
     (* let Loc_ := fun l x => loc G.(lab) x = Some l in *)
@@ -476,9 +472,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     ⟪ RMWSC  : rmw G ≡ ⦗Sc G⦘ ⨾ rmw G⨾ ⦗Sc G⦘ ⟫ /\
     ⟪ WRLXF : E G ∩₁ W G ∩₁ ORlx G ⊆₁ codom_rel (⦗F G ∩₁ Acqrel G⦘ ⨾ immediate (sb G)) ⟫ /\
     ⟪ RSCF  : E G ∩₁ R G ∩₁ Sc G ⊆₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G)) ⟫.
-
-  (* Lemma tl_sbl: thread_local_biproperty same_behavior_local. *)
-  (* Proof. Admitted.  *)
 
   Record Wf_local (G: execution) :=
     {  wf_index' : forall a b, 
@@ -514,14 +507,14 @@ Section OCamlMM_TO_IMM_S_PROG.
       wf_init_lab' : forall l, G.(lab) (InitEvent l) = Astore Xpln Opln l 0 ;       
     }.
 
-    Lemma Wf_tsg G:
+  Lemma Wf_tsg G:
     Wf G <-> (forall tid Gi (THREAD_GRAPH: Some Gi = IdentMap.find tid (Gis (g2tsg G))),
                Wf_local Gi)
            /\ Wf_global G. 
   Proof. Admitted.
 
-  (* Definition at_compilation_block sti := exists PO, is_thread_compiled PO (firstn sti.(pc) sti.(instrs)).  *)
-      
+    
+
   Definition mm_similar_states (sto sti: state) :=
     is_thread_compiled sto.(instrs) sti.(instrs)  /\
     is_thread_compiled (firstn sto.(pc) sto.(instrs)) (firstn sti.(pc) sti.(instrs)) /\
@@ -531,9 +524,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     sto.(ectrl) = sti.(ectrl) /\
     sto.(eindex) = sti.(eindex). 
   
-  (* Definition next_compilation_block sti (CORR: exists sto, mm_similar_states sto sti) (NOT_END: pc sti < length (instrs sti)) : list Prog.Instr.t. *)
-  (* Admitted. *)
-
   (* TODO: update Coq version? *)
   (* this lemma is mentioned on https://coq.inria.fr/library/Coq.Lists.List.html *)
   Lemma skipn_all2 {A: Type} (l: list A) n: length l <= n -> skipn n l = [].
@@ -599,7 +589,16 @@ Section OCamlMM_TO_IMM_S_PROG.
       { red. exists lbls. red. splits; [subst; simpl; auto| ].
         exists ld. exists 0. splits.
         { (* need to establish pc correspondence between compiled programs *)
-          subst. admit. }
+          subst. 
+          assert (is_thread_compiled (skipn (pc sto) (instrs sto))
+                                     (skipn (pc sti) (instrs sti))) as MM_SIM'.
+          { admit. }
+          red in MM_SIM'. destruct MM_SIM' as [BPI' [COMPCUR bar]].
+          destruct COMPCUR.
+          { simpl in bar. admit. }
+          simpl in bar.
+          admit. 
+        }
         pose proof (@Oload tid lbls sto sto' ld 1 (gt_Sn_O 0) Orlx reg lexpr val l) as OMM_STEP. 
         assert (ord_eq: ord = Orlx). 
         { subst ld. congruence. }
@@ -640,7 +639,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       mm_similar_states (init PO) (init PI).
   Proof.
     ins. red. simpl. splits; auto.
-    { apply compiled_empty. }
+    { red. exists []. split; [apply compiled_empty| auto]. }
     red. splits; auto. 
     arewrite (E init_execution ≡₁ ∅) by basic_solver. basic_solver. 
   Qed.
@@ -1054,14 +1053,18 @@ Section OCamlMM_TO_IMM_S_PROG.
     intros STEPS. apply crt_num_steps in STEPS as [n STEPS]. 
     eapply oseq_between_acb; eauto.
     2: { red. auto. }
-    desc. destruct COMP.
+    desc. destruct COMP as [BPI [BLOCK_COMP BLOCK_PI]].
+    destruct BLOCK_COMP.     
     { red. right.
+      replace (instrs fin) with ([]: list Prog.Instr.t). 
       apply is_terminal_new. 
       simpl. omega. } 
     red. left.
     (* TODO: simplify is_thread_compiled definition *)
-    exists block. red. split; eauto.
+    exists block. red. splits; eauto.
     simpl. unfold sublist. simpl.
+    rewrite BLOCK_PI.
+    simpl.
     rewrite <- (Nat.add_0_r (length block)).
     rewrite firstn_app_2. simpl.
     rewrite <- app_nil_end. auto.     
