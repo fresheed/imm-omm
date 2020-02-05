@@ -591,20 +591,96 @@ Section OCamlMM_TO_IMM_S_PROG.
         i instr block (INSTR: Some instr = nth_error PO i)
         (BLOCK: Some block = nth_error BPI i):
     is_instruction_compiled instr block.
-  Proof. Admitted. 
-  
+  Proof. Admitted.
+
+  Lemma compilation_same_length PO BPI (COMP: is_thread_block_compiled PO BPI):
+    length PO = length BPI.
+  Proof.
+    generalize dependent BPI.
+    induction PO.
+    { ins. inversion COMP. auto. }
+    ins. inversion COMP. simpl.
+    intuition.
+  Qed. 
+
+  Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
+    instrs sti = instrs sti'.
+  Proof.
+    destruct STEPS as [tid STEPS]. apply crt_num_steps in STEPS.
+    destruct STEPS as [n STEPS].
+    generalize dependent sti'.
+    induction n.
+    - intros sti' STEPS. simpl in STEPS. generalize STEPS. basic_solver 10.
+    - intros sti' STEPS.
+      rewrite step_prev in STEPS. destruct STEPS as [sti'' STEPS'']. desc.
+      replace (instrs sti) with (instrs sti'').
+      { red in STEPS''0. desf. red in STEPS''0. desf. }
+      symmetry. eapply IHn. eauto.
+  Qed.
+
   Lemma SAME_BINSTRS bst bst' tid (BLOCK_STEP: block_step tid bst bst'):
     binstrs bst = binstrs bst'.
-  Proof. Admitted. 
-    
+  Proof.
+    (* not true in general because of non-injective flatten *)
+  Admitted.
+
+  Definition prefix_alt {A: Type} (l1 l2: list A) := l2 = l1 ++ skipn (length l1) l2.
+
+  Lemma firstn_prefix {A: Type} (l: list A) i j (LT: i < j) (INDEX: j < length l):
+    prefix_alt (firstn i l) (firstn j l).
+  Proof.    
+    (* red. *)
+    (* replace j with (i + (j - i)) at 1. *)
+    (* 2: { omega. } *)
+    (* replace (length (firstn i l)) with i at 1. *)
+    (* 2: { symmetry. apply firstn_length_le. omega. } *)
+    (* rewrite <- firstn_app_2.  *)
+  Admitted.
+  
   Lemma BPC_CHANGE bst bst' tid (OMM_BLOCK_STEP: omm_block_step tid bst bst'):
     bpc bst' = bpc bst + 1 \/ exists cond adr, Some [Instr.ifgoto cond adr] = nth_error (binstrs bst) (bpc bst).
-  Proof. Admitted.
-  
+  Proof.
+    red in OMM_BLOCK_STEP. desc.
+    assert (binstrs bst = binstrs bst') as BINSTRS_SAME. 
+    { eapply (@SAME_BINSTRS _ _ tid). red. eauto. }
+    red in OMM_BLOCK_STEP. desc.
+    inversion OMM_BLOCK_STEP0.
+    - left. subst. simpl in *.
+      apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP.
+      do 2 (red in BLOCK_STEP;  desc).
+      inversion ISTEP0.
+      (* TODO: discriminate wrong instructions *)
+      + simpl in UPC. 
+        rewrite <- BINSTRS_SAME in *. 
+  Admitted.
+
+  Lemma block_step_nonterminal bst bst' tid
+        (OSEQ_STEP: block_step tid bst bst'):
+    bpc bst < length (binstrs bst).
+  Proof.
+    destruct (dec_lt (bpc bst) (length (binstrs bst))); auto.
+    exfalso. apply not_lt in H.
+    do 2 (red in OSEQ_STEP; desc).
+    pose proof (proj2 (nth_error_None (binstrs bst) (bpc bst))). 
+    intuition. congruence.
+  Qed.
+
+  Lemma OPT_VAL: forall {A: Type} (opt: option A), opt <> None <-> exists o, Some o = opt.
+  Proof. 
+    ins. destruct opt; [vauto | ]. 
+    split; [ins| ]. 
+    intros [o CONTRA]. vauto.
+  Qed.  
+
+  Lemma bs_extract bst bst' tid (OSEQ_STEP: omm_block_step tid bst bst'):
+    block_step tid bst bst'.
+  Proof. do 2 (red in OSEQ_STEP; desc). vauto. Qed. 
+   
   Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
         tid bsti' (OSEQ_STEP: omm_block_step tid bsti bsti'):
     exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
   Proof.
+    pose proof (block_step_nonterminal (bs_extract OSEQ_STEP)) as BST_NONTERM. 
     pose proof (BPC_CHANGE OSEQ_STEP) as BPC'. 
     red in OSEQ_STEP. destruct OSEQ_STEP as [block [BLOCK_STEP_ COMP_BLOCK]].
     forward eapply (@SAME_BINSTRS bsti bsti' tid) as BINSTRS_SAME.
@@ -618,25 +694,18 @@ Section OCamlMM_TO_IMM_S_PROG.
     - remember (bst2st bsti) as sti. remember (bst2st bsti') as sti'. 
       apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP.
       assert (AT_PC: Some ld = nth_error (instrs sti) (pc sti)).
-      { 
-        (* apply eq_trans with (y := nth_error [ld] 0); auto. *)
-        (* rewrite <- (NPeano.Nat.add_0_r (pc sti)). *)
-        (* eapply sublist_items; eauto. *)
-        replace (instrs sti) with (flatten (binstrs bsti)).
+      { replace (instrs sti) with (flatten (binstrs bsti)).
         2: { unfold bst2st in Heqsti. subst. auto. }
         replace (pc sti) with (length (flatten (firstn (bpc bsti) (binstrs bsti)))).
         2: { unfold bst2st in Heqsti. subst. auto. }
         rewrite <- (firstn_skipn (bpc bsti) (binstrs bsti)) in AT_BLOCK. 
         rewrite nth_error_app2 in AT_BLOCK.
         2: { apply firstn_le_length. }
-        rewrite firstn_length_le in AT_BLOCK.
-        2: { admit. }
+        rewrite firstn_length_le in AT_BLOCK; [| omega]. 
         rewrite Nat.sub_diag in AT_BLOCK.
-        rewrite (@flatten_split _ (binstrs bsti) (bpc bsti)).
-        2: { admit. (* TODO: what if it's terminal state? *) }
+        rewrite (@flatten_split _ (binstrs bsti) (bpc bsti)); [| auto]. 
         rewrite nth_error_app2; [| omega].
-        rewrite Nat.sub_diag.
-        
+        rewrite Nat.sub_diag.        
         assert (forall {A: Type} l (x: A), Some x = nth_error l 0 -> exists l', l = x :: l'). 
         { ins. destruct l; vauto. }
         apply H in AT_BLOCK. desc.
@@ -670,7 +739,10 @@ Section OCamlMM_TO_IMM_S_PROG.
       { red. exists lbls. red. splits; [subst; simpl; auto| ].
         exists ld. exists 0. splits.
         { assert (exists oinstr, Some oinstr = nth_error (instrs sto) (pc sto)).
-          { admit. }
+          { apply OPT_VAL. apply nth_error_Some.
+            rewrite MM_SIM0.
+            replace (length (instrs sto)) with (length (binstrs bsti)); auto. 
+            symmetry. apply compilation_same_length. auto. }
           desc. pose proof (every_instruction_compiled MM_SIM (pc sto)).
           forward eapply H0 as COMP; eauto.
           { replace (pc sto) with (bpc bsti). eauto. }
@@ -745,20 +817,6 @@ Section OCamlMM_TO_IMM_S_PROG.
   Lemma Wfl_subgraph SG' SG (SB: same_behavior_local SG SG') (WFL: Wf_local SG'): Wf_local SG.
   Proof.  Admitted.
       
-  Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
-    instrs sti = instrs sti'.
-  Proof.
-    destruct STEPS as [tid STEPS]. apply crt_num_steps in STEPS.
-    destruct STEPS as [n STEPS].
-    generalize dependent sti'.
-    induction n.
-    - intros sti' STEPS. simpl in STEPS. generalize STEPS. basic_solver 10.
-    - intros sti' STEPS.
-      rewrite step_prev in STEPS. destruct STEPS as [sti'' STEPS'']. desc.
-      replace (instrs sti) with (instrs sti'').
-      { red in STEPS''0. desf. red in STEPS''0. desf. }
-      symmetry. eapply IHn. eauto.
-  Qed.
 
   Lemma omm_steps_same_instrs sto sto' (STEPS: exists tid, (Ostep tid)＊ sto sto'):
     instrs sto = instrs sto'.
@@ -1509,13 +1567,6 @@ Section CompilationCorrectness.
   Hypothesis IPC: imm_s.imm_psc_consistent GI sc.
 
 
-  Lemma OPT_VAL: forall {A: Type} (opt: option A), opt <> None <-> exists o, Some o = opt.
-  Proof. 
-    ins. destruct opt; [vauto | ]. 
-    split; [ins| ]. 
-    intros [o CONTRA]. vauto.
-  Qed.
-  
   Lemma find_iff_in {A: Type} (M: IdentMap.t A) k: 
     IdentMap.In k M <-> exists elt, Some elt = IdentMap.find k M. 
   Proof.
