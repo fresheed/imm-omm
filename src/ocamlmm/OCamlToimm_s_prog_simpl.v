@@ -1613,9 +1613,36 @@ Section OCamlMM_TO_IMM_S_PROG.
         (SAME: firstn x l = firstn y l):
     x = y \/ (x >= length l /\ y >= length l). 
   Proof.
-  Admitted. 
+  Admitted.
 
-  
+  Lemma terminal_exact_pc st (TERM: is_terminal st):
+    pc st = length (instrs st).
+  Proof.
+    (* a program can be adjusted so all gotos pointing somewhere outside the program will point exactly where program ends *)
+  Admitted.
+
+  Lemma leibniz : forall {A:Type} (x y:A),
+                  (x = y) ->
+                  forall (P : A -> Prop), P x -> P y.
+Proof.
+  intros A x y H P.
+  rewrite H.
+  auto.
+Qed.
+
+  Lemma state_record_equality st:
+    st = {|
+      instrs := instrs st;
+      pc := pc st;
+      G := G st;
+      eindex := eindex st;
+      regf := regf st;
+      depf := depf st;
+      ectrl := ectrl st
+    |}.
+  Proof. 
+  Admitted. 
+    
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
         SGI (ExI: thread_execution tid PI SGI) (WFL: Wf_local SGI):
     exists SGO, Othread_execution tid PO SGO /\
@@ -1641,10 +1668,9 @@ Section OCamlMM_TO_IMM_S_PROG.
       simpl.
       rewrite firstn_all.
       rewrite <- COMP0.
-      assert (forall st, is_terminal st -> pc st = length (instrs st)) by admit.
-      rewrite SAME_INSTRS. rewrite <- H; auto.
-      (* technical issue? *)      
-      admit. } 
+      rewrite SAME_INSTRS. rewrite <- terminal_exact_pc; auto.
+      (* TODO: why so complicated? *)      
+      apply state_record_equality. } 
 
     assert (is_block_terminal bsti_fin) as BLOCK_TERM. 
     { red. destruct (dec_ge (bpc bsti_fin) (length (binstrs bsti_fin))); auto. }
@@ -1714,7 +1740,7 @@ Section OCamlMM_TO_IMM_S_PROG.
     red in MM_SIM. desc.
     apply (Wfl_subgraph MM_SIM1).
     replace (bG bsti_fin) with SGI; auto.
-  Admitted. 
+  Qed. 
 
   Lemma same_beh_implies_similar_rels GO GI (SB: same_behavior GO GI):
     ⟪ SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘⟫ /\
