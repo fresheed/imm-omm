@@ -377,13 +377,7 @@ Section OCaml_IMM_Compilation.
       let igt := (Instr.ifgoto e n) in
       is_instruction_compiled (igt) ([igt]).
 
-  Inductive is_thread_block_compiled:
-    list Prog.Instr.t -> list (list Prog.Instr.t) -> Prop := 
-  | compiled_empty: is_thread_block_compiled [] []
-  | compiled_add oinstr block ro ri
-                 (instr_compiled: is_instruction_compiled oinstr block)
-                 (rest: is_thread_block_compiled ro ri):
-      is_thread_block_compiled (oinstr :: ro) (block :: ri).
+  Definition is_thread_block_compiled PO BPI := Forall2 is_instruction_compiled PO BPI. 
 
   Definition is_thread_compiled PO PI :=
     exists BPI, is_thread_block_compiled PO BPI /\ PI = flatten BPI. 
@@ -408,8 +402,8 @@ Section OCaml_IMM_Compilation.
     - ins. inversion COMP. subst.
       destruct (NPeano.Nat.zero_or_succ i).
       + subst. simpl in *. congruence.
-      + desc. subst. simpl in *.
-        apply (IHPO block instr m INSTR ri rest). auto. 
+      + desc. subst. simpl in *. 
+        apply (@IHPO block instr m INSTR l' H3 BLOCK). 
   Qed. 
 
   Lemma compilation_same_length PO BPI (COMP: is_thread_block_compiled PO BPI):
@@ -1574,16 +1568,35 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   Definition is_block_terminal bst := bpc bst >= length (binstrs bst). 
 
-  Lemma oseq_iff_steps bfin tid (TERM: is_block_terminal bfin)
+  Lemma oseq_iff_steps bfin tid (* (TERM: is_block_terminal bfin) *)
         (COMP: exists PO, is_thread_block_compiled PO (binstrs bfin)):
     let fin := (bst2st bfin) in 
     (step tid)＊ (init (instrs fin)) fin <-> (omm_block_step tid)＊ (binit (binstrs bfin)) bfin.
   Proof.
-    simpl. remember (bst2st bfin) as fin. 
-    split. 
-    2: { (*TODO: remove this part? *)
-      admit.  }
-    intros STEPS. apply crt_num_steps in STEPS as [n STEPS]. 
+    (* simpl. remember (bst2st bfin) as fin.  *)
+    (* split.  *)
+    (* 2: { (*TODO: remove this part? *) *)
+    (*   admit.  } *)
+    (* intros STEPS. apply crt_num_steps in STEPS as [n STEPS]. *)
+    (* generalize dependent bfin. generalize dependent fin. *)
+    (* generalize dependent n. *)
+    (* set (P := fun (n : nat) => forall(fin : state) (bfin : block_state), *)
+    (*               (* is_block_terminal bfin -> *) *)
+    (*               (exists PO : list Instr.t, is_thread_block_compiled PO (binstrs bfin)) -> *)
+    (*               fin = bst2st bfin -> *)
+    (*               (step tid) ^^ n (init (flatten (binstrs bfin))) fin -> *)
+    (*               (omm_block_step tid)＊ (binit (binstrs bfin)) bfin).  *)
+    (* apply (lt_ind P).  *)
+    (* { ins. red. ins. red in H1. desc. *)
+    (*   apply clos_refl_transE. left. *)
+    (*   rewrite H0 in H1. *)
+    (*   replace (init (flatten (binstrs bfin))) with (bst2st (binit (binstrs bfin))) in H2. *)
+    (*   2: { unfold bst2st, init, binit. simpl. auto. } *)
+    (*   admit. } *)
+    (* ins. red. intros st bst [po COMP] BST REACH.  *)
+
+    (*********************************** old stuff *)
+
     (* eapply oseq_between_acb; eauto. *)
     (* 2: { red. auto. } *)
     (* desc. destruct COMP as [BPI [BLOCK_COMP BLOCK_PI]]. *)
@@ -2376,6 +2389,6 @@ Section CompilationCorrectness.
     splits; auto.
     apply graph_switch; auto.
     apply (imm_implies_omm). 
-  Qed. 
+  Qed.  
 
 End CompilationCorrectness.       
