@@ -506,7 +506,39 @@ Section ThreadSeparatedGraph.
     (* /\ Einit_tsg TSGO ≡₁ Einit_tsg TSGI *)
     /\ co_tsg TSGO ≡ co_tsg TSGI
     /\ rf_tsg TSGO ≡ rf_tsg TSGI ⨾ ⦗set_compl (dom_rel (rmw_tsg TSGI))⦘. 
-       
+
+  (* Definition restrict (G: execution) (tid: thread_id): execution. *)
+  (*   set (thread_local := fun x y => Events.tid x = tid /\ Events.tid y = tid).  *)
+  (*   exact {| *)
+  (*       acts := filterP (fun e => is_tid tid e) (acts G); *)
+  (*       lab := lab G; (* TODO: restrict? *) *)
+  (*       rmw := rmw G ∩ thread_local; *)
+  (*       data := data G ∩ thread_local; *)
+  (*       addr := addr G ∩ thread_local; *)
+  (*       ctrl := ctrl G ∩ thread_local; *)
+  (*       rmw_dep := rmw_dep G ∩ thread_local; *)
+  (*       rf := ∅₂; *)
+  (*       co := ∅₂; |}. *)
+  (* Defined. *)
+  (* Definition g2tsg' (G: execution): *)
+  (*   exists (TSG: thread_separated_graph), True.  *)
+  (*   set (events_tids := map (fun e => Events.tid e) (acts G)).  *)
+  (*   assert (ListDec.decidable_eq thread_id) as DECIDE_TID.  *)
+  (*   { unfold thread_id, Ident.t. red. ins. red.  *)
+  (*     pose proof (DecidableTypeEx.Positive_as_DT.eq_dec x y).  *)
+  (*     destruct H; auto. } *)
+  (*   pose proof (ListDec.uniquify DECIDE_TID events_tids) as [tids TIDS_UNIQUE].  *)
+  (*   set (Gis_list := map (fun tid => (tid, restrict G tid)) tids).  *)
+  (*   (* TODO: remove rmw from tsg? *)     *)
+  (*   exists {| *)
+  (*       Gis := UsualFMapPositive.UsualPositiveMap.Properties.of_list Gis_list; *)
+  (*       Einit_tsg := fun e => In e (filterP (fun e' => is_tid tid_init e') (acts G)); *)
+  (*       rf_tsg := rf G; *)
+  (*       co_tsg := co G; *)
+  (*       rmw_tsg := rmw G |}.  *)
+  (*   auto.  *)
+  (* Defined. *)
+ 
   Definition g2tsg: execution -> thread_separated_graph. Admitted. 
   Definition tsg2g: thread_separated_graph -> execution. Admitted. 
 
