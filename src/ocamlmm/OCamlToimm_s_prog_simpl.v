@@ -967,19 +967,16 @@ Section OCamlMM_TO_IMM_S_PROG.
     
   Definition is_block_terminal bst := bpc bst >= length (binstrs bst). 
 
-  Lemma oseq_iff_steps bfin tid (* (TERM: is_block_terminal bfin) *)
+  Lemma steps_imply_ommblocks bfin tid (* (TERM: is_block_terminal bfin) *)
         (COMP: exists PO, is_thread_block_compiled PO (binstrs bfin)):
     let fin := (bst2st bfin) in 
-    (step tid)＊ (init (instrs fin)) fin <-> (omm_block_step tid)＊ (binit (binstrs bfin)) bfin.
+    (step tid)＊ (init (instrs fin)) fin -> (omm_block_step tid)＊ (binit (binstrs bfin)) bfin.
   Proof.
-    split. 
-    2: { (*TODO: remove this part? *)
-      admit.  }
-    intros STEPS. apply crt_num_steps in STEPS as [n STEPS].
+    intros fin STEPS. apply crt_num_steps in STEPS as [n STEPS].
     eapply oseq_between_acb; eauto.
     unfold bst2st, binit, init. simpl.
     desc. exists PO. red. exists (binstrs bfin). split; auto. 
-  Admitted. 
+  Qed. 
     
   Lemma compilation_bijective: forall PI PO PO' (COMP: is_thread_compiled PO PI)
                                  (COMP': is_thread_compiled PO' PI),
@@ -1054,9 +1051,8 @@ Qed.
     { red. destruct (dec_ge (bpc bsti_fin) (length (binstrs bsti_fin))); auto. }
     assert (exists n_osteps, (omm_block_step tid) ^^ n_osteps (binit BPI) bsti_fin) as [n_osteps OMM_STEPS]. 
     { apply crt_num_steps.
-      forward eapply (@oseq_iff_steps bsti_fin tid) as [FOO _]; eauto.
-      
-      apply FOO. rewrite <- BST. apply crt_num_steps.
+      forward eapply (@steps_imply_ommblocks bsti_fin tid); eauto.
+      rewrite <- BST. apply crt_num_steps.
       rewrite <- SAME_INSTRS. eauto. }
     
     assert (BY_STEPS:
