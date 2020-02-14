@@ -325,36 +325,150 @@ Section OCamlMM_TO_IMM_S_PROG.
     intros [o CONTRA]. vauto.
   Qed.  
 
-
-  Definition prefix_alt {A: Type} (l1 l2: list A) := l2 = l1 ++ skipn (length l1) l2.
-
-  Lemma firstn_prefix {A: Type} (l: list A) i j (LT: i < j) (INDEX: j < length l):
-    prefix_alt (firstn i l) (firstn j l).
-  Proof.    
-    (* red. *)
-    (* replace j with (i + (j - i)) at 1. *)
-    (* 2: { omega. } *)
-    (* replace (length (firstn i l)) with i at 1. *)
-    (* 2: { symmetry. apply firstn_length_le. omega. } *)
-    (* rewrite <- firstn_app_2.  *)
-  Admitted.
   
+  Lemma first_end {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n):
+    firstn (n + 1) l = firstn n l ++ [x].
+  Proof.
+    ins. 
+    symmetry in NTH. apply nth_error_split in NTH as [l1 [l2 [CAT H]]].
+    rewrite <- H. pose proof (@firstn_app_2 A 1 l1 (x :: l2)).
+    rewrite CAT. simpl in H0. rewrite H0.
+    pose proof (@firstn_app_2 A 0 l1). simpl in H1. rewrite app_nil_r, NPeano.Nat.add_0_r in H1.
+    rewrite H1. auto. 
+  Qed.
+
+    
+  Lemma BPC_CHANGE_foobar bst bst' tid
+        (OMM_BLOCK_STEP: omm_block_step tid bst bst')
+        (COMP: exists PO, is_thread_block_compiled PO (binstrs bst)):
+    bpc bst' = bpc bst + 1 \/ exists cond adr, Some [Instr.ifgoto cond adr] = nth_error (binstrs bst) (bpc bst).
+  Proof.
+    red in OMM_BLOCK_STEP. desc. red in OMM_BLOCK_STEP. desc.
+    assert ((exists (cond : Instr.expr) (adr : nat),
+                block = [Instr.ifgoto cond adr])
+            \/ (forall (cond : Instr.expr) (adr : nat), ~ In (Instr.ifgoto cond adr) block)) as BLOCK_CONTENT.
+    { admit. }
+    (* remember (bst2st bst) as st. remember (bst2st bst') as st'.  *)
+    assert (block = sublist (instrs (bst2st bst)) (pc (bst2st bst)) (length block)).
+    { admit. }
+    destruct BLOCK_CONTENT.
+    { right. desc. exists cond. exists adr. congruence. }
+    left.
+    assert (pc (bst2st bst') = pc (bst2st bst) + length block) by admit.
+    unfold bst2st in H1. simpl in H1.
+    replace (binstrs bst') with (binstrs bst) in * by admit.
+    assert (length block > 0) as LENB. 
+    { inversion OMM_BLOCK_STEP0; vauto. }
+    assert (bpc bst' <= bpc bst \/ exists d, bpc bst' = bpc bst + S d) by admit.
+    desf. 
+    { assert (length (flatten (firstn (bpc bst') (binstrs bst)))
+              <= length (flatten (firstn (bpc bst) (binstrs bst)))).
+      { admit. }
+      omega. }
+    { destruct d; auto.
+      exfalso. 
+      rewrite H2 in *.
+      replace (bpc bst + S (S d)) with ((bpc bst + 1) + (d + 1)) in H1 by omega. 
+      replace (binstrs bst) with (firstn (bpc bst + 1) (binstrs bst) ++ skipn (bpc bst + 1) (binstrs bst)) in H1 at 1.
+      2: { apply firstn_skipn. }
+      replace (bpc bst + 1) with (length (firstn (bpc bst + 1) (binstrs bst))) in H1 at 1.
+      2: { apply firstn_length_le.
+           rewrite Nat.add_1_r. apply lt_le_S.
+           apply nth_error_Some. congruence. }
+      rewrite firstn_app_2 in H1.
+      rewrite (first_end _ _ AT_BLOCK) in H1.
+      rewrite !flatten_app, !app_length in H1. simpl in H1.
+      rewrite <- app_nil_end in H1.
+      assert (length (flatten (firstn (d + 1) (skipn (bpc bst + 1) (binstrs bst)))) = 0).
+      { omega. }
+      apply length_zero_iff_nil in H3.
+      assert (firstn (d + 1) (skipn (bpc bst + 1) (binstrs bst)) = []).
+      { destruct (firstn (d + 1) (skipn (bpc bst + 1) (binstrs bst))); auto.
+        admit. }
+  Admitted. 
+      
+      (* do 2 rewrite <- Nat.add_1_r, Const.add_assoc in H1. *)
+      (* assert (exists block', Some block' = nth_error (binstrs bst) (bpc bst) *)
+  (*   dest *)
+
+      (* foobar.  *)
+    (* inversion OMM_BLOCK_STEP0. *)
+      
+  (* Qed. *)
+
+  (* Lemma BPC_CHANGE_foobar2 bst bst' tid (OMM_BLOCK_STEP: omm_block_step tid bst bst') (COMP: exists PO, is_thread_block_compiled PO (binstrs bst)): *)
+  (*   bpc bst' = bpc bst + 1 \/ exists cond adr, Some [Instr.ifgoto cond adr] = nth_error (binstrs bst) (bpc bst). *)
+  (* Proof. *)
+  (*   red in OMM_BLOCK_STEP. desc. *)
+  (*   assert (binstrs bst = binstrs bst') as BINSTRS_SAME. *)
+  (*   { eapply (@SAME_BINSTRS _ _ tid). red. eauto. } *)
+  (*   red in OMM_BLOCK_STEP. desc. *)
+  (*   inversion OMM_BLOCK_STEP0. *)
+  (*   - left. subst. simpl in *. apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP. *)
+  (*     assert (Some ld = nth_error PO (bpc bst)). *)
+  (*     { assert (exists instr, Some instr = nth_error PO (bpc bst)). *)
+  (*       { apply OPT_VAL. apply nth_error_Some. *)
+  (*         rewrite (compilation_same_length COMP). *)
+  (*         apply nth_error_Some. eapply OPT_VAL. eauto. } *)
+  (*       desc. pose proof (every_instruction_compiled COMP _ H AT_BLOCK). *)
+  (*       inversion H0. vauto. } *)
+  (*     do 2 (red in BLOCK_STEP; desc). *)
+  (*     replace instr with ld in *. *)
+  (*     2: { foobar.  *)
+  (*     assert (AT_PC: Some ld = nth_error (instrs (bst2st bst)) (pc (bst2st bst))). *)
+  (*     {  *)
+  (*       apply eq_trans with (y := nth_error [ld] 0); auto. *)
+  (*       rewrite <- (NPeano.Nat.add_0_r (pc (bst2st bst))). *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     inversion ISTEP0; rewrite <- AT_PC in ISTEP; inversion ISTEP; rewrite II in H2; subst ld. *)
+  (*     all: try discriminate H2. *)
+  (*     subst. unfold bst2st in UPC. simpl in UPC. *)
+  (* Admitted. *)
+
   Lemma BPC_CHANGE bst bst' tid (OMM_BLOCK_STEP: omm_block_step tid bst bst'):
     bpc bst' = bpc bst + 1 \/ exists cond adr, Some [Instr.ifgoto cond adr] = nth_error (binstrs bst) (bpc bst).
   Proof.
-    red in OMM_BLOCK_STEP. desc.
-    assert (binstrs bst = binstrs bst') as BINSTRS_SAME. 
-    { eapply (@SAME_BINSTRS _ _ tid). red. eauto. }
-    red in OMM_BLOCK_STEP. desc.
-    inversion OMM_BLOCK_STEP0.
-    - left. subst. simpl in *.
-      apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP.
-      do 2 (red in BLOCK_STEP;  desc).
-      inversion ISTEP0.
-      (* TODO: discriminate wrong instructions *)
-      + simpl in UPC. 
-        rewrite <- BINSTRS_SAME in *. 
-  Admitted.
+    red in OMM_BLOCK_STEP. desc. red in OMM_BLOCK_STEP. desc.
+    assert ((exists (cond : Instr.expr) (adr : nat),
+                block = [Instr.ifgoto cond adr])
+            \/ (forall (cond : Instr.expr) (adr : nat), ~ In (Instr.ifgoto cond adr) block)) as BLOCK_CONTENT.
+    { admit. }
+    destruct BLOCK_CONTENT.
+    { right. desc. exists cond. exists adr. congruence. }
+    left.
+    remember (bst2st bst) as st. remember (bst2st bst') as st'.
+    assert (pc st = length (flatten (firstn (bpc bst) (binstrs bst)))) by vauto. 
+    assert (pc st' = length (flatten (firstn (bpc bst') (binstrs bst)))) by admit.
+    assert (pc st' = pc st + length block) by admit.
+    rewrite H2 in H1. rewrite Heqst in H1. unfold bst2st in H1. simpl in H1.
+    rewrite <- app_length in H1.
+    replace (flatten (firstn (bpc bst) (binstrs bst)) ++ block) with (flatten (firstn (bpc bst) (binstrs bst) ++ [block])) in H1. 
+    2: { rewrite flatten_app. simpl. rewrite app_nil_r. auto. }
+    rewrite <- first_end in H1; auto.
+    assert (bpc bst' < bpc bst + 1 \/ bpc bst' = bpc bst + 1 \/ bpc bst' > bpc bst + 1) by omega. 
+    destruct H3 as [BPC | [BPC | BPC]]; auto; exfalso. 
+    {
+      (* set (strict_prefix_alt := fun {A: Type} (l1 l2: list A) => exists x l', l2 = l1 ++ x :: l'). *)
+      (* assert (strict_prefix_alt _ (firstn (bpc bst') (binstrs bst)) (firstn (bpc bst + 1) (binstrs bst))) by admit. *)
+      (* red in H4. desc. rewrite H4, flatten_app, app_length in H1. *)
+      (* simpl in H1. rewrite app_length in H1. *)
+      (* assert (length x > 0). *)
+      (* {  *)
+      (* assert (length (flatten l') = 0) by omega. *)
+      (* apply length_zero_iff_nil in H5. *)
+      admit. }
+
+    (* foobar. *)
+    
+    (* destruct H0. *)
+    (* { admit. } *)
+    (* desc. cut (d = 1); [ins; vauto|].   *)
+    (* unfold bst2st in BLOCK_STEP. rewrite H0 in *. simpl in *.  *)
+    (* assert (block = sublist (instrs (bst2st bst)) (pc (bst2st bst)) (length block)). *)
+    (* { admit. } *)
+
+    
+  Admitted. 
 
   Lemma block_step_nonterminal bst bst' tid
         (OSEQ_STEP: block_step tid bst bst'):
@@ -545,19 +659,6 @@ Section OCamlMM_TO_IMM_S_PROG.
       (* - .....*)
       (* - .....*)
   Admitted.
-  
-  Lemma first_end {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n):
-    firstn (n + 1) l = firstn n l ++ [x].
-  Proof.
-    ins. 
-    symmetry in NTH. apply nth_error_split in NTH as [l1 [l2 [CAT H]]].
-    rewrite <- H. pose proof (@firstn_app_2 A 1 l1 (x :: l2)).
-    rewrite CAT. simpl in H0. rewrite H0.
-    pose proof (@firstn_app_2 A 0 l1). simpl in H1. rewrite app_nil_r, NPeano.Nat.add_0_r in H1.
-    rewrite H1. auto. 
-  Qed.
-
-    
   Lemma init_mm_same: forall PO BPI (COMP: is_thread_block_compiled PO BPI),
       mm_similar_states (init PO) (binit BPI).
   Proof.
