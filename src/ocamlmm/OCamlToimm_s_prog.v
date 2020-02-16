@@ -19,7 +19,7 @@ Set Implicit Arguments.
 
 Section OCaml_Program.
 
-  Inductive Oistep_ tid labels s1 s2 instr dindex (GT0: dindex > 0): Prop :=
+  Inductive Oistep_ tid labels s1 s2 instr dindex: Prop :=
   | Oassign reg expr
            (LABELS : labels = nil)
            (II : instr = Instr.assign reg expr)
@@ -46,9 +46,9 @@ Section OCaml_Program.
          (LABELS : labels = [Aload false ord (RegFile.eval_lexpr s1.(regf) lexpr) val])
          (UPC   : s2.(pc) = s1.(pc) + 1)
          (UG    : s2.(G) =
-                  add s1.(G) tid s1.(eindex) (Aload false ord (RegFile.eval_lexpr s1.(regf) lexpr) val) ∅
+                  add s1.(G) tid (s1.(eindex) + dindex) (Aload false ord (RegFile.eval_lexpr s1.(regf) lexpr) val) ∅
                                              (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl) ∅)
-         (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+         (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
          (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
          (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
          (UECTRL : s2.(ectrl) = s1.(ectrl))
@@ -60,10 +60,10 @@ Section OCaml_Program.
           (II : instr = Instr.store ord lexpr expr)
           (UPC   : s2.(pc) = s1.(pc) + 1)
           (UG    : s2.(G) =
-                   add s1.(G) tid s1.(eindex) (Astore x ord l v)
+                   add s1.(G) tid (s1.(eindex) + dindex) (Astore x ord l v)
                                               (DepsFile.expr_deps  s1.(depf)  expr)
                                               (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl) ∅)
-          (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+          (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
           (UREGS : s2.(regf) = s1.(regf))
           (UDEPS : s2.(depf) = s1.(depf))
           (UECTRL : s2.(ectrl) = s1.(ectrl))
@@ -71,8 +71,8 @@ Section OCaml_Program.
           (LABELS : labels = [Afence ord])
           (II : instr = Instr.fence ord)
           (UPC   : s2.(pc) = s1.(pc) + 1)
-          (UG    : s2.(G) = add s1.(G) tid s1.(eindex) (Afence ord) ∅ ∅ s1.(ectrl) ∅)
-          (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+          (UG    : s2.(G) = add s1.(G) tid (s1.(eindex) + dindex) (Afence ord) ∅ ∅ s1.(ectrl) ∅)
+          (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
           (UREGS : s2.(regf) = s1.(regf))
           (UDEPS : s2.(depf) = s1.(depf))
           (UECTRL : s2.(ectrl) = s1.(ectrl))
@@ -83,10 +83,10 @@ Section OCaml_Program.
            (II : instr= Instr.update (Instr.cas expr_old expr_new) xmod ordr ordw reg lexpr)
            (UPC   : s2.(pc) = s1.(pc) + 1)
            (UG    : s2.(G) =
-                    add s1.(G) tid s1.(eindex) (Aload true ordr l val) ∅
+                    add s1.(G) tid (s1.(eindex) + dindex) (Aload true ordr l val) ∅
                                                (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl)
                                                                                           (DepsFile.expr_deps s1.(depf) expr_old))
-           (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+           (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
            (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
            (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
            (UECTRL : s2.(ectrl) = s1.(ectrl))
@@ -99,11 +99,11 @@ Section OCaml_Program.
             (UPC   : s2.(pc) = s1.(pc) + 1)
             (UG    : s2.(G) =
                      add_rmw s1.(G)
-                                  tid s1.(eindex) (Aload true ordr l expected) (Astore xmod ordw l new_value)
+                                  tid (s1.(eindex) + dindex) (Aload true ordr l expected) (Astore xmod ordw l new_value)
                                                   (DepsFile.expr_deps s1.(depf) expr_new)
                                                   (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl)
                                                                                              (DepsFile.expr_deps s1.(depf) expr_old))
-            (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+            (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
             (UREGS : s2.(regf) = RegFun.add reg expected s1.(regf))
             (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
             (UECTRL : s2.(ectrl) = s1.(ectrl))
@@ -114,13 +114,13 @@ Section OCaml_Program.
         (II : instr = Instr.update (Instr.fetch_add expr_add) xmod ordr ordw reg lexpr)
         (UPC   : s2.(pc) = s1.(pc) + 1)
         (UG    : s2.(G) =
-                 add_rmw s1.(G) tid s1.(eindex)
+                 add_rmw s1.(G) tid (s1.(eindex) + dindex)
                                          (Aload true ordr l val)
                                          (Astore xmod ordw l nval)
                                          ((eq (ThreadEvent tid s1.(eindex))) ∪₁ (DepsFile.expr_deps s1.(depf) expr_add))
                                          (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl)
                                                                                     ∅)
-        (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+        (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
         (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
         (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
         (UECTRL : s2.(ectrl) = s1.(ectrl))
@@ -133,23 +133,23 @@ Section OCaml_Program.
                                         xmod ordr ordw reg loc_expr)
              (UPC   : s2.(pc) = s1.(pc) + 1)
              (UG    : s2.(G) =
-                      add_rmw s1.(G) tid s1.(eindex)
+                      add_rmw s1.(G) tid (s1.(eindex) + dindex)
                                               (Aload true ordr loc old_value)
                                               (Astore xmod ordw loc new_value)
                                               (DepsFile.expr_deps s1.(depf) new_expr)
                                               (DepsFile.lexpr_deps s1.(depf) loc_expr)
                                               s1.(ectrl)
                                                    ∅)
-             (UINDEX : s2.(eindex) = s1.(eindex) + dindex)
+             (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
              (UREGS : s2.(regf) = RegFun.add reg old_value s1.(regf))
              (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
              (UECTRL : s2.(ectrl) = s1.(ectrl)).      
 
   Definition Oistep (tid : thread_id) (labels : list label) s1 s2 :=
     ⟪ INSTRS : s1.(instrs) = s2.(instrs) ⟫ /\
-    ⟪ ISTEP: exists instr dindex', 
+    ⟪ ISTEP: exists instr dindex, 
         Some instr = List.nth_error s1.(instrs) s1.(pc) /\
-        @Oistep_ tid labels s1 s2 instr (S dindex') (gt_Sn_O dindex')⟫.
+        @Oistep_ tid labels s1 s2 instr dindex⟫.
   
   Definition Ostep (tid : thread_id) s1 s2 :=
     exists lbls, Oistep tid lbls s1 s2.
