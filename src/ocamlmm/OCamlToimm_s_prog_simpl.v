@@ -578,13 +578,13 @@ Section OCamlMM_TO_IMM_S_PROG.
           { replace (pc sto) with (bpc bsti). eauto. }
           cut (ld = oinstr); [congruence| ].
           inversion COMP. vauto. }
-        pose proof (@Oload tid lbls sto sto' ld 1 (gt_Sn_O 0) Orlx reg lexpr val l) as OMM_STEP.
+        pose proof (@Oload tid lbls sto sto' ld 0 Orlx reg lexpr val l) as OMM_STEP.
         assert (ORD_RLX: ord = Orlx). 
         { subst ld. congruence. }
         rewrite ORD_RLX, REGF_EQ, DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. 
         forward eapply OMM_STEP; eauto.
-        { subst sto'. simpl. rewrite ORD_RLX, EINDEX_EQ. auto. }
-        { subst sto'. simpl. rewrite EINDEX_EQ. auto. }
+        { subst sto'. simpl. rewrite ORD_RLX, EINDEX_EQ, Nat.add_0_r. auto. }
+        { subst sto'. simpl. rewrite EINDEX_EQ, Nat.add_0_r.  auto. }
         { subst sto'. simpl. rewrite REGF_EQ. auto. }
         subst sto'. simpl. rewrite DEPF_EQ. auto. }
       assert (LAB_EQ: lab (G sto) = lab (G sti)).
@@ -714,12 +714,13 @@ Section OCamlMM_TO_IMM_S_PROG.
       inversion ISTEP1.
       all: rewrite II in EQ'.
       all: try discriminate.
-      rewrite EQ' in *. subst instr. 
+      rewrite EQ' in *. subst instr.
+      rename x into xmd. 
       set (sto'' :=
              {| instrs := instrs sto;
                 pc := pc sto' + 1;
                 (* G := add (G sto') tid (eindex sto') (Astore x ord0 l v) *)
-                G := add (G sto') tid (eindex sto' + 1) (Astore x ord0 l v)
+                G := add (G sto') tid (eindex sto' + 1) (Astore xmd ord0 l v)
                          (DepsFile.expr_deps (depf sto') expr)
                          (DepsFile.lexpr_deps (depf sto') lexpr) (ectrl sto') ∅;
                 eindex := eindex sto' + 2;
@@ -758,7 +759,7 @@ Section OCamlMM_TO_IMM_S_PROG.
 
         
         (* pose proof (@Ostore tid lbls0 sto sto'' st 2 (gt_Sn_O 1) Orlx loc val l v) as OMM_STEP. *)
-        pose proof (@Ostore tid lbls0 sto sto'' st 2 (gt_Sn_O 1) Orlx loc val l v) as OMM_STEP.
+        pose proof (@Ostore tid lbls0 sto sto'' st 1 Orlx loc val l v) as OMM_STEP.
 
         
         (* TODO: ???*)
@@ -768,9 +769,9 @@ Section OCamlMM_TO_IMM_S_PROG.
         (* TODO: modify equalities above to operate with sti' ? *)
         { rewrite REGF_EQ, <- UREGS. auto. }
         { rewrite REGF_EQ, <- UREGS. auto. }
-        { foobar. 
-          subst sto''. subst sto'. simpl. rewrite ORD_RLX, EINDEX_EQ.
-          unfold add at 1. simpl. basic_solver.  } }
+        { subst sto''. subst sto'. simpl. rewrite ORD_RLX, EINDEX_EQ.
+          unfold add at 1. simpl. basic_solver.  }
+        subst sto''. subst sto'. simpl. omega. }
       assert (LAB_EQ: lab (G sto) = lab (G sti)).
       { red in MM_SIM1. desc. vauto. }
       red. splits.
@@ -841,17 +842,25 @@ Section OCamlMM_TO_IMM_S_PROG.
             red in MM_SIM1. desc.
             replace (G sti) with (bG bsti) by vauto.
             rewrite <- set_inter_minus_r. auto. }
-          split; [| basic_solver].
+          split.
+          2: { admit. }
           apply set_subset_inter_r. split; [basic_solver| ].
           apply inclusion_minus. split; [basic_solver| ]. 
           subst nev. red. ins. red in H. desc. red. 
           forward eapply rmw_bibounded; eauto.
           ins. red in H1. desc.
           red in H0. desc. specialize (H1 x y).
-          pose proof (H1 H0). desc. 
-          rewrite <- H in H2. simpl in H2. omega. }
-        replace (bG bsti') with (G sti'); [| vauto ]. 
-        subst sto'. rewrite UG. simpl.
+
+          assert (rmw (G sti') x y) as RMW'xy. 
+          { assert (rmw (G sti') ≡ rmw (G sti)). 
+            { rewrite UG. vauto. }
+            apply (same_relation_exp H2). auto. }
+          
+          pose proof (H1 RMW'xy). desc. 
+          rewrite Heqnev' in H. rewrite <- H in H2. simpl in H2. omega. }
+        replace (bG bsti'') with (G sti''); [| vauto ]. 
+        subst sto''. rewrite UG0, UG. simpl.
+        rewrite LAB_EQ, EINDEX_EQ. 
         congruence. }
       { subst sto'. replace (bregf bsti') with (regf sti'); [| vauto ].
         simpl. congruence. }
