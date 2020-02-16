@@ -654,7 +654,213 @@ Section OCamlMM_TO_IMM_S_PROG.
         simpl. congruence. }
       { subst sto'. replace (beindex bsti') with (eindex sti'); [| vauto ].
         simpl. congruence. }
-      (* - .....*)
+    - remember (bst2st bsti) as sti. remember (bst2st bsti') as sti'.
+      apply (same_relation_exp (seqA _ _ _)) in BLOCK_STEP. 
+      rewrite (same_relation_exp (seq_id_l _)) in BLOCK_STEP.
+      rename sti' into sti''. rename bsti' into bsti''.
+      red in BLOCK_STEP. destruct BLOCK_STEP as [sti' [STEP' STEP'']]. 
+      assert (AT_PC: Some f = nth_error (instrs sti) (pc sti)).
+      { replace (instrs sti) with (flatten (binstrs bsti)).
+        2: { unfold bst2st in Heqsti. subst. auto. }
+        replace (pc sti) with (length (flatten (firstn (bpc bsti) (binstrs bsti)))).
+        2: { unfold bst2st in Heqsti. subst. auto. }
+        rewrite <- (firstn_skipn (bpc bsti) (binstrs bsti)) in AT_BLOCK. 
+        rewrite nth_error_app2 in AT_BLOCK.
+        2: { apply firstn_le_length. }
+        rewrite firstn_length_le in AT_BLOCK; [| omega]. 
+        rewrite Nat.sub_diag in AT_BLOCK.
+        rewrite (@flatten_split _ (binstrs bsti) (bpc bsti)); [| auto]. 
+        rewrite nth_error_app2; [| omega].
+        rewrite Nat.sub_diag.        
+        assert (forall {A: Type} l (x: A), Some x = nth_error l 0 -> exists l', l = x :: l'). 
+        { ins. destruct l; vauto. }
+        apply H in AT_BLOCK. desc.
+        rewrite AT_BLOCK. simpl. auto. }
+      assert (AT_PC': Some st = nth_error (instrs sti) (pc sti + 1)).
+      { replace (instrs sti) with (flatten (binstrs bsti)).
+        2: { unfold bst2st in Heqsti. subst. auto. }
+        replace (pc sti) with (length (flatten (firstn (bpc bsti) (binstrs bsti)))).
+        2: { unfold bst2st in Heqsti. subst. auto. }
+        rewrite <- (firstn_skipn (bpc bsti) (binstrs bsti)) in AT_BLOCK. 
+        rewrite nth_error_app2 in AT_BLOCK.
+        2: { apply firstn_le_length. }
+        rewrite firstn_length_le in AT_BLOCK; [| omega]. 
+        rewrite Nat.sub_diag in AT_BLOCK.
+        rewrite (@flatten_split _ (binstrs bsti) (bpc bsti)); [| auto]. 
+        rewrite nth_error_app2; [| omega].
+        rewrite minus_plus. 
+        assert (forall {A: Type} l (x: A), Some x = nth_error l 0 -> exists l', l = x :: l'). 
+        { ins. destruct l; vauto. }
+        apply H in AT_BLOCK. desc.
+        rewrite AT_BLOCK. simpl. auto. }      
+
+      red in STEP'. desc. red in STEP'. desc.
+      rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
+      inversion ISTEP0.
+      all: rewrite II in EQ.
+      all: try discriminate.
+      rewrite EQ in *. subst instr. 
+      set (sto' :=
+             {| instrs := instrs sto;
+                pc := pc sto;
+                G := G sto;
+                eindex := eindex sto;
+                regf := regf sto;
+                depf := depf sto;
+                ectrl := ectrl sto |}).
+
+      red in STEP''. desc. red in STEP''. desc.
+      rewrite <- INSTRS, UPC, <- AT_PC' in ISTEP. inversion ISTEP as [EQ']. clear ISTEP. 
+      inversion ISTEP1.
+      all: rewrite II in EQ'.
+      all: try discriminate.
+      rewrite EQ' in *. subst instr. 
+      set (sto'' :=
+             {| instrs := instrs sto;
+                pc := pc sto' + 1;
+                (* G := add (G sto') tid (eindex sto') (Astore x ord0 l v) *)
+                G := add (G sto') tid (eindex sto' + 1) (Astore x ord0 l v)
+                         (DepsFile.expr_deps (depf sto') expr)
+                         (DepsFile.lexpr_deps (depf sto') lexpr) (ectrl sto') ∅;
+                eindex := eindex sto' + 2;
+                regf := regf sto';
+                depf := depf sto';
+                ectrl := ectrl sto' |}).
+
+      red in MM_SIM. desc.
+      assert (REGF_EQ: regf sto = regf sti). 
+      { rewrite MM_SIM2. vauto. }
+      assert (DEPF_EQ: depf sto = depf sti). 
+      { rewrite MM_SIM3. vauto. }
+      assert (EINDEX_EQ: eindex sto = eindex sti). 
+      { rewrite MM_SIM5. vauto. }
+      assert (ECTRL_EQ: ectrl sto = ectrl sti). 
+      { rewrite MM_SIM4. vauto. }
+      
+      exists sto''. splits.
+      { red. exists lbls0. red. splits; [subst; simpl; auto| ].
+        exists st. exists 1. splits.
+        { assert (exists oinstr, Some oinstr = nth_error (instrs sto) (pc sto)).
+          { apply OPT_VAL. apply nth_error_Some.
+            rewrite MM_SIM0.
+            replace (length (instrs sto)) with (length (binstrs bsti)); auto. 
+            symmetry. apply compilation_same_length. auto. }
+          desc. pose proof (every_instruction_compiled MM_SIM (pc sto)).
+          forward eapply H0 as COMP; eauto.
+          { replace (pc sto) with (bpc bsti). eauto. }
+          cut (st = oinstr); [congruence| ].
+          inversion COMP. vauto. }
+        assert (ORD_RLX: ord0 = Orlx). 
+        { subst st. congruence. }
+        rewrite ORD_RLX in *. 
+        assert (Instr.store Orlx lexpr expr = Instr.store Orlx loc val) by vauto.
+        inversion H. subst lexpr. subst expr. clear H. 
+
+        
+        (* pose proof (@Ostore tid lbls0 sto sto'' st 2 (gt_Sn_O 1) Orlx loc val l v) as OMM_STEP. *)
+        pose proof (@Ostore tid lbls0 sto sto'' st 2 (gt_Sn_O 1) Orlx loc val l v) as OMM_STEP.
+
+        
+        (* TODO: ???*)
+        (* rewrite ORD_RLX, REGF_EQ, DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. *)
+        (*********)
+        forward eapply OMM_STEP; eauto.
+        (* TODO: modify equalities above to operate with sti' ? *)
+        { rewrite REGF_EQ, <- UREGS. auto. }
+        { rewrite REGF_EQ, <- UREGS. auto. }
+        { foobar. 
+          subst sto''. subst sto'. simpl. rewrite ORD_RLX, EINDEX_EQ.
+          unfold add at 1. simpl. basic_solver.  } }
+      assert (LAB_EQ: lab (G sto) = lab (G sti)).
+      { red in MM_SIM1. desc. vauto. }
+      red. splits.
+      { subst sto''. simpl. rewrite <- BINSTRS_SAME. auto. }
+      { subst sto''. simpl. destruct BPC' as [BPC' | BPC']. 
+         - rewrite BPC'. rewrite MM_SIM0. auto.
+         - desc. congruence. }
+      { red. splits.
+        { replace (bG bsti'') with (G sti'') by vauto.
+          rewrite (@E_ADD).
+          2: { repeat eexists. } 
+          rewrite (@E_ADD (G sti') (G sti'') tid (eindex sti + 1)).
+          2: { repeat eexists. rewrite <- UINDEX. eapply UG0. }
+          rewrite (@E_ADD (G sti) (G sti') tid (eindex sti)).
+          2: { repeat eexists. eapply UG. }
+          
+          assert (exists n_steps, (step tid) ^^ n_steps (init (instrs sti)) sti) as REACH.
+          { apply crt_num_steps. 
+            subst sti.
+            replace (init (instrs (bst2st bsti))) with (bst2st (binit (binstrs bsti))). 
+            { apply blockstep_implies_steps. auto. }
+            unfold bst2st, init. simpl. auto. }
+          desc. 
+          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid) as R_EXT; eauto. 
+          { apply r_pl. }
+          { forward eapply nonnop_bounded; eauto.
+            { generalize r_pl. eauto. }
+            vauto. } 
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid) as W_EXT; eauto. 
+          { apply w_pl. }
+          { forward eapply nonnop_bounded; eauto.
+            { generalize w_pl. eauto. }
+            vauto. } 
+          
+          assert (exists n_steps', (step tid) ^^ n_steps' (init (instrs sti')) sti') as REACH'.
+          { exists (n_steps + 1). rewrite Nat.add_1_r. apply step_prev.
+            exists sti. split.
+            { rewrite <- INSTRS. auto. }
+            red. exists lbls. red. splits; auto.
+            eexists. eauto. }
+          desc. 
+          forward eapply (@label_set_step (@is_r actid) r_matcher sti' sti'' tid) as R_EXT'; eauto. 
+          { apply r_pl. }
+          { forward eapply (@nonnop_bounded n_steps'); eauto.
+            { generalize r_pl. eauto. }
+            vauto. } 
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti' sti'' tid) as W_EXT'; eauto. 
+          { apply w_pl. }
+          { forward eapply (@nonnop_bounded n_steps'); eauto.
+            { generalize w_pl. eauto. }
+            vauto. } 
+
+          rewrite W_EXT', R_EXT', R_EXT, W_EXT. simpl in *.
+          arewrite (rmw (G sti'') ≡ rmw (G sti)).
+          { rewrite UG0, UG. vauto. }
+          rewrite EINDEX_EQ, !set_union_empty_r. 
+          remember (eq (ThreadEvent tid (eindex sti))) as nev.
+          rewrite UINDEX. remember (eq (ThreadEvent tid (eindex sti + 1))) as nev'.
+          rewrite <- set_unionA, set_unionA. 
+          rewrite set_inter_union_l. apply set_equiv_union.
+          { rewrite set_inter_minus_r.
+            arewrite (E (G sti) ∩₁ (RW (G sti) ∪₁ nev') ≡₁ E (G sti) ∩₁ RW (G sti)).
+            { rewrite set_inter_union_r. 
+              arewrite (E (G sti) ∩₁ nev' ≡₁ ∅); [| basic_solver ].
+              split; [| basic_solver].
+              rewrite E_bounded; eauto. vauto.
+              red. ins. red in H. desc. rewrite <- H0 in H. simpl in H. omega. }
+            red in MM_SIM1. desc.
+            replace (G sti) with (bG bsti) by vauto.
+            rewrite <- set_inter_minus_r. auto. }
+          split; [| basic_solver].
+          apply set_subset_inter_r. split; [basic_solver| ].
+          apply inclusion_minus. split; [basic_solver| ]. 
+          subst nev. red. ins. red in H. desc. red. 
+          forward eapply rmw_bibounded; eauto.
+          ins. red in H1. desc.
+          red in H0. desc. specialize (H1 x y).
+          pose proof (H1 H0). desc. 
+          rewrite <- H in H2. simpl in H2. omega. }
+        replace (bG bsti') with (G sti'); [| vauto ]. 
+        subst sto'. rewrite UG. simpl.
+        congruence. }
+      { subst sto'. replace (bregf bsti') with (regf sti'); [| vauto ].
+        simpl. congruence. }
+      { subst sto'. replace (bdepf bsti') with (depf sti'); [| vauto ].
+        simpl. congruence. }
+      { subst sto'. replace (bectrl bsti') with (ectrl sti'); [| vauto ].
+        simpl. congruence. }
+      { subst sto'. replace (beindex bsti') with (eindex sti'); [| vauto ].
+        simpl. congruence. }
       (* - .....*)
       (* - .....*)
       (* - .....*)
