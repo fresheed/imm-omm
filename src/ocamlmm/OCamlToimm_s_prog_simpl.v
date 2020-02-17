@@ -105,8 +105,8 @@ Section ThreadSeparatedGraph.
     
 
   Definition same_behavior_local (GO GI: execution) :=
-    ⟪RESTR_EVENTS: E GO ≡₁ E GI ∩₁ (RW GI \₁ dom_rel (GI.(rmw))) ⟫ /\
-    ⟪SAME_LAB: lab GO = lab GI ⟫. 
+    ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ (RW GI \₁ dom_rel (GI.(rmw))) ⟫ /\
+    ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫. 
 
   Definition same_behavior (GO GI: execution) :=
     ⟪SAME_LOCAL: same_behavior_local GO GI ⟫ /\
@@ -587,25 +587,27 @@ Section OCamlMM_TO_IMM_S_PROG.
         { subst sto'. simpl. rewrite EINDEX_EQ, Nat.add_0_r.  auto. }
         { subst sto'. simpl. rewrite REGF_EQ. auto. }
         subst sto'. simpl. rewrite DEPF_EQ. auto. }
-      assert (LAB_EQ: lab (G sto) = lab (G sti)).
-      { red in MM_SIM1. desc. vauto. }
+      (* assert (LAB_EQ: lab (G sto) = lab (G sti)). *)
+      (* { red in MM_SIM1. desc. vauto. } *)
       red. splits.
       { subst sto'. simpl. rewrite <- BINSTRS_SAME. auto. }
       {  subst sto'. simpl. destruct BPC' as [BPC' | BPC']. 
          - rewrite BPC'. rewrite MM_SIM0. auto.
          - desc. congruence. }
-      { red. splits.
+      { red.
+        assert (exists n_steps, (step tid) ^^ n_steps (init (instrs sti)) sti) as [n_steps REACH].
+        { apply crt_num_steps. 
+          subst sti.
+          replace (init (instrs (bst2st bsti))) with (bst2st (binit (binstrs bsti))). 
+          { apply blockstep_implies_steps. auto. }
+          unfold bst2st, init. simpl. auto. }
+        splits.
         { replace (bG bsti') with (G sti') by vauto.
           rewrite (@E_ADD).
           2: { repeat eexists. } 
           rewrite (@E_ADD (G sti) (G sti')).
           2: { repeat eexists. eapply UG. }
-          assert (exists n_steps, (step tid) ^^ n_steps (init (instrs sti)) sti) as REACH.
-          { apply crt_num_steps. 
-            subst sti.
-            replace (init (instrs (bst2st bsti))) with (bst2st (binit (binstrs bsti))). 
-            { apply blockstep_implies_steps. auto. }
-            unfold bst2st, init. simpl. auto. }
+
           desc. 
           forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid) as R_EXT; eauto. 
           { apply r_pl. }
@@ -643,9 +645,25 @@ Section OCamlMM_TO_IMM_S_PROG.
           red in H0. desc. specialize (H1 x y).
           pose proof (H1 H0). desc. 
           rewrite <- H in H2. simpl in H2. omega. }
+        (* **** *)
         replace (bG bsti') with (G sti'); [| vauto ]. 
         subst sto'. rewrite UG. simpl.
-        congruence. }
+        ins. unfold add, acts_set in EGOx. simpl in EGOx.
+        red in MM_SIM. rewrite <- EINDEX_EQ. destruct EGOx.
+        + rewrite H. do 2 rewrite upds. auto.
+        + assert (x <> ThreadEvent tid (eindex sto)) as NEQ.
+          { red. ins. rewrite H0 in H.
+            forward eapply E_bounded as BOUND; eauto.
+            rewrite  EINDEX_EQ in H0, H.
+            assert (E (G sti) x) as EGIx.
+            { red in MM_SIM1. desc. red in RESTR_EVENTS. desc.
+              red in RESTR_EVENTS. forward eapply (RESTR_EVENTS x); vauto.
+              basic_solver. }
+            red in BOUND. specialize (BOUND x EGIx).
+            rewrite H0 in BOUND. simpl in BOUND. omega. }
+          rewrite updo; auto. rewrite updo; auto. 
+          red in MM_SIM1. desc. replace (G sti) with (bG bsti); [| vauto ]. 
+          apply SAME_LAB. auto. }
       { subst sto'. replace (bregf bsti') with (regf sti'); [| vauto ].
         simpl. congruence. }
       { subst sto'. replace (bdepf bsti') with (depf sti'); [| vauto ].
@@ -772,14 +790,25 @@ Section OCamlMM_TO_IMM_S_PROG.
         { subst sto''. subst sto'. simpl. rewrite ORD_RLX, EINDEX_EQ.
           unfold add at 1. simpl. basic_solver.  }
         subst sto''. subst sto'. simpl. omega. }
-      assert (LAB_EQ: lab (G sto) = lab (G sti)).
-      { red in MM_SIM1. desc. vauto. }
       red. splits.
       { subst sto''. simpl. rewrite <- BINSTRS_SAME. auto. }
       { subst sto''. simpl. destruct BPC' as [BPC' | BPC']. 
          - rewrite BPC'. rewrite MM_SIM0. auto.
          - desc. congruence. }
-      { red. splits.
+      { red.
+        assert (exists n_steps, (step tid) ^^ n_steps (init (instrs sti)) sti) as [n_steps REACH].
+        { apply crt_num_steps. 
+          subst sti.
+          replace (init (instrs (bst2st bsti))) with (bst2st (binit (binstrs bsti))). 
+          { apply blockstep_implies_steps. auto. }
+          unfold bst2st, init. simpl. auto. }
+          assert (exists n_steps', (step tid) ^^ n_steps' (init (instrs sti')) sti') as [n_steps' REACH'].
+          { exists (n_steps + 1). rewrite Nat.add_1_r. apply step_prev.
+            exists sti. split.
+            { rewrite <- INSTRS. auto. }
+            red. exists lbls. red. splits; auto.
+            eexists. eauto. }        
+        splits.
         { replace (bG bsti'') with (G sti'') by vauto.
           rewrite (@E_ADD).
           2: { repeat eexists. } 
@@ -788,30 +817,18 @@ Section OCamlMM_TO_IMM_S_PROG.
           rewrite (@E_ADD (G sti) (G sti') tid (eindex sti)).
           2: { repeat eexists. eapply UG. }
           
-          assert (exists n_steps, (step tid) ^^ n_steps (init (instrs sti)) sti) as REACH.
-          { apply crt_num_steps. 
-            subst sti.
-            replace (init (instrs (bst2st bsti))) with (bst2st (binit (binstrs bsti))). 
-            { apply blockstep_implies_steps. auto. }
-            unfold bst2st, init. simpl. auto. }
           desc. 
           forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid) as R_EXT; eauto. 
           { apply r_pl. }
-          { forward eapply nonnop_bounded; eauto.
+          { forward eapply (@nonnop_bounded n_steps); eauto.
             { generalize r_pl. eauto. }
             vauto. } 
           forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid) as W_EXT; eauto. 
           { apply w_pl. }
-          { forward eapply nonnop_bounded; eauto.
+          { forward eapply (@nonnop_bounded n_steps); eauto.
             { generalize w_pl. eauto. }
             vauto. } 
           
-          assert (exists n_steps', (step tid) ^^ n_steps' (init (instrs sti')) sti') as REACH'.
-          { exists (n_steps + 1). rewrite Nat.add_1_r. apply step_prev.
-            exists sti. split.
-            { rewrite <- INSTRS. auto. }
-            red. exists lbls. red. splits; auto.
-            eexists. eauto. }
           desc. 
           forward eapply (@label_set_step (@is_r actid) r_matcher sti' sti'' tid) as R_EXT'; eauto. 
           { apply r_pl. }
@@ -860,9 +877,24 @@ Section OCamlMM_TO_IMM_S_PROG.
           rewrite Heqnev' in H. rewrite <- H in H2. simpl in H2. omega. }
         replace (bG bsti'') with (G sti''); [| vauto ]. 
         subst sto''. rewrite UG0, UG. simpl.
-        rewrite LAB_EQ, EINDEX_EQ. 
-        (* congruence. *) admit. 
-      }
+        ins. unfold add, acts_set in EGOx. simpl in EGOx.
+        rewrite UINDEX, <- EINDEX_EQ.
+        destruct EGOx.
+        + rewrite H. do 2 rewrite upds. auto.
+        + assert (index x < eindex sto) as NEQ.
+          { destruct (Const.lt_decidable (index x) (eindex sto)); auto.
+            exfalso. 
+            forward eapply (@E_bounded n_steps tid sti) as BOUND; eauto.
+            assert (E (G sti) x) as EGIx.
+            { red in MM_SIM1. desc. red in RESTR_EVENTS. desc.
+              red in RESTR_EVENTS. forward eapply (RESTR_EVENTS x); vauto.
+              basic_solver. }
+            red in BOUND. specialize (BOUND x EGIx).
+            omega. }
+          rewrite updo. rewrite updo. rewrite updo.
+          2, 3, 4: red; ins; rewrite H0 in NEQ; simpl in NEQ; omega.
+          red in MM_SIM1. desc. replace (G sti) with (bG bsti); [| vauto ]. 
+          apply SAME_LAB. auto. }
       { subst sto'. replace (bregf bsti'') with (regf sti''); [| vauto ].
         simpl. congruence. }
       { subst sto'. replace (bdepf bsti'') with (depf sti''); [| vauto ].
