@@ -861,19 +861,21 @@ Section OCamlMM_TO_IMM_S_PROG.
         replace (bG bsti'') with (G sti''); [| vauto ]. 
         subst sto''. rewrite UG0, UG. simpl.
         rewrite LAB_EQ, EINDEX_EQ. 
-        congruence. }
-      { subst sto'. replace (bregf bsti') with (regf sti'); [| vauto ].
+        (* congruence. *) admit. 
+      }
+      { subst sto'. replace (bregf bsti'') with (regf sti''); [| vauto ].
         simpl. congruence. }
-      { subst sto'. replace (bdepf bsti') with (depf sti'); [| vauto ].
+      { subst sto'. replace (bdepf bsti'') with (depf sti''); [| vauto ].
         simpl. congruence. }
-      { subst sto'. replace (bectrl bsti') with (ectrl sti'); [| vauto ].
+      { subst sto'. replace (bectrl bsti'') with (ectrl sti''); [| vauto ].
         simpl. congruence. }
-      { subst sto'. replace (beindex bsti') with (eindex sti'); [| vauto ].
-        simpl. congruence. }
+      { subst sto'. replace (beindex bsti'') with (eindex sti''); [| vauto ].
+        simpl. rewrite UINDEX0, UINDEX. omega. }
       (* - .....*)
       (* - .....*)
       (* - .....*)
   Admitted.
+  
   Lemma init_mm_same: forall PO BPI (COMP: is_thread_block_compiled PO BPI),
       mm_similar_states (init PO) (binit BPI).
   Proof.
@@ -1539,11 +1541,32 @@ Qed.
     ⟪NO_RMWDEP: rmw_dep GO ≡ ∅₂ ⟫.
   Proof. Admitted.     
 
+  Lemma SUPSET_RESTR {A: Type} (r1 r2: relation A) S (INCL: r1 ⊆ r2) (RESTR: r2 ≡ ⦗S⦘ ⨾ r2 ⨾ ⦗S⦘):
+    r1 ≡ ⦗S⦘ ⨾ r1 ⨾ ⦗S⦘. 
+  Proof.
+    ins. split; [| basic_solver].
+    red. ins. apply seq_eqv_lr.
+    red in RESTR. desc. red in RESTR.
+    red in INCL. 
+    pose proof (INCL x y H) as R2.
+    specialize (RESTR x y R2). apply seq_eqv_lr in RESTR. desc.
+    splits; auto.
+  Qed.
+
+  Lemma RESTR_SEQ (r1 r2: relation actid) (D: actid -> Prop):
+    restr_rel D r1 ⨾ restr_rel D r2 ⊆ restr_rel D (r1 ⨾ r2). 
+  Proof. ins. basic_solver. Qed.
+
+  Lemma wf_init_same_beh GO GI (SB: same_behavior GO GI) (WF: Wf GI):
+    forall l, lab GO (InitEvent l) = Astore Xpln Opln l 0.
+  Proof. Admitted. 
+  
   Lemma Wf_subgraph GO GI (SB: same_behavior GO GI) (WF: Wf GI): Wf GO.
   Proof.
     pose proof SB as SB'. 
     pose proof (same_beh_implies_similar_rels SB). 
     red in SB. desc. red in SAME_LOCAL. desc.
+    clear SAME_LAB. assert (SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x) by admit. 
     symmetry in SAME_CO.
     assert (forall (r1 r2 r3: relation actid), r1 ⊆ r2 -> r1 \ r3 ⊆ r2 \r3) as MINUS_INCL. 
     { ins. basic_solver. }
@@ -1569,75 +1592,162 @@ Qed.
       unfold RWO. 
       seq_rewrite set_inter_minus_r.
       arewrite (R GI ∩₁ RW GI ≡₁ R GI) by basic_solver. }
-    split. 
-    all: (try seq_rewrite DATA_SIM; try seq_rewrite CTRL_SIM;
-          try seq_rewrite ADDR_SIM; try seq_rewrite SB_SIM;
-          try seq_rewrite SAME_CO;  try seq_rewrite RF_SIM;
-          try seq_rewrite Rex_SAME;
-          try seq_rewrite NO_RMW; try seq_rewrite NO_RMWDEP;
-          try rewrite SAME_LAB).
-    12: { rewrite RESTR_EVENTS.
-          rewrite set_interC at 2. 
-          rewrite !id_inter.
-          rewrite seqA.
-          seq_rewrite <- restr_relE.
-          arewrite (restr_rel (RWO GI) (restr_rel (RWO GI) (rf GI)) ≡ restr_rel (RWO GI) (rf GI)) by basic_solver.          
-          rewrite <- restr_relE.
-          rewrite restrC.
-          rewrite restr_relE with (d := E GI). rewrite <- wf_rfE.
-          basic_solver. }
-    all: try vauto.
-    9, 17: basic_solver. 
-    all: try (apply restr_rel_mori; auto). 
-    1: { ins. des.
-         specialize (wf_index a b). forward eapply wf_index; auto.
-         destruct RESTR_EVENTS as [EGO_EGI _]. red in EGO_EGI.
-         splits; auto.
-         { specialize (EGO_EGI a H). red in EGO_EGI. desc. auto. } 
-         specialize (EGO_EGI b H0). red in EGO_EGI. desc. auto. }
-    { rewrite wf_dataD at 1. rewrite restr_seq_eqv_l, restr_seq_eqv_r. auto. }    
-    { rewrite wf_addrD at 1. rewrite restr_seq_eqv_l, restr_seq_eqv_r. auto. }    
-    { rewrite wf_ctrlD at 1. rewrite restr_seq_eqv_l. auto. }    
-    { assert (forall (r1 r2: relation actid) (D: actid -> Prop),
-                 restr_rel D r1 ⨾ restr_rel D r2 ⊆ restr_rel D (r1 ⨾ r2)).
-      { ins. basic_solver. }
-      rewrite H. apply restr_rel_mori; auto. }
-    { rewrite wf_rfD at 1. rewrite restr_seq_eqv_l, restr_seq_eqv_r. auto. }
-    { apply inclusion_restr_rel_l. auto. }
-    { apply funeq_restr. auto. }
-    { rewrite restr_relE. rewrite !transp_seq.
+    assert (co GO ≡ ⦗E GO⦘ ⨾ co GO ⨾ ⦗E GO⦘) as ECO. 
+    { rewrite RESTR_EVENTS, SAME_CO.
+      rewrite !id_inter. rewrite seq_eqvC. rewrite seqA. rewrite seq_eqvC.
+      seq_rewrite <- wf_coE.
+      split; [| basic_solver].
+      rewrite wf_coD at 1.
+      assert (W GI ⊆₁ RW GI \₁ dom_rel (rmw GI)).
+      { apply inclusion_minus. split; [basic_solver |].
+        rewrite wf_rmwD. type_solver. }
+      apply seq_mori.
+      { apply eqv_rel_mori. auto. }
+      apply seq_mori; [basic_solver|].
+      apply eqv_rel_mori. auto. }
+    assert (rf GO ≡ ⦗E GO⦘ ⨾ rf GO ⨾ ⦗E GO⦘) as ERF. 
+    { rewrite RF_SIM, RESTR_EVENTS. fold (RWO GI).
+      rewrite set_interC at 1. do 2 rewrite id_inter.
+      rewrite !seqA. do 2 seq_rewrite <- restr_relE.
+      rewrite restrC with (d' := (RWO GI)). rewrite restr_restr, set_interK.
+      apply restr_rel_more; [basic_solver|].
+      rewrite restr_relE. auto. }
+
+    assert (DATA_INCL: data GO ⊆ sb GO).
+    { rewrite DATA_SIM, SB_SIM. apply restr_rel_mori; basic_solver. }
+    assert (ADDR_INCL: addr GO ⊆ sb GO).
+    { rewrite ADDR_SIM, SB_SIM. apply restr_rel_mori; basic_solver. }
+    assert (CTRL_INCL: ctrl GO ⊆ sb GO).
+    { rewrite CTRL_SIM, SB_SIM. apply restr_rel_mori; basic_solver. }
+    assert (W_SIM: E GO ∩₁ W GO ≡₁ E GO ∩₁ W GI).
+    { apply set_equiv_exp_iff.
+      ins. split.
+      { ins. red in H. desc. red. split; auto.
+        unfold is_w. rewrite <- (SAME_LAB); auto. }
+      { ins. red in H. desc. red. split; auto.
+        unfold is_w. rewrite (SAME_LAB); auto. } }
+    assert (R_SIM: E GO ∩₁ R GO ≡₁ E GO ∩₁ R GI).
+    { apply set_equiv_exp_iff.
+      ins. split.
+      { ins. red in H. desc. red. split; auto.
+        unfold is_r. rewrite <- (SAME_LAB); auto. }
+      { ins. red in H. desc. red. split; auto.
+        unfold is_r. rewrite (SAME_LAB); auto. } }
+    assert (RW_SIM: E GO ∩₁ RW GO ≡₁ E GO ∩₁ RW GI).
+    { rewrite !set_inter_union_r. rewrite W_SIM, R_SIM. auto. }
+
+    split; vauto.
+    all: try (seq_rewrite NO_RMW; basic_solver). 
+    all: try (seq_rewrite NO_RMWDEP; basic_solver). 
+    { ins. des.
+      specialize (wf_index a b). forward eapply wf_index; auto.
+      destruct RESTR_EVENTS as [EGO_EGI _]. red in EGO_EGI.
+      splits; auto.
+      { specialize (EGO_EGI a H). red in EGO_EGI. desc. auto. } 
+      specialize (EGO_EGI b H0). red in EGO_EGI. desc. auto. }
+    { rewrite (@SUPSET_RESTR _ (data GO) (sb GO) (E GO)); auto.
+      2: { unfold Execution.sb. basic_solver. }
+      rewrite !seqA. do 2 seq_rewrite <- id_inter. rewrite set_interC.
+      rewrite W_SIM, R_SIM.
+      rewrite set_interC with (s' := W GI). do 2 seq_rewrite id_inter.
+      rewrite !seqA. seq_rewrite <- restr_relE.
+      rewrite <- seqA with (r2 := ⦗W GI⦘). rewrite <- seqA with (r1 := ⦗R GI⦘).
+      seq_rewrite <- restr_relE. apply restr_rel_more; auto. 
+      rewrite DATA_SIM. rewrite <- restr_seq_eqv_r, <- restr_seq_eqv_l. 
+      apply restr_rel_more; auto. }
+    { rewrite (@SUPSET_RESTR _ (addr GO) (sb GO) (E GO)); auto.
+      2: { unfold Execution.sb. basic_solver. }
+      rewrite !seqA. do 2 seq_rewrite <- id_inter. rewrite set_interC.
+      rewrite R_SIM, RW_SIM.
+      rewrite set_interC with (s' := RW GI). do 2 seq_rewrite id_inter.
+      rewrite !seqA. seq_rewrite <- restr_relE.
+      rewrite <- seqA with (r2 := ⦗RW GI⦘). rewrite <- seqA with (r1 := ⦗R GI⦘).
+      seq_rewrite <- restr_relE. apply restr_rel_more; auto. 
+      rewrite ADDR_SIM. rewrite <- restr_seq_eqv_r, <- restr_seq_eqv_l. 
+      apply restr_rel_more; auto. }
+    { rewrite <- (seq_id_r (ctrl GO)) at 2.  
+      rewrite (@SUPSET_RESTR _ (ctrl GO) (sb GO) (E GO)); auto.
+      2: { unfold Execution.sb. basic_solver. }
+      rewrite !seqA. do 2 seq_rewrite <- id_inter. rewrite set_interC.
+      rewrite R_SIM. (* TRUE_SIM. *)
+      rewrite set_interC with (s' := (fun _ : actid => True)). do 2 seq_rewrite id_inter.
+      rewrite !seqA. seq_rewrite <- restr_relE.
+      rewrite <- seqA with (r2 := ⦗fun _ : actid => True⦘). rewrite <- seqA with (r1 := ⦗R GI⦘).
+      seq_rewrite <- restr_relE. apply restr_rel_more; auto. 
+      rewrite CTRL_SIM. rewrite <- restr_seq_eqv_r, <- restr_seq_eqv_l.
+      rewrite seq_id_r. 
+      apply restr_rel_more; auto. }
+    { rewrite CTRL_SIM, SB_SIM. rewrite RESTR_SEQ. apply restr_rel_mori; auto. }
+    { rewrite ERF. rewrite RF_SIM.
+      rewrite !seqA. do 2 seq_rewrite <- id_inter.
+      rewrite set_interC. rewrite W_SIM, R_SIM.
+      rewrite set_interC with (s' := R GI). rewrite !id_inter.
+      rewrite !seqA. seq_rewrite <- !restr_relE.
+      rewrite <- seqA with  (r3 := ⦗E GO⦘). rewrite <- seqA with  (r1 := ⦗W GI⦘).
+      seq_rewrite <- restr_relE. apply restr_rel_more; [basic_solver|].
+      rewrite <- restr_seq_eqv_r, <- restr_seq_eqv_l.
+      apply restr_rel_more; [basic_solver|]. auto. }
+    { rewrite ERF. red. ins.
+      apply seq_eqv_lr in H. desc.
+      red.
+      rewrite (same_relation_exp EXT_RF) in H0. apply seq_eqv_r in H0. desc. 
+      replace (loc (lab GO) x) with (loc (lab GI) x).
+      replace (loc (lab GO) y) with (loc (lab GI) y).
+      apply wf_rfl; auto.
+      all: unfold loc; rewrite SAME_LAB; auto. }
+    { red. ins.
+      rewrite (same_relation_exp ERF) in H. apply seq_eqv_lr in H. desc.
+      rewrite (same_relation_exp EXT_RF) in H0. apply seq_eqv_r in H0. desc.
+      replace (val (lab GO) a) with (val (lab GI) a).
+      replace (val (lab GO) b) with (val (lab GI) b).
+      apply wf_rfv; auto. 
+      all: unfold val; rewrite SAME_LAB; auto. }
+    { rewrite RF_SIM. rewrite restr_relE. rewrite !transp_seq.
       rewrite !transp_eqv_rel. rewrite seqA, <- restr_relE.
       apply functional_restr. auto. }
-    1: { rewrite RESTR_EVENTS.
-         rewrite set_interC at 1. rewrite !id_inter.
-         rewrite seqA. seq_rewrite <- wf_coE.
-         rewrite wf_coD at 2.
-         assert (forall (r: relation actid) D1 D2, restr_rel D1 (restr_rel D2 r) ≡ restr_rel (D1 ∩₁ D2) r).
-         { ins. basic_solver. }
-         rewrite wf_coD at 1. 
-         rewrite <- !restr_relE. rewrite H.
-         apply restr_rel_more; [| basic_solver].
-         split; [| basic_solver].
-         rewrite set_inter_minus_l.
-         rewrite wf_rmwD.
-         arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
-         apply empty_inter_minus_same.
-         type_solver. }
+    { rewrite ECO at 2.
+      rewrite !seqA. do 2 seq_rewrite <- id_inter.
+      rewrite set_interC. rewrite W_SIM.
+      rewrite set_interC at 2. do 2 rewrite id_inter.
+      rewrite SAME_CO at 2. rewrite !seqA. seq_rewrite <- wf_coD.
+      rewrite <- SAME_CO. apply ECO. }
+    { rewrite ECO. red. ins.
+      apply seq_eqv_lr in H. desc.
+      red.
+      rewrite (same_relation_exp SAME_CO) in H0.
+      replace (loc (lab GO) x) with (loc (lab GI) x).
+      replace (loc (lab GO) y) with (loc (lab GI) y).
+      apply wf_col; auto.
+      all: unfold loc; rewrite SAME_LAB; auto. }
+    { rewrite SAME_CO. auto. }
     { ins. specialize (wf_co_total ol).
-         forward eapply (@is_total_more _ (E GI ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol)) (E GO ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol))).
-         { apply set_equiv_inter; [| basic_solver].
-           rewrite RESTR_EVENTS.
-           rewrite set_interA. rewrite set_inter_minus_l.
-           arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
-           rewrite empty_inter_minus_same; [auto| ]. 
-           rewrite wf_rmwD. type_solver. }
-         { symmetry. eapply SAME_CO. }
-         intros [impl _]. apply impl. auto. }
-    ins.
-    eapply SAME_INIT; eauto. 
-    apply wf_init. desc.
-    exists b. split; auto.
-    apply (proj1 RESTR_EVENTS). auto. 
+      forward eapply (@is_total_more _ (E GI ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol)) (E GO ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol))).
+      { apply set_equiv_inter; [| basic_solver].
+        rewrite RESTR_EVENTS.
+        rewrite set_interA. rewrite set_inter_minus_l.
+        arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
+        rewrite empty_inter_minus_same; [auto| ]. 
+        rewrite wf_rmwD. type_solver. }
+      { symmetry. eapply SAME_CO. }
+      intros [impl _].
+      arewrite (E GO ∩₁ W GO ∩₁ (fun x : actid => loc (lab GO) x = ol) ≡₁ E GO ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol)). 
+      2: { apply impl. auto. }
+      rewrite W_SIM.
+      apply set_equiv_exp_iff. ins. split.
+      { ins. desc. red in H. desc. red in H. desc.
+        red. split; [basic_solver|].
+        rewrite <- H0. unfold loc. rewrite SAME_LAB; auto. } 
+      { ins. desc. red in H. desc. red in H. desc.
+        red. split; [basic_solver|].
+        rewrite <- H0. unfold loc. rewrite SAME_LAB; auto. } }
+    { rewrite SAME_CO. auto. }
+    { ins.
+      eapply SAME_INIT; eauto. 
+      apply wf_init. desc.
+      exists b. split; auto.
+      apply (proj1 RESTR_EVENTS). auto.
+      rewrite <- H0. unfold loc. rewrite SAME_LAB; auto. }
+    eapply wf_init_same_beh; eauto. 
   Qed. 
 
 
