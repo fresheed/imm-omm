@@ -1403,10 +1403,11 @@ Qed.
   Admitted. 
     
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
-        SGI (ExI: thread_execution tid PI SGI) (WFL: Wf_local SGI):
+        SGI (ExI: thread_execution tid PI SGI) (* (WFL: Wf_local SGI) *):
     exists SGO, Othread_execution tid PO SGO /\
-           same_behavior_local SGO SGI /\
-           Wf_local SGO. 
+           same_behavior_local SGO SGI
+           (* /\ Wf_local SGO *)
+  . 
   Proof.
     red in ExI. destruct ExI as [sti_fin ExI]. desc.
     apply (@crt_num_steps _ (step tid) (init PI) sti_fin) in STEPS as [n_isteps ISTEPS].
@@ -1495,9 +1496,9 @@ Qed.
       apply BLOCK_TERM. }
     { red in MM_SIM. desc.
       replace SGI with (bG bsti_fin); auto. }
-    red in MM_SIM. desc.
-    apply (Wfl_subgraph MM_SIM1).
-    replace (bG bsti_fin) with SGI; auto.
+    (* red in MM_SIM. desc. *)
+    (* apply (Wfl_subgraph MM_SIM1). *)
+    (* replace (bG bsti_fin) with SGI; auto. *)
   Qed.
 
   Definition RWO GI := (RW GI \₁ dom_rel (rmw GI)). 
@@ -2086,8 +2087,8 @@ Section CompilationCorrectness.
     apply find_iff_in in THREAD. destruct THREAD as [Gi THREAD_EXEC]. 
     specialize (THREAD_GRAPH_EXEC tid Pi THREAD_PROGI Gi THREAD_EXEC). 
     forward eapply thread_execs; eauto.
-    { pose proof (proj1 (Wf_tsg (tsg2g TSGI))). apply H in WFG. desc.
-      eapply WFG. rewrite (proj2 tsg_g_bijection). eauto. }
+    (* { pose proof (proj1 (Wf_tsg (tsg2g TSGI))). apply H in WFG. desc. *)
+    (*   eapply WFG. rewrite (proj2 tsg_g_bijection). eauto. } *)
     ins. unfold P. destruct H as [GOi GOi_PROPS].
     exists GOi. ins.
     (* TODO: correct this duplication? *)
