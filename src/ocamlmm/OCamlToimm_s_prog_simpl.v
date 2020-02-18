@@ -1589,15 +1589,12 @@ Qed.
   Lemma SAME_INIT GO GI (SB: same_behavior GO GI): forall l, E GO (InitEvent l) <-> E GI (InitEvent l). 
   Proof. Admitted. 
 
-  Lemma ocaml_no_rmw_tmp GO GI (SB: same_behavior GO GI):
-    GO.(rmw) ≡ ∅₂.
-  Proof. Admitted.
-  
   Lemma same_beh_implies_similar_intrarels GO GI (SB: same_behavior GO GI):
     ⟪DATA_SIM: data GO ≡ restr_rel (RWO GI) (data GI) ⟫ /\
     ⟪CTRL_SIM: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI) ⟫ /\ 
     ⟪ADDR_SIM: addr GO ≡ restr_rel (RWO GI) (addr GI) ⟫ /\
     ⟪SB_SIM: sb GO ≡ restr_rel (RWO GI) (sb GI) ⟫ /\
+    ⟪NO_RMW: rmw GO ≡ ∅₂ ⟫ /\
     ⟪NO_RMWDEP: rmw_dep GO ≡ ∅₂ ⟫.
   Proof. Admitted.     
 
@@ -1673,7 +1670,6 @@ Qed.
     (* TODO: should we include addr, ctrl equality in same_behavior? *)
     pose proof (same_beh_implies_similar_intrarels SB'). desc. 
     inversion WF. 
-    pose proof (ocaml_no_rmw_tmp SB') as NO_RMW. 
     assert (rf GO ≡ restr_rel (RWO GI) (rf GI)) as RF_SIM. 
     { rewrite EXT_RF. rewrite wf_rfD. rewrite restr_relE.
       rewrite !seqA.
@@ -2167,15 +2163,12 @@ Section CompilationCorrectness.
     restr_rel A r \ restr_rel B r' ≡ r. 
   Proof. Admitted. 
     
-  Lemma ocaml_no_rmw GO (ExecO: Oprogram_execution OCamlProgO GO):
-    GO.(rmw) ≡ ∅₂.
-  Proof. Admitted.
-
   Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI)
         (ExecO: Oprogram_execution OCamlProgO GO):
     ocaml_consistent GO.
   Proof.
-    pose proof (same_beh_implies_similar_rels SB). 
+    pose proof (same_beh_implies_similar_rels SB).
+    pose proof (same_beh_implies_similar_intrarels SB) as SIMILAR_INTRA. 
     pose proof (Wf_subgraph SB WFI) as WFO. 
     red in SB. desc. red in SAME_LOCAL. desc.
     assert (HBO': hbo GO ⊆ hbo GI).
@@ -2209,7 +2202,7 @@ Section CompilationCorrectness.
       rewrite set_minusE.
       apply set_subset_inter; [| basic_solver].
       vauto. }
-    { red. seq_rewrite ocaml_no_rmw; auto. basic_solver. }
+    { red. arewrite (rmw GO ≡ ∅₂); basic_solver. }
     { rewrite HBO', (same_relation_sym SAME_CO). desc.  auto. }
     { unfold fr. rewrite HBO', (same_relation_sym SAME_CO). 
       arewrite (rf GO ⊆ rf GI) by rewrite EXT_RF; auto. 
