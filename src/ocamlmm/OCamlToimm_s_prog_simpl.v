@@ -490,20 +490,32 @@ Section OCamlMM_TO_IMM_S_PROG.
   Lemma bs_extract bst bst' tid (OSEQ_STEP: omm_block_step tid bst bst'):
     block_step tid bst bst'.
   Proof. do 2 (red in OSEQ_STEP; desc). vauto. Qed.
+
+  Lemma same_relation_exp_iff {A: Type} (r r': relation A):
+    r ≡ r' <-> (forall x y, r x y <-> r' x y).
+  Proof.
+    red. split.
+    { apply same_relation_exp. }
+    ins. red. split.
+    all: red; ins; apply H; auto.
+  Qed.  
    
-  Lemma blockstep_implies_steps bst1 bst2 tid (OSEQ: (block_step tid)＊ bst1 bst2): 
+  Lemma blockstep_implies_steps bst1 bst2 tid
+        (BLOCK_STEPS: (block_step tid)＊ bst1 bst2): 
     (step tid)＊ (bst2st bst1) (bst2st bst2). 
   Proof.
-    
-    (* unfold block_step in OSEQ. simpl in OSEQ.  *)
-    (* forward eapply (@hahn_inclusion_exp _ (oseq_step tid)＊ (step tid)＊); eauto. *)
-    (* apply inclusion_rt_rt2. *)
-    (* unfold oseq_step. *)
-    (* red. intros x y [block [_ STEPS]]. *)
-    (* apply crt_num_steps. *)
-    (* eauto. *)
-    (* Qed. *)
-  Admitted. 
+    apply crt_num_steps. apply crt_num_steps in BLOCK_STEPS. desc.
+    generalize dependent bst1. generalize dependent bst2. induction n.
+    { ins. red in BLOCK_STEPS. desc.
+      exists 0. apply steps0. congruence. }
+    ins. red in BLOCK_STEPS. destruct BLOCK_STEPS as [bst' [BLOCK_STEPS1 BLOCK_STEPS2]].
+    specialize (IHn _ _ BLOCK_STEPS1). destruct IHn as [n' STEPS1].
+    red in BLOCK_STEPS2. desc. red in BLOCK_STEPS2. desc. 
+    exists (n' + length block).
+    forward eapply (steps_split (step tid) n' (length block) _ (bst2st bst1) (bst2st bst2)) as SPLIT; auto. 
+    apply SPLIT. exists (bst2st bst'). split; auto.
+    Unshelve. auto.
+  Qed. 
 
   Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
         tid bsti' (OSEQ_STEP: omm_block_step tid bsti bsti')
@@ -860,7 +872,29 @@ Section OCamlMM_TO_IMM_S_PROG.
             replace (G sti) with (bG bsti) by vauto.
             rewrite <- set_inter_minus_r. auto. }
           split.
-          2: { admit. }
+          2: { rewrite set_inter_union_l. apply set_subset_union_l.
+               split; [| basic_solver].
+               rewrite set_inter_minus_r. rewrite set_inter_union_r.
+               arewrite (nev ∩₁ nev' ≡₁ ∅).
+               { subst. red. split; [| basic_solver].
+                 red. ins. red in H. desc. rewrite <- H in H0.
+                 inversion H0. omega. }
+               arewrite (nev ∩₁ RW (G sti) ≡₁ ∅).
+               2: basic_solver.
+               red. split; [| basic_solver]. 
+               red. ins. red in H. desc. rewrite Heqnev in H.
+               red in H0. destruct H0.
+               + forward eapply (@nonnop_bounded n_steps (@is_r actid) r_matcher sti tid) as R_BOUNDED; eauto. 
+               { apply r_pl. }
+               { red. vauto. }
+                 do 2 red in R_BOUNDED. specialize (R_BOUNDED x H0).
+                 rewrite <- H in R_BOUNDED. simpl in R_BOUNDED. omega.
+               + forward eapply (@nonnop_bounded n_steps (@is_w actid) w_matcher sti tid) as W_BOUNDED; eauto. 
+               { apply w_pl. }
+               { red. vauto. }
+                 do 2 red in W_BOUNDED. specialize (W_BOUNDED x H0).
+                 rewrite <- H in W_BOUNDED. simpl in W_BOUNDED. omega. }
+               
           apply set_subset_inter_r. split; [basic_solver| ].
           apply inclusion_minus. split; [basic_solver| ]. 
           subst nev. red. ins. red in H. desc. red. 
@@ -1497,15 +1531,6 @@ Qed.
     red. split; auto.
     red in H. specialize (H x).
     red. ins. apply H. basic_solver. 
-  Qed.
-
-  Lemma same_relation_exp_iff {A: Type} (r r': relation A):
-    r ≡ r' <-> (forall x y, r x y <-> r' x y).
-  Proof.
-    red. split.
-    { apply same_relation_exp. }
-    ins. red. split.
-    all: red; ins; apply H; auto.
   Qed.
 
   Lemma set_equiv_exp_iff {A : Type} (s s' : A -> Prop):
