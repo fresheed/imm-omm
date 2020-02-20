@@ -28,7 +28,33 @@ Set Implicit Arguments.
 
 
 Definition same_keys {A B: Type} (map1: IdentMap.t A) (map2: IdentMap.t B)
-  := forall key, IdentMap.In key map1 <-> IdentMap.In key map2. 
+  := forall key, IdentMap.In key map1 <-> IdentMap.In key map2.
+
+  Lemma state_record_equality st:
+    st = {|
+      instrs := instrs st;
+      pc := pc st;
+      G := G st;
+      eindex := eindex st;
+      regf := regf st;
+      depf := depf st;
+      ectrl := ectrl st
+    |}.
+  Proof. 
+  Admitted. 
+    
+  Lemma blockstate_record_equality bst:
+    bst = {|
+      binstrs := binstrs bst;
+      bpc := bpc bst;
+      bG := bG bst;
+      beindex := beindex bst;
+      bregf := bregf bst;
+      bdepf := bdepf bst;
+      bectrl := bectrl bst
+    |}.
+  Proof. 
+  Admitted.    
 
   (* Definition restrict (G: execution) (tid: thread_id): execution. *)
   (*   set (thread_local := fun x y => Events.tid x = tid /\ Events.tid y = tid).  *)
@@ -167,10 +193,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     unfold init_execution. red. simpl. basic_solver. 
   Qed.
       
-  Lemma Wfl_subgraph SG' SG (SB: same_behavior_local SG SG') (WFL: Wf_local SG'): Wf_local SG.
-  Proof.  Admitted.
-      
-
   Lemma omm_steps_same_instrs sto sto' (STEPS: exists tid, (Ostep tid)＊ sto sto'):
     instrs sto = instrs sto'.
   Proof.
@@ -199,15 +221,6 @@ Section OCamlMM_TO_IMM_S_PROG.
       apply IHn. auto. }
     apply H0. auto.
   Qed.
-
-  Lemma oseq_same_instrs bst bst' (STEPS: exists tid, (block_step tid)＊ bst bst'):
-    binstrs bst = binstrs bst'.
-  Proof.
-    desc. 
-  (*   apply steps_same_instrs. desc. exists tid. *)
-  (*   apply oseq_implies_steps. auto. *)
-    (* Qed.  *)
-  Admitted.
 
   Definition on_block st block :=
     ⟪ PROG_BLOCK: block = sublist (instrs st) (pc st) (length block) ⟫ /\
@@ -504,7 +517,8 @@ Section OCamlMM_TO_IMM_S_PROG.
   Definition StepProp n := forall st1 st2 tid (STEPS: (step tid) ^^ n st1 st2)
                              (COMP: exists PO, is_thread_compiled PO (instrs st1))
                              bst1 (BST1: st1 = bst2st bst1)
-                             bst2 (BST2: st2 = bst2st bst2),
+                             bst2 (BST2: st2 = bst2st bst2)
+                             (SAME_BINSTRS: binstrs bst1 = binstrs bst2),
       (omm_block_step tid)＊ bst1 bst2.
 
   Lemma acb_iff_bst st (COMP: exists PO, is_thread_compiled PO (instrs st)):
@@ -513,6 +527,11 @@ Section OCamlMM_TO_IMM_S_PROG.
 
   Lemma st_bst_prog_blocks bst block (COMP: exists PO, is_thread_block_compiled PO (binstrs bst)):
     on_block (bst2st bst) block <-> Some block = nth_error (binstrs bst) (bpc bst).
+  Proof. Admitted.
+
+  Lemma bst_equality bst1 bst2 (SAME_BINSTRS: binstrs bst1 = binstrs bst2)
+        (BST2ST_EQ: bst2st bst1 = bst2st bst2):
+    bst1 = bst2.
   Proof. Admitted. 
   
   Lemma oseq_between_acb: forall n, StepProp n.
@@ -520,16 +539,18 @@ Section OCamlMM_TO_IMM_S_PROG.
     apply lt_ind.
     { red. intros. apply steps0 in STEPS. subst.
       replace bst2 with bst1; [apply rt_refl| ].
-      admit. }
+      apply bst_equality; auto. }
     unfold StepProp in *. intros. desc.
-    assert (at_compilation_block st1) as ACB1 by admit. 
-    assert (at_compilation_block st2) as ACB2 by admit. 
+    assert (at_compilation_block st1) as ACB1 by (apply acb_iff_bst; eauto). 
+    assert (at_compilation_block st2) as ACB2.
+    { apply acb_iff_bst; eauto. exists PO.
+      replace (instrs st2) with (instrs st1); auto.
+      apply steps_same_instrs. exists tid. apply crt_num_steps. eauto. }
     unfold at_compilation_block in ACB1. desf. 
     2: { destruct n.
          { (* generalize it? *)
-           apply steps0 in STEPS.
-           (*see the same above *)
-           admit.  }
+           apply steps0 in STEPS. replace bst2 with bst1; [apply rt_refl| ].
+           apply bst_equality; auto. }
          forward eapply (@steps_sub _ (step tid) (S n) _ _ 1) as [st' STEP];
            [omega | eauto |].
          apply (same_relation_exp (pow_unit (step tid))) in STEP.
@@ -549,7 +570,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       pose proof (proj1 (@acb_iff_bst st' COMP') ACB'). destruct H0 as [bst' BST']. 
       specialize (H (n - length block) LEN' st' (bst2st bst2) tid NEXT_STEPS COMP' bst' BST' bst2).
       apply clos_trans_in_rt. apply t_step_rt. exists bst'. split.         
-      2: { apply H. auto. }
+      2: { apply H. auto. admit. }
       red. exists block. split.
       2: { red in ACB1. desc. vauto. }
       red.
@@ -598,28 +619,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     (* a program can be adjusted so all gotos pointing somewhere outside the program will point exactly where program ends *)
   Admitted.
 
-  Lemma leibniz : forall {A:Type} (x y:A),
-                  (x = y) ->
-                  forall (P : A -> Prop), P x -> P y.
-Proof.
-  intros A x y H P.
-  rewrite H.
-  auto.
-Qed.
-
-  Lemma state_record_equality st:
-    st = {|
-      instrs := instrs st;
-      pc := pc st;
-      G := G st;
-      eindex := eindex st;
-      regf := regf st;
-      depf := depf st;
-      ectrl := ectrl st
-    |}.
-  Proof. 
-  Admitted. 
-    
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
         SGI (ExI: thread_execution tid PI SGI) (* (WFL: Wf_local SGI) *):
     exists SGO, Othread_execution tid PO SGO /\
@@ -714,9 +713,6 @@ Qed.
       apply BLOCK_TERM. }
     { red in MM_SIM. desc.
       replace SGI with (bG bsti_fin); auto. }
-    (* red in MM_SIM. desc. *)
-    (* apply (Wfl_subgraph MM_SIM1). *)
-    (* replace (bG bsti_fin) with SGI; auto. *)
   Qed.
 
   Definition RWO GI := (RW GI \₁ dom_rel (rmw GI)). 
