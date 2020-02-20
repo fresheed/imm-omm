@@ -60,9 +60,49 @@ Section PairStep.
 
   Lemma flatten_split {A: Type} (ll: list (list A)) bi (INDEX: bi < length ll):
     flatten ll = flatten (firstn bi ll) ++ flatten (skipn bi ll).
-  Proof. ins. rewrite <- flatten_app. rewrite firstn_skipn. auto. Qed. 
-    
-  Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
+  Proof. ins. rewrite <- flatten_app. rewrite firstn_skipn. auto. Qed.
+   
+  Lemma near_pc b block d (BLOCK_POS: Some b = nth_error block d)
+        bst st (BST2ST: st = bst2st bst)
+        (AT_BLOCK: Some block = nth_error (binstrs bst) (bpc bst))
+        (BST_NONTERM: bpc bst < length (binstrs bst)):
+    Some b = nth_error (instrs st) (pc st + d).
+  Proof.
+    replace (instrs st) with (flatten (binstrs bst)).
+    2: { unfold bst2st in BST2ST. subst. auto. }
+    replace (pc st) with (length (flatten (firstn (bpc bst) (binstrs bst)))).
+    2: { unfold bst2st in BST2ST. subst. auto. }
+    rewrite <- (firstn_skipn (bpc bst) (binstrs bst)) in AT_BLOCK. 
+    rewrite nth_error_app2 in AT_BLOCK.
+    2: { apply firstn_le_length. }
+    rewrite firstn_length_le in AT_BLOCK; [| omega]. 
+    rewrite Nat.sub_diag in AT_BLOCK.
+    rewrite (@flatten_split _ (binstrs bst) (bpc bst)); [| auto]. 
+    rewrite nth_error_app2; [| omega].
+    rewrite minus_plus.
+    remember (skipn (bpc bst) (binstrs bst)) as ll. 
+    assert (forall {A: Type} l (x: A), Some x = nth_error l 0 -> exists l', l = x :: l'). 
+    { ins. destruct l; vauto. }
+    apply H in AT_BLOCK. desc.
+    rewrite AT_BLOCK. simpl.
+    rewrite nth_error_app1.
+    { cut (exists b, Some b = nth_error block d); auto. 
+      apply OPT_VAL. congruence. }
+    apply nth_error_Some. congruence. 
+  Qed. 
+
+  Lemma reach_with_blocks bst st tid (BST2ST: st = bst2st bst)
+        (BLOCK_REACH: (block_step tid)＊ (binit (binstrs bst)) bst):
+    exists n_steps, (step tid) ^^ n_steps (init (instrs st)) st.
+  Proof. 
+    apply crt_num_steps. 
+    subst st. 
+    replace (init (instrs (bst2st bst))) with (bst2st (binit (binstrs bst))). 
+    { apply blockstep_implies_steps. auto. }
+    unfold bst2st, init. simpl. auto.
+  Qed. 
+  
+    Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
         tid bsti' (OSEQ_STEP: omm_block_step tid bsti bsti')
         (BLOCK_REACH: (block_step tid)＊ (binit (binstrs bsti)) bsti):
     exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
@@ -81,22 +121,8 @@ Section PairStep.
     - remember (bst2st bsti) as sti. remember (bst2st bsti') as sti'. 
       apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP.
       assert (AT_PC: Some ld = nth_error (instrs sti) (pc sti)).
-      { replace (instrs sti) with (flatten (binstrs bsti)).
-        2: { unfold bst2st in Heqsti. subst. auto. }
-        replace (pc sti) with (length (flatten (firstn (bpc bsti) (binstrs bsti)))).
-        2: { unfold bst2st in Heqsti. subst. auto. }
-        rewrite <- (firstn_skipn (bpc bsti) (binstrs bsti)) in AT_BLOCK. 
-        rewrite nth_error_app2 in AT_BLOCK.
-        2: { apply firstn_le_length. }
-        rewrite firstn_length_le in AT_BLOCK; [| omega]. 
-        rewrite Nat.sub_diag in AT_BLOCK.
-        rewrite (@flatten_split _ (binstrs bsti) (bpc bsti)); [| auto]. 
-        rewrite nth_error_app2; [| omega].
-        rewrite Nat.sub_diag.        
-        assert (forall {A: Type} l (x: A), Some x = nth_error l 0 -> exists l', l = x :: l'). 
-        { ins. destruct l; vauto. }
-        apply H in AT_BLOCK. desc.
-        rewrite AT_BLOCK. simpl. auto. }
+      { forward eapply (@near_pc ld [ld] 0 _ bsti sti); eauto.
+        rewrite Nat.add_0_r. auto. }
       red in BLOCK_STEP. desc. red in BLOCK_STEP. desc.
       rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
       inversion ISTEP0.
@@ -144,39 +170,25 @@ Section PairStep.
         { subst sto'. simpl. rewrite EINDEX_EQ, Nat.add_0_r.  auto. }
         { subst sto'. simpl. rewrite REGF_EQ. auto. }
         subst sto'. simpl. rewrite DEPF_EQ. auto. }
-      (* assert (LAB_EQ: lab (G sto) = lab (G sti)). *)
-      (* { red in MM_SIM1. desc. vauto. } *)
       red. splits.
       { subst sto'. simpl. rewrite <- BINSTRS_SAME. auto. }
       {  subst sto'. simpl. destruct BPC' as [BPC' | BPC']. 
          - rewrite BPC'. rewrite MM_SIM0. auto.
          - desc. congruence. }
       { red.
-        assert (exists n_steps, (step tid) ^^ n_steps (init (instrs sti)) sti) as [n_steps REACH].
-        { apply crt_num_steps. 
-          subst sti.
-          replace (init (instrs (bst2st bsti))) with (bst2st (binit (binstrs bsti))). 
-          { apply blockstep_implies_steps. auto. }
-          unfold bst2st, init. simpl. auto. }
+        pose proof (reach_with_blocks Heqsti BLOCK_REACH) as [n_steps REACH]. 
         splits.
         { replace (bG bsti') with (G sti') by vauto.
           rewrite (@E_ADD).
           2: { repeat eexists. } 
           rewrite (@E_ADD (G sti) (G sti')).
           2: { repeat eexists. eapply UG. }
-
-          desc. 
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid) as R_EXT; eauto. 
-          { apply r_pl. }
-          { forward eapply nonnop_bounded; eauto.
-            { generalize r_pl. eauto. }
-            vauto. } 
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid) as W_EXT; eauto. 
-          { apply w_pl. }
-          { forward eapply nonnop_bounded; eauto.
-            { generalize w_pl. eauto. }
-            vauto. } 
-          rewrite R_EXT, W_EXT. simpl in *.
+          desc.
+          remember (Aload false ord (RegFile.eval_lexpr (regf sti) lexpr) val) as new_lbl. 
+          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto. 
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto. 
+ 
+          rewrite R_EXT, W_EXT. subst new_lbl. simpl in *.
           arewrite (rmw (G sti') ≡ rmw (G sti)).
           { rewrite UG. vauto. }
           rewrite EINDEX_EQ, set_union_empty_r. 
@@ -235,39 +247,10 @@ Section PairStep.
       rename sti' into sti''. rename bsti' into bsti''.
       red in BLOCK_STEP. destruct BLOCK_STEP as [sti' [STEP' STEP'']]. 
       assert (AT_PC: Some f = nth_error (instrs sti) (pc sti)).
-      { replace (instrs sti) with (flatten (binstrs bsti)).
-        2: { unfold bst2st in Heqsti. subst. auto. }
-        replace (pc sti) with (length (flatten (firstn (bpc bsti) (binstrs bsti)))).
-        2: { unfold bst2st in Heqsti. subst. auto. }
-        rewrite <- (firstn_skipn (bpc bsti) (binstrs bsti)) in AT_BLOCK. 
-        rewrite nth_error_app2 in AT_BLOCK.
-        2: { apply firstn_le_length. }
-        rewrite firstn_length_le in AT_BLOCK; [| omega]. 
-        rewrite Nat.sub_diag in AT_BLOCK.
-        rewrite (@flatten_split _ (binstrs bsti) (bpc bsti)); [| auto]. 
-        rewrite nth_error_app2; [| omega].
-        rewrite Nat.sub_diag.        
-        assert (forall {A: Type} l (x: A), Some x = nth_error l 0 -> exists l', l = x :: l'). 
-        { ins. destruct l; vauto. }
-        apply H in AT_BLOCK. desc.
-        rewrite AT_BLOCK. simpl. auto. }
+      { forward eapply (@near_pc f [f; st] 0 _ bsti sti); eauto.
+        rewrite Nat.add_0_r. auto. }
       assert (AT_PC': Some st = nth_error (instrs sti) (pc sti + 1)).
-      { replace (instrs sti) with (flatten (binstrs bsti)).
-        2: { unfold bst2st in Heqsti. subst. auto. }
-        replace (pc sti) with (length (flatten (firstn (bpc bsti) (binstrs bsti)))).
-        2: { unfold bst2st in Heqsti. subst. auto. }
-        rewrite <- (firstn_skipn (bpc bsti) (binstrs bsti)) in AT_BLOCK. 
-        rewrite nth_error_app2 in AT_BLOCK.
-        2: { apply firstn_le_length. }
-        rewrite firstn_length_le in AT_BLOCK; [| omega]. 
-        rewrite Nat.sub_diag in AT_BLOCK.
-        rewrite (@flatten_split _ (binstrs bsti) (bpc bsti)); [| auto]. 
-        rewrite nth_error_app2; [| omega].
-        rewrite minus_plus. 
-        assert (forall {A: Type} l (x: A), Some x = nth_error l 0 -> exists l', l = x :: l'). 
-        { ins. destruct l; vauto. }
-        apply H in AT_BLOCK. desc.
-        rewrite AT_BLOCK. simpl. auto. }      
+      { forward eapply (@near_pc st [f; st] 1 _ bsti sti); eauto. }
 
       red in STEP'. desc. red in STEP'. desc.
       rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
@@ -347,24 +330,21 @@ Section PairStep.
         { subst sto''. subst sto'. simpl. rewrite ORD_RLX, EINDEX_EQ.
           unfold add at 1. simpl. basic_solver.  }
         subst sto''. subst sto'. simpl. omega. }
-      red. splits.
+      red.
+      pose proof (reach_with_blocks Heqsti BLOCK_REACH) as [n_steps REACH]. 
+      
+      splits.
       { subst sto''. simpl. rewrite <- BINSTRS_SAME. auto. }
       { subst sto''. simpl. destruct BPC' as [BPC' | BPC']. 
          - rewrite BPC'. rewrite MM_SIM0. auto.
          - desc. congruence. }
       { red.
-        assert (exists n_steps, (step tid) ^^ n_steps (init (instrs sti)) sti) as [n_steps REACH].
-        { apply crt_num_steps. 
-          subst sti.
-          replace (init (instrs (bst2st bsti))) with (bst2st (binit (binstrs bsti))). 
-          { apply blockstep_implies_steps. auto. }
-          unfold bst2st, init. simpl. auto. }
-          assert (exists n_steps', (step tid) ^^ n_steps' (init (instrs sti')) sti') as [n_steps' REACH'].
-          { exists (n_steps + 1). rewrite Nat.add_1_r. apply step_prev.
-            exists sti. split.
-            { rewrite <- INSTRS. auto. }
-            red. exists lbls. red. splits; auto.
-            eexists. eauto. }        
+        assert (exists n_steps', (step tid) ^^ n_steps' (init (instrs sti')) sti') as [n_steps' REACH'].
+        { exists (n_steps + 1). rewrite Nat.add_1_r. apply step_prev.
+          exists sti. split.
+          { rewrite <- INSTRS. auto. }
+          red. exists lbls. red. splits; auto.
+          eexists. eauto. }
         splits.
         { replace (bG bsti'') with (G sti'') by vauto.
           rewrite (@E_ADD).
@@ -374,33 +354,20 @@ Section PairStep.
           rewrite (@E_ADD (G sti) (G sti') tid (eindex sti)).
           2: { repeat eexists. eapply UG. }
           
-          desc. 
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid) as R_EXT; eauto. 
-          { apply r_pl. }
-          { forward eapply (@nonnop_bounded n_steps); eauto.
-            { generalize r_pl. eauto. }
-            vauto. } 
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid) as W_EXT; eauto. 
-          { apply w_pl. }
-          { forward eapply (@nonnop_bounded n_steps); eauto.
-            { generalize w_pl. eauto. }
-            vauto. } 
+          desc.
+          remember (Afence ord) as new_lbl. 
+          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto. 
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto. 
           
-          desc. 
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti' sti'' tid) as R_EXT'; eauto. 
-          { apply r_pl. }
-          { forward eapply (@nonnop_bounded n_steps'); eauto.
-            { generalize r_pl. eauto. }
-            vauto. } 
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti' sti'' tid) as W_EXT'; eauto. 
-          { apply w_pl. }
-          { forward eapply (@nonnop_bounded n_steps'); eauto.
-            { generalize w_pl. eauto. }
-            vauto. } 
+          desc.
+          remember (Astore xmd ord0 l v) as new_lbl'. 
+          forward eapply (@label_set_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto. 
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto. 
 
-          rewrite W_EXT', R_EXT', R_EXT, W_EXT. simpl in *.
+          rewrite W_EXT', R_EXT', R_EXT, W_EXT.
           arewrite (rmw (G sti'') ≡ rmw (G sti)).
           { rewrite UG0, UG. vauto. }
+          subst new_lbl'. subst new_lbl. simpl in *.  
           rewrite EINDEX_EQ, !set_union_empty_r. 
           remember (eq (ThreadEvent tid (eindex sti))) as nev.
           rewrite UINDEX. remember (eq (ThreadEvent tid (eindex sti + 1))) as nev'.
