@@ -102,7 +102,67 @@ Section PairStep.
     unfold bst2st, init. simpl. auto.
   Qed. 
   
-    Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
+  Definition sim_lab GO GI := forall x : actid, E GO x -> lab GO x = lab GI x.
+
+  Definition extends_with tid d new_lbl st st' :=
+    (exists ddata daddr dctrl drmw_dep,
+        G st' = add (G st) tid (eindex st + d) new_lbl ddata daddr dctrl drmw_dep) /\
+      eindex st' = eindex st + d + 1. 
+
+  Definition extends tid d st st' := exists new_lbl, extends_with tid d new_lbl st st'.       
+
+  Lemma sim_lab_extension k tid sto sti (SBL: same_behavior_local (G sto) (G sti))
+        (EI_BOUND: E (G sti) ⊆₁ (fun x : actid => index x < eindex sti))
+        (INDEX_EQ: eindex sto = eindex sti)
+        sto' sti' (new_lbl: label)
+        (OEXTENDS: extends_with tid k new_lbl sto sto')
+        (IEXTENDS: (extends tid 0) ^^ (k + 1) sti sti')
+        (LAST_LBL: lab (G sti') (ThreadEvent tid (eindex sto + k)) = new_lbl):
+    sim_lab (G sto') (G sti').
+  Proof.
+    unfold sim_lab in *. intros x EGO'x. red in SBL. desc.  
+    assert (x = ThreadEvent tid (eindex sto + k) \/ E (G sto) x) as EGOx.
+    { red in OEXTENDS. desc. rewrite OEXTENDS in EGO'x.
+      unfold add, acts_set in EGO'x. simpl in EGO'x.
+      unfold acts_set. intuition. }
+    destruct EGOx.
+    + rewrite H. 
+      red in OEXTENDS. desc. rewrite OEXTENDS.
+      unfold add. simpl. rewrite upds. congruence.
+    + assert (index x < eindex sto) as NEQ.
+      { destruct (Const.lt_decidable (index x) (eindex sto)); auto.
+        exfalso. 
+        assert (E (G sti) x) as EGIx.
+        { red in RESTR_EVENTS. desc.
+          red in RESTR_EVENTS. forward eapply (RESTR_EVENTS x); vauto.
+          basic_solver. }
+        red in EI_BOUND. specialize (EI_BOUND x EGIx).
+        omega. }
+      red in OEXTENDS. desc. rewrite OEXTENDS. unfold add. simpl.
+      rewrite updo.
+      2: { red; ins; rewrite H0 in NEQ; simpl in NEQ; omega. }
+      assert (forall j (LT: j <= k + 1) stj (EXTI: (extends tid 0) ^^ j sti stj),
+                 lab (G stj) x = lab (G sti) x
+                 /\ eindex stj = eindex sto + j) as EXT_SAME_LAB. 
+      { intros j. induction j.
+        { ins. rewrite Nat.add_0_r. red in EXTI. desc. split; congruence. }
+        ins. rename stj into stj'.
+        red in EXTI. destruct EXTI as [stj [EXT EXT']].
+        specialize (IHj (le_Sn_le j (k + 1) LT) stj EXT). desc.  
+        replace (lab (G stj') x) with (lab (G stj) x).
+        2: { red in EXT'. desc. red in EXT'. desc.
+             rewrite EXT'. unfold add. simpl.
+             rewrite updo; auto.
+             red. ins. rewrite H0 in NEQ. simpl in NEQ.
+             omega. }
+        rewrite IHj. split; auto.
+        red in EXT'. desc. red in EXT'. desc. 
+        omega. }
+      pose proof (EXT_SAME_LAB (k + 1) (Nat.le_refl (k + 1)) sti' IEXTENDS). desc.
+      specialize (SAME_LAB x H). congruence.  
+  Qed.    
+
+  Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
         tid bsti' (OSEQ_STEP: omm_block_step tid bsti bsti')
         (BLOCK_REACH: (block_step tid)＊ (binit (binstrs bsti)) bsti):
     exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
@@ -169,7 +229,7 @@ Section PairStep.
         { subst sto'. simpl. rewrite ORD_RLX, EINDEX_EQ, Nat.add_0_r. auto. }
         { subst sto'. simpl. rewrite EINDEX_EQ, Nat.add_0_r.  auto. }
         { subst sto'. simpl. rewrite REGF_EQ. auto. }
-        subst sto'. simpl. rewrite DEPF_EQ. auto. }
+        subst sto'. simpl. rewrite Nat.add_0_r. congruence. }
       red. splits.
       { subst sto'. simpl. rewrite <- BINSTRS_SAME. auto. }
       {  subst sto'. simpl. destruct BPC' as [BPC' | BPC']. 
@@ -216,23 +276,21 @@ Section PairStep.
           rewrite <- H in H2. simpl in H2. omega. }
         (* **** *)
         replace (bG bsti') with (G sti'); [| vauto ]. 
-        subst sto'. rewrite UG. simpl.
-        ins. unfold add, acts_set in EGOx. simpl in EGOx.
-        red in MM_SIM. rewrite <- EINDEX_EQ. destruct EGOx.
-        + rewrite H. do 2 rewrite upds. auto.
-        + assert (x <> ThreadEvent tid (eindex sto)) as NEQ.
-          { red. ins. rewrite H0 in H.
-            forward eapply E_bounded as BOUND; eauto.
-            rewrite  EINDEX_EQ in H0, H.
-            assert (E (G sti) x) as EGIx.
-            { red in MM_SIM1. desc. red in RESTR_EVENTS. desc.
-              red in RESTR_EVENTS. forward eapply (RESTR_EVENTS x); vauto.
-              basic_solver. }
-            red in BOUND. specialize (BOUND x EGIx).
-            rewrite H0 in BOUND. simpl in BOUND. omega. }
-          rewrite updo; auto. rewrite updo; auto. 
-          red in MM_SIM1. desc. replace (G sti) with (bG bsti); [| vauto ]. 
-          apply SAME_LAB. auto. }
+        forward eapply (@sim_lab_extension 0 tid sto sti); eauto.
+        { vauto. }
+        { apply (@E_bounded n_steps tid sti); eauto. }
+        { red. split. 
+          2: { subst sto'. simpl. omega. }
+          rewrite Nat.add_0_r.
+          replace (lab (G sti') (ThreadEvent tid (eindex sto))) with (Aload false ord (RegFile.eval_lexpr (regf sti) lexpr) val).
+          { repeat eexists. }
+          unfold add. rewrite UG, EINDEX_EQ. simpl.
+          rewrite upds. auto. }
+        replace (0 + 1) with 1 by omega. rewrite (same_relation_exp (pow_unit _)).
+        red. eexists. red. split.
+        2: { cut (eindex sti' = eindex sti + 1); [omega |].
+             vauto. }
+        rewrite Nat.add_0_r. repeat eexists. eauto. }
       { subst sto'. replace (bregf bsti') with (regf sti'); [| vauto ].
         simpl. congruence. }
       { subst sto'. replace (bdepf bsti') with (depf sti'); [| vauto ].
@@ -315,14 +373,8 @@ Section PairStep.
         assert (Instr.store Orlx lexpr expr = Instr.store Orlx loc val) by vauto.
         inversion H. subst lexpr. subst expr. clear H. 
 
-        
-        (* pose proof (@Ostore tid lbls0 sto sto'' st 2 (gt_Sn_O 1) Orlx loc val l v) as OMM_STEP. *)
         pose proof (@Ostore tid lbls0 sto sto'' st 1 Orlx loc val l v) as OMM_STEP.
 
-        
-        (* TODO: ???*)
-        (* rewrite ORD_RLX, REGF_EQ, DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. *)
-        (*********)
         forward eapply OMM_STEP; eauto.
         (* TODO: modify equalities above to operate with sti' ? *)
         { rewrite REGF_EQ, <- UREGS. auto. }
@@ -421,26 +473,23 @@ Section PairStep.
           
           pose proof (H1 RMW'xy). desc. 
           rewrite Heqnev' in H. rewrite <- H in H2. simpl in H2. omega. }
+        
         replace (bG bsti'') with (G sti''); [| vauto ]. 
-        subst sto''. rewrite UG0, UG. simpl.
-        ins. unfold add, acts_set in EGOx. simpl in EGOx.
-        rewrite UINDEX, <- EINDEX_EQ.
-        destruct EGOx.
-        + rewrite H. do 2 rewrite upds. auto.
-        + assert (index x < eindex sto) as NEQ.
-          { destruct (Const.lt_decidable (index x) (eindex sto)); auto.
-            exfalso. 
-            forward eapply (@E_bounded n_steps tid sti) as BOUND; eauto.
-            assert (E (G sti) x) as EGIx.
-            { red in MM_SIM1. desc. red in RESTR_EVENTS. desc.
-              red in RESTR_EVENTS. forward eapply (RESTR_EVENTS x); vauto.
-              basic_solver. }
-            red in BOUND. specialize (BOUND x EGIx).
-            omega. }
-          rewrite updo. rewrite updo. rewrite updo.
-          2, 3, 4: red; ins; rewrite H0 in NEQ; simpl in NEQ; omega.
-          red in MM_SIM1. desc. replace (G sti) with (bG bsti); [| vauto ]. 
-          apply SAME_LAB. auto. }
+        forward eapply (@sim_lab_extension 1 tid sto sti); eauto.
+        { vauto. }
+        { apply (@E_bounded n_steps tid sti); eauto. }
+        { red. split. 
+          2: { subst sto''. simpl. omega. } 
+          replace (lab (G sti'') (ThreadEvent tid (eindex sto + 1)))  with (Astore xmd ord0 l v).
+          2: { rewrite UG0, UG. simpl.
+               replace (eindex sti') with (eindex sto + 1) by congruence. 
+               rewrite upds. auto. }
+          repeat eexists. }
+        simpl. red. exists sti'. split.
+        { red. exists sti. split; [red; auto|]. red. eexists. red.
+          rewrite Nat.add_0_r. split; auto. repeat eexists. eauto. }
+        red. eexists. red. rewrite Nat.add_0_r. split; auto.
+        repeat eexists. eauto. }
       { subst sto'. replace (bregf bsti'') with (regf sti''); [| vauto ].
         simpl. congruence. }
       { subst sto'. replace (bdepf bsti'') with (depf sti''); [| vauto ].
@@ -449,6 +498,196 @@ Section PairStep.
         simpl. congruence. }
       { subst sto'. replace (beindex bsti'') with (eindex sti''); [| vauto ].
         simpl. rewrite UINDEX0, UINDEX. omega. }
+    - remember (bst2st bsti) as sti. remember (bst2st bsti') as sti'.
+      apply (same_relation_exp (seqA _ _ _)) in BLOCK_STEP. 
+      rewrite (same_relation_exp (seq_id_l _)) in BLOCK_STEP.
+      rename sti' into sti''. rename bsti' into bsti''.
+      red in BLOCK_STEP. destruct BLOCK_STEP as [sti' [STEP' STEP'']]. 
+      assert (AT_PC: Some f = nth_error (instrs sti) (pc sti)).
+      { forward eapply (@near_pc f [f; ld] 0 _ bsti sti); eauto.
+        rewrite Nat.add_0_r. auto. }
+      assert (AT_PC': Some ld = nth_error (instrs sti) (pc sti + 1)).
+      { forward eapply (@near_pc ld [f; ld] 1 _ bsti sti); eauto. }
+
+      red in STEP'. desc. red in STEP'. desc.
+      rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
+      inversion ISTEP0.
+      all: rewrite II in EQ.
+      all: try discriminate.
+      rewrite EQ in *. subst instr. 
+
+      red in STEP''. desc. red in STEP''. desc.
+      rewrite <- INSTRS, UPC, <- AT_PC' in ISTEP. inversion ISTEP as [EQ']. clear ISTEP. 
+      inversion ISTEP1.
+      all: rewrite II in EQ'.
+      all: try discriminate.
+      rewrite EQ' in *. subst instr.
+      set (sto'' :=
+             {| instrs := instrs sto;
+                pc := pc sto + 1;
+                G := add (G sto) tid (eindex sto + 1) (Aload false ord0 (RegFile.eval_lexpr (regf sto) lexpr) val)
+                         ∅
+                         (DepsFile.lexpr_deps (depf sto) lexpr) (ectrl sto) ∅;
+                eindex := eindex sto + 2;
+                regf := RegFun.add reg val (regf sto);
+                depf := RegFun.add reg (eq (ThreadEvent tid (eindex sto + 1))) (depf sto);
+                ectrl := ectrl sto |}).
+
+      red in MM_SIM. desc.
+      assert (REGF_EQ: regf sto = regf sti). 
+      { rewrite MM_SIM2. vauto. }
+      assert (DEPF_EQ: depf sto = depf sti). 
+      { rewrite MM_SIM3. vauto. }
+      assert (EINDEX_EQ: eindex sto = eindex sti). 
+      { rewrite MM_SIM5. vauto. }
+      assert (ECTRL_EQ: ectrl sto = ectrl sti). 
+      { rewrite MM_SIM4. vauto. }
+      
+      exists sto''. splits.
+      { red. exists lbls0. red. splits; [subst; simpl; auto| ].
+        exists ld. exists 1. splits.
+        { assert (exists oinstr, Some oinstr = nth_error (instrs sto) (pc sto)).
+          { apply OPT_VAL. apply nth_error_Some.
+            rewrite MM_SIM0.
+            replace (length (instrs sto)) with (length (binstrs bsti)); auto. 
+            symmetry. apply compilation_same_length. auto. }
+          desc. pose proof (every_instruction_compiled MM_SIM (pc sto)).
+          forward eapply H0 as COMP; eauto.
+          { replace (pc sto) with (bpc bsti). eauto. }
+          cut (ld = oinstr); [congruence| ].
+          inversion COMP. vauto. }
+        assert (ORD_SC: ord0 = Osc). 
+        { subst ld. congruence. }
+        rewrite ORD_SC in *.
+        assert (Instr.load Osc reg lexpr = Instr.load Osc lhs loc) by vauto.
+        inversion H. subst lexpr. subst reg. clear H. 
+        
+        pose proof (@Oload tid lbls0 sto sto'' ld 1 Osc lhs loc val l) as OMM_STEP.
+
+        forward eapply OMM_STEP; eauto.
+        (* TODO: modify equalities above to operate with sti' ? *)
+        { rewrite REGF_EQ, <- UREGS. auto. }
+        { rewrite REGF_EQ, <- UREGS. auto. }
+        { subst sto''. simpl. rewrite ORD_SC, EINDEX_EQ.
+          unfold add at 1. simpl. basic_solver. }
+        subst sto''. simpl. omega. }
+      red.
+      pose proof (reach_with_blocks Heqsti BLOCK_REACH) as [n_steps REACH]. 
+      
+      splits.
+      { subst sto''. simpl. rewrite <- BINSTRS_SAME. auto. }
+      { subst sto''. simpl. destruct BPC' as [BPC' | BPC']. 
+         - rewrite BPC'. rewrite MM_SIM0. auto.
+         - desc. congruence. }
+      { red.
+        assert (exists n_steps', (step tid) ^^ n_steps' (init (instrs sti')) sti') as [n_steps' REACH'].
+        { exists (n_steps + 1). rewrite Nat.add_1_r. apply step_prev.
+          exists sti. split.
+          { rewrite <- INSTRS. auto. }
+          red. exists lbls. red. splits; auto.
+          eexists. eauto. }
+        splits.
+        { replace (bG bsti'') with (G sti'') by vauto.
+          rewrite (@E_ADD).
+          2: { repeat eexists. } 
+          rewrite (@E_ADD (G sti') (G sti'') tid (eindex sti + 1)).
+          2: { repeat eexists. rewrite <- UINDEX. eapply UG0. }
+          rewrite (@E_ADD (G sti) (G sti') tid (eindex sti)).
+          2: { repeat eexists. eapply UG. }
+          
+          desc.
+          remember (Afence ord) as new_lbl. 
+          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto. 
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto. 
+          
+          desc.
+          remember (Aload false ord0 (RegFile.eval_lexpr (regf sto) lexpr) val) as new_lbl'. 
+          forward eapply (@label_set_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto. 
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto. 
+
+          rewrite W_EXT', R_EXT', R_EXT, W_EXT.
+          arewrite (rmw (G sti'') ≡ rmw (G sti)).
+          { rewrite UG0, UG. vauto. }
+          subst new_lbl'. subst new_lbl. simpl in *.  
+          rewrite EINDEX_EQ, !set_union_empty_r. 
+          remember (eq (ThreadEvent tid (eindex sti))) as nev.
+          rewrite UINDEX. remember (eq (ThreadEvent tid (eindex sti + 1))) as nev'.
+          rewrite set_unionA. rewrite set_unionA. rewrite set_unionC with (s := nev'). rewrite <- set_unionA with (s := R (G sti)). 
+          rewrite set_inter_union_l. apply set_equiv_union.
+          { rewrite set_inter_minus_r.
+            arewrite (E (G sti) ∩₁ (RW (G sti) ∪₁ nev') ≡₁ E (G sti) ∩₁ RW (G sti)).
+            { rewrite set_inter_union_r. 
+              arewrite (E (G sti) ∩₁ nev' ≡₁ ∅); [| basic_solver ].
+              split; [| basic_solver].
+              rewrite E_bounded; eauto. vauto.
+              red. ins. red in H. desc. rewrite <- H0 in H. simpl in H. omega. }
+            red in MM_SIM1. desc.
+            replace (G sti) with (bG bsti) by vauto.
+            rewrite <- set_inter_minus_r. auto. }
+          split.
+          2: { rewrite set_inter_union_l. apply set_subset_union_l.
+               split; [| basic_solver].
+               rewrite set_inter_minus_r. rewrite set_inter_union_r.
+               arewrite (nev ∩₁ nev' ≡₁ ∅).
+               { subst. red. split; [| basic_solver].
+                 red. ins. red in H. desc. rewrite <- H in H0.
+                 inversion H0. omega. }
+               arewrite (nev ∩₁ RW (G sti) ≡₁ ∅).
+               2: basic_solver.
+               red. split; [| basic_solver]. 
+               red. ins. red in H. desc. rewrite Heqnev in H.
+               red in H0. destruct H0.
+               + forward eapply (@nonnop_bounded n_steps (@is_r actid) r_matcher sti tid) as R_BOUNDED; eauto. 
+               { apply r_pl. }
+               { red. vauto. }
+                 do 2 red in R_BOUNDED. specialize (R_BOUNDED x H0).
+                 rewrite <- H in R_BOUNDED. simpl in R_BOUNDED. omega.
+               + forward eapply (@nonnop_bounded n_steps (@is_w actid) w_matcher sti tid) as W_BOUNDED; eauto. 
+               { apply w_pl. }
+               { red. vauto. }
+                 do 2 red in W_BOUNDED. specialize (W_BOUNDED x H0).
+                 rewrite <- H in W_BOUNDED. simpl in W_BOUNDED. omega. }
+               
+          apply set_subset_inter_r. split; [basic_solver| ].
+          apply inclusion_minus. split; [basic_solver| ]. 
+          subst nev. red. ins. red in H. desc. red. 
+          forward eapply rmw_bibounded; eauto.
+          ins. red in H1. desc.
+          red in H0. desc. specialize (H1 x y).
+
+          assert (rmw (G sti') x y) as RMW'xy. 
+          { assert (rmw (G sti') ≡ rmw (G sti)). 
+            { rewrite UG. vauto. }
+            apply (same_relation_exp H2). auto. }
+          
+          pose proof (H1 RMW'xy). desc. 
+          rewrite Heqnev' in H. rewrite <- H in H2. simpl in H2. omega. }
+        
+        replace (bG bsti'') with (G sti''); [| vauto ]. 
+        forward eapply (@sim_lab_extension 1 tid sto sti); eauto.
+        { vauto. }
+        { apply (@E_bounded n_steps tid sti); eauto. }
+        { red. split. 
+          2: { subst sto''. simpl. omega. } 
+          replace (lab (G sti'') (ThreadEvent tid (eindex sto + 1))) with (Aload false ord0 (RegFile.eval_lexpr (regf sto) lexpr) val).
+          2: { rewrite UG0, UG. rewrite UREGS, REGF_EQ. simpl.
+               replace (eindex sti') with (eindex sto + 1) by congruence. 
+               rewrite upds. auto. }
+          repeat eexists. }
+        simpl. red. exists sti'. split.
+        { red. exists sti. split; [red; auto|]. red. eexists. red.
+          rewrite Nat.add_0_r. split; auto. repeat eexists. eauto. }
+        red. eexists. red. rewrite Nat.add_0_r. split; auto.
+        repeat eexists. eauto. }
+      { replace (bregf bsti'') with (regf sti''); [| vauto ].
+        simpl. congruence. }
+      { replace (bdepf bsti'') with (depf sti''); [| vauto ].
+        simpl. congruence. }
+      { replace (bectrl bsti'') with (ectrl sti''); [| vauto ].
+        simpl. congruence. }
+      { replace (beindex bsti'') with (eindex sti''); [| vauto ].
+        simpl. rewrite UINDEX0, UINDEX. omega. }
+    - 
       (* - .....*)
       (* - .....*)
       (* - .....*)

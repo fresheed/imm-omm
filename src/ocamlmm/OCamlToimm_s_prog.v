@@ -50,7 +50,7 @@ Section OCaml_Program.
                                              (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl) ∅)
          (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
          (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
-         (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
+         (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid (s1.(eindex) + dindex))) s1.(depf))
          (UECTRL : s2.(ectrl) = s1.(ectrl))
   | Ostore ord lexpr expr l v x
           (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
@@ -67,83 +67,7 @@ Section OCaml_Program.
           (UREGS : s2.(regf) = s1.(regf))
           (UDEPS : s2.(depf) = s1.(depf))
           (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | Ofence ord 
-          (LABELS : labels = [Afence ord])
-          (II : instr = Instr.fence ord)
-          (UPC   : s2.(pc) = s1.(pc) + 1)
-          (UG    : s2.(G) = add s1.(G) tid (s1.(eindex) + dindex) (Afence ord) ∅ ∅ s1.(ectrl) ∅)
-          (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
-          (UREGS : s2.(regf) = s1.(regf))
-          (UDEPS : s2.(depf) = s1.(depf))
-          (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | Ocas_un expr_old expr_new xmod ordr ordw reg lexpr val l
-           (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
-           (NEXPECTED : val <> RegFile.eval_expr s1.(regf) expr_old)
-           (LABELS : labels = [Aload true ordr l val])
-           (II : instr= Instr.update (Instr.cas expr_old expr_new) xmod ordr ordw reg lexpr)
-           (UPC   : s2.(pc) = s1.(pc) + 1)
-           (UG    : s2.(G) =
-                    add s1.(G) tid (s1.(eindex) + dindex) (Aload true ordr l val) ∅
-                                               (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl)
-                                                                                          (DepsFile.expr_deps s1.(depf) expr_old))
-           (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
-           (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
-           (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
-           (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | Ocas_suc expr_old expr_new xmod ordr ordw reg lexpr l expected new_value
-            (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
-            (EXPECTED: expected = RegFile.eval_expr s1.(regf) expr_old)
-            (NEW: new_value = RegFile.eval_expr s1.(regf) expr_new)
-            (LABELS : labels = [Astore xmod ordw l new_value; Aload true ordr l expected])
-            (II : instr = Instr.update (Instr.cas expr_old expr_new) xmod ordr ordw reg lexpr)
-            (UPC   : s2.(pc) = s1.(pc) + 1)
-            (UG    : s2.(G) =
-                     add_rmw s1.(G)
-                                  tid (s1.(eindex) + dindex) (Aload true ordr l expected) (Astore xmod ordw l new_value)
-                                                  (DepsFile.expr_deps s1.(depf) expr_new)
-                                                  (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl)
-                                                                                             (DepsFile.expr_deps s1.(depf) expr_old))
-            (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
-            (UREGS : s2.(regf) = RegFun.add reg expected s1.(regf))
-            (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
-            (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | Oinc expr_add xmod ordr ordw reg lexpr val l nval
-        (L: l = RegFile.eval_lexpr s1.(regf) lexpr)
-        (NVAL: nval = val + RegFile.eval_expr s1.(regf) expr_add)
-        (LABELS : labels = [Astore xmod ordw l nval; Aload true ordr l val])
-        (II : instr = Instr.update (Instr.fetch_add expr_add) xmod ordr ordw reg lexpr)
-        (UPC   : s2.(pc) = s1.(pc) + 1)
-        (UG    : s2.(G) =
-                 add_rmw s1.(G) tid (s1.(eindex) + dindex)
-                                         (Aload true ordr l val)
-                                         (Astore xmod ordw l nval)
-                                         ((eq (ThreadEvent tid s1.(eindex))) ∪₁ (DepsFile.expr_deps s1.(depf) expr_add))
-                                         (DepsFile.lexpr_deps s1.(depf) lexpr) s1.(ectrl)
-                                                                                    ∅)
-        (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
-        (UREGS : s2.(regf) = RegFun.add reg val s1.(regf))
-        (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
-        (UECTRL : s2.(ectrl) = s1.(ectrl))
-  | Oexchange new_expr xmod ordr ordw reg loc_expr old_value loc new_value
-             (L: loc = RegFile.eval_lexpr s1.(regf) loc_expr)
-             (NVAL: new_value = RegFile.eval_expr s1.(regf) new_expr)
-             (LABELS : labels = [Astore xmod ordw loc new_value;
-                                   Aload true ordr loc old_value])
-             (II : instr = Instr.update (Instr.exchange new_expr)
-                                        xmod ordr ordw reg loc_expr)
-             (UPC   : s2.(pc) = s1.(pc) + 1)
-             (UG    : s2.(G) =
-                      add_rmw s1.(G) tid (s1.(eindex) + dindex)
-                                              (Aload true ordr loc old_value)
-                                              (Astore xmod ordw loc new_value)
-                                              (DepsFile.expr_deps s1.(depf) new_expr)
-                                              (DepsFile.lexpr_deps s1.(depf) loc_expr)
-                                              s1.(ectrl)
-                                                   ∅)
-             (UINDEX : s2.(eindex) = s1.(eindex) + dindex + 1)
-             (UREGS : s2.(regf) = RegFun.add reg old_value s1.(regf))
-             (UDEPS : s2.(depf) = RegFun.add reg (eq (ThreadEvent tid s1.(eindex))) s1.(depf))
-             (UECTRL : s2.(ectrl) = s1.(ectrl)).      
+          . 
 
   Definition Oistep (tid : thread_id) (labels : list label) s1 s2 :=
     ⟪ INSTRS : s1.(instrs) = s2.(instrs) ⟫ /\
