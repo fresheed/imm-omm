@@ -912,7 +912,145 @@ Section PairStep.
         simpl. congruence. }
       { replace (beindex bsti'') with (eindex sti''); [| vauto ].
         simpl. rewrite UINDEX0, UINDEX. omega. }
+    - remember (bst2st bsti) as sti. remember (bst2st bsti') as sti'. 
+      apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP.
+      assert (AT_PC: Some asn = nth_error (instrs sti) (pc sti)).
+      { forward eapply (@near_pc asn [asn] 0 _ bsti sti); eauto.
+        rewrite Nat.add_0_r. auto. }
+      red in BLOCK_STEP. desc. red in BLOCK_STEP. desc.
+      rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
+      inversion ISTEP0.
+      all: rewrite II in EQ.
+      all: try discriminate.
+      rewrite EQ in *. subst instr. 
+      set (sto' :=
+             {| instrs := instrs sto;
+                pc := pc sto + 1;
+                G := G sto;
+                regf := RegFun.add reg (RegFile.eval_expr (regf sto) expr) (regf sto);
+                depf := RegFun.add reg (DepsFile.expr_deps (depf sto) expr) (depf sto);
+                ectrl := ectrl sto;
+                eindex := eindex sto |}).
+      red in MM_SIM. desc.
+      assert (REGF_EQ: regf sto = regf sti). 
+      { rewrite MM_SIM2. vauto. }
+      assert (DEPF_EQ: depf sto = depf sti). 
+      { rewrite MM_SIM3. vauto. }
+      assert (EINDEX_EQ: eindex sto = eindex sti). 
+      { rewrite MM_SIM5. vauto. }
+      assert (ECTRL_EQ: ectrl sto = ectrl sti). 
+      { rewrite MM_SIM4. vauto. }
+      exists sto'. splits.
+      { red. exists []. red. splits; [subst; simpl; auto| ].
+        exists asn. exists 0. splits.
+        { assert (exists oinstr, Some oinstr = nth_error (instrs sto) (pc sto)).
+          { apply OPT_VAL. apply nth_error_Some.
+            rewrite MM_SIM0.
+            replace (length (instrs sto)) with (length (binstrs bsti)); auto. 
+            symmetry. apply compilation_same_length. auto. }
+          desc. pose proof (every_instruction_compiled MM_SIM (pc sto)).
+          forward eapply H0 as COMP; eauto.
+          { replace (pc sto) with (bpc bsti). eauto. }
+          cut (asn = oinstr); [congruence| ].
+          inversion COMP. vauto. }
+        pose proof (@Oassign tid [] sto sto' asn 0 reg expr) as OMM_STEP.
+        rewrite REGF_EQ, DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. 
+        forward eapply OMM_STEP; eauto.
+        { subst sto'. simpl. congruence. }
+        subst sto'. simpl. congruence. }
+      red. splits.
+      { subst sto'. simpl. rewrite <- BINSTRS_SAME. auto. }
+      {  subst sto'. simpl. destruct BPC' as [BPC' | BPC']. 
+         - rewrite BPC'. rewrite MM_SIM0. auto.
+         - desc. congruence. }
+      { subst sto'. simpl. replace (bG bsti') with (G sti'); [| vauto ].
+        rewrite UG. vauto. }
+      { subst sto'. replace (bregf bsti') with (regf sti'); [| vauto ].
+        simpl. congruence. }
+      { subst sto'. replace (bdepf bsti') with (depf sti'); [| vauto ].
+        simpl. congruence. }
+      { subst sto'. replace (bectrl bsti') with (ectrl sti'); [| vauto ].
+        simpl. congruence. }
+      { subst sto'. replace (beindex bsti') with (eindex sti'); [| vauto ].
+        simpl. congruence. }
+    - remember (bst2st bsti) as sti. remember (bst2st bsti') as sti'. 
+      apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP.
+      assert (AT_PC: Some igt = nth_error (instrs sti) (pc sti)).
+      { forward eapply (@near_pc igt [igt] 0 _ bsti sti); eauto.
+        rewrite Nat.add_0_r. auto. }
+      red in BLOCK_STEP. desc. red in BLOCK_STEP. desc.
+      rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
+      inversion ISTEP0.
+      all: rewrite II in EQ.
+      all: try discriminate.
+      rewrite EQ in *. subst instr. 
+      set (sto' :=
+             {| instrs := instrs sto;
+                pc := pc sto + 1;
+                G := G sto;
+                regf := regf sto;
+                depf := depf sto;
+                ectrl := DepsFile.expr_deps (depf sto) expr ∪₁ ectrl sto;
+                eindex := eindex sto |}).
+      red in MM_SIM. desc.
+      assert (REGF_EQ: regf sto = regf sti). 
+      { rewrite MM_SIM2. vauto. }
+      assert (DEPF_EQ: depf sto = depf sti). 
+      { rewrite MM_SIM3. vauto. }
+      assert (EINDEX_EQ: eindex sto = eindex sti). 
+      { rewrite MM_SIM5. vauto. }
+      assert (ECTRL_EQ: ectrl sto = ectrl sti). 
+      { rewrite MM_SIM4. vauto. }
+      exists sto'. splits.
+      { red. exists []. red. splits; [subst; simpl; auto| ].
+        forward eapply (proj1 (compilation_correction (instrs sto) (instrs sti))) as [corrector CORR]. 
+        { red. exists (binstrs bsti). split; vauto. } 
+        red in CORR.
+        forward eapply (ifgoto_corr CORR e n) as IN_CORR. 
+        { eapply nth_error_In; eauto. }
+        apply In_nth_error in IN_CORR. destruct IN_CORR as [omm_addr CORR_INDEX].
+        set (omm_igt := Instr.ifgoto e omm_addr). 
+        exists omm_igt. exists 0. splits.
+        { assert (exists oinstr, Some oinstr = nth_error (instrs sto) (pc sto)).
+          { apply OPT_VAL. apply nth_error_Some.
+            rewrite MM_SIM0.
+            replace (length (instrs sto)) with (length (binstrs bsti)); auto. 
+            symmetry. apply compilation_same_length. auto. }
+          red in CORR. 
+          desc. pose proof (every_instruction_compiled MM_SIM (pc sto)).
+          forward eapply H0 as COMP; eauto.
+          { replace (pc sto) with (bpc bsti). eauto. }
+          cut (omm_igt = oinstr); [congruence| ].
+          foobar_fix_igt_compilation_definition.
+          inversion COMP. subst.
+           (igt = igt0) by auto. 
+          assert (igt = igt1) by auto. 
+          assert (igt = igt2) by auto. 
+          subst. clear igt0. 
+          replace igt1 with igt0 by auto. clear igt1. 
+          vauto. }
+        pose proof (@Oassign tid [] sto sto' asn 0 reg expr) as OMM_STEP.
+        rewrite REGF_EQ, DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. 
+        forward eapply OMM_STEP; eauto.
+        { subst sto'. simpl. congruence. }
+        subst sto'. simpl. congruence. }
+      red. splits.
+      { subst sto'. simpl. rewrite <- BINSTRS_SAME. auto. }
+      {  subst sto'. simpl. destruct BPC' as [BPC' | BPC']. 
+         - rewrite BPC'. rewrite MM_SIM0. auto.
+         - desc. congruence. }
+      { subst sto'. simpl. replace (bG bsti') with (G sti'); [| vauto ].
+        rewrite UG. vauto. }
+      { subst sto'. replace (bregf bsti') with (regf sti'); [| vauto ].
+        simpl. congruence. }
+      { subst sto'. replace (bdepf bsti') with (depf sti'); [| vauto ].
+        simpl. congruence. }
+      { subst sto'. replace (bectrl bsti') with (ectrl sti'); [| vauto ].
+        simpl. congruence. }
+      { subst sto'. replace (beindex bsti') with (eindex sti'); [| vauto ].
+        simpl. congruence. }
     - 
+     
 
       (* - .....*)
       (* - .....*)

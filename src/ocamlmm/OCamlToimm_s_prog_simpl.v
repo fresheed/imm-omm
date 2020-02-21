@@ -257,18 +257,7 @@ Section OCamlMM_TO_IMM_S_PROG.
     red. eexists. split; eauto. 
   Qed.
   
-  
   Lemma is_terminal_new st: pc st >= length (instrs st) <-> is_terminal st.
-  Proof. Admitted.
-
-  (* TODO: finish definition *)
-  Definition is_corrector (corr: list nat) (PO PI: list Prog.Instr.t) :=
-    length corr = length PO + 1 /\
-    True.
-
-  Lemma compilation_correction PO PI:
-    is_thread_compiled PO PI <-> exists (corrector: list nat),
-      ⟪CORR: is_corrector corrector PO PI  ⟫.
   Proof. Admitted.
 
   Lemma acb_iff_corr PO PI corr (CORR: is_corrector corr PO PI):
@@ -282,11 +271,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       exists i, Some (pc st + length block) = nth_error corr i.
   Proof. Admitted.
         
-  Lemma ifgoto_corr PO PI corr (CORR: is_corrector corr PO PI):
-      forall cond adr (IN_PROG: In (Instr.ifgoto cond adr) PI),
-      In adr corr.
-  Proof. Admitted.
-        
+  (* TODO: finish definition *)
   Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
         (COMP: exists PO, is_thread_compiled PO (instrs st1)):
     at_compilation_block st2.

@@ -100,6 +100,20 @@ Section OCaml_IMM_Compilation.
       symmetry. eapply IHn. eauto.
   Qed.
 
+  Definition is_corrector (corr: list nat) (PO PI: list Prog.Instr.t) :=
+    length corr = length PO + 1 /\
+    True.
+
+  Lemma compilation_correction PO PI:
+    is_thread_compiled PO PI <-> exists (corrector: list nat),
+      ⟪CORR: is_corrector corrector PO PI  ⟫.
+  Proof. Admitted.
+
+  Lemma ifgoto_corr PO PI corr (CORR: is_corrector corr PO PI):
+      forall cond adr (IN_PROG: In (Instr.ifgoto cond adr) PI),
+      In adr corr.
+  Proof. Admitted.
+        
 End OCaml_IMM_Compilation.
 
 
