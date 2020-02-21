@@ -166,7 +166,7 @@ Section BoundedProperties.
     - (* TODO *)
       admit.
   Admitted. 
-
+  
   Lemma label_set_step (S: (actid -> label) -> actid -> bool) matcher st1 st2 tid new_label
         (ADD: exists foo bar baz bazz,
             G st2 = add (G st1) tid (eindex st1) new_label foo bar baz bazz)
@@ -202,6 +202,60 @@ Section BoundedProperties.
     intros. des; auto. 
     destruct (matcher new_label); vauto.
     congruence. 
+  Qed. 
+    
+  Lemma label_set_rmw_step (S: (actid -> label) -> actid -> bool) matcher st1 st2 tid lblr lblw
+        (ADD: exists foo bar baz bazz,
+            G st2 = add_rmw (G st1) tid (eindex st1) lblr lblw foo bar baz bazz)
+        (MATCH: processes_lab S matcher)
+        (BOUND: index_bounded S st1):
+    S (lab (G st2)) ≡₁ S (lab (G st1))
+      ∪₁ (if matcher lblr then eq (ThreadEvent tid (eindex st1)) else ∅)
+      ∪₁ (if matcher lblw then eq (ThreadEvent tid (eindex st1 + 1)) else ∅).
+  Proof.
+    (* TODO: use seq_equiv_exp_iff *)
+    assert (SAME_SET_ELT: forall (A : Type) (s s' : A -> Prop),
+               s ≡₁ s' <-> (forall x : A, s x <-> s' x)).
+    { intros. red. split; [apply set_equiv_exp| ].
+      intros. red. split.
+      all: red; intros.
+      all: specialize (H x).
+      all: apply H; auto. }    
+    apply SAME_SET_ELT. unfold set_union. intros.
+    red in MATCH. rewrite !MATCH.
+    desc. rewrite ADD. simpl. 
+    remember (ThreadEvent tid (eindex st1)) as evr. 
+    remember (ThreadEvent tid (eindex st1 + 1)) as evw.  
+    destruct (classic (x = evr)).
+    { rewrite H. rewrite updo.
+      2: { red. ins. subst. inversion H0. omega. }
+      rewrite upds. 
+      destruct (matcher lblr) eqn:MATCHED; auto.
+      unfold set_empty. 
+      cut (matcher (lab (G st1) evr) = false). 
+      { intros. rewrite H0. intuition.
+        destruct (matcher lblw); vauto. omega. }
+      (* require boundness of a function and restrict ev to be new event*)
+      do 2 red in BOUND. specialize (BOUND evr).
+      rewrite MATCH in BOUND.
+      apply Bool.not_true_is_false. red. intros CONTRA. 
+      apply BOUND in CONTRA. vauto. simpl in CONTRA. omega. }
+    destruct (classic (x = evw)).
+    { rewrite H0. rewrite upds.
+      destruct (matcher lblw) eqn:MATCHED; auto.
+      unfold set_empty. 
+      cut (matcher (lab (G st1) evw) = false). 
+      { intros. rewrite H1. intuition.
+        destruct (matcher lblr); vauto. omega. }
+      (* require boundness of a function and restrict ev to be new event*)
+      do 2 red in BOUND. specialize (BOUND evw).
+      rewrite MATCH in BOUND.
+      apply Bool.not_true_is_false. red. intros CONTRA. 
+      apply BOUND in CONTRA. vauto. simpl in CONTRA. omega. }
+    do 2 (rewrite updo; auto). split; auto.
+    intros. des; auto.  
+    - destruct (matcher lblr); vauto.
+    - destruct (matcher lblw); vauto.
   Qed. 
     
   Lemma E_bounded n tid: forall st (STEPS: (step tid) ^^ n (init (instrs st)) st),
