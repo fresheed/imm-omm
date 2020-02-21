@@ -687,8 +687,233 @@ Section PairStep.
         simpl. congruence. }
       { replace (beindex bsti'') with (eindex sti''); [| vauto ].
         simpl. rewrite UINDEX0, UINDEX. omega. }
+    - remember (bst2st bsti) as sti. remember (bst2st bsti') as sti'.
+      apply (same_relation_exp (seqA _ _ _)) in BLOCK_STEP. 
+      rewrite (same_relation_exp (seq_id_l _)) in BLOCK_STEP.
+      rename sti' into sti''. rename bsti' into bsti''.
+      red in BLOCK_STEP. destruct BLOCK_STEP as [sti' [STEP' STEP'']]. 
+      assert (AT_PC: Some f = nth_error (instrs sti) (pc sti)).
+      { forward eapply (@near_pc f [f; exc] 0 _ bsti sti); eauto.
+        rewrite Nat.add_0_r. auto. }
+      assert (AT_PC': Some exc = nth_error (instrs sti) (pc sti + 1)).
+      { forward eapply (@near_pc exc [f; exc] 1 _ bsti sti); eauto. }
+
+      red in STEP'. desc. red in STEP'. desc.
+      rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
+      inversion ISTEP0.
+      all: rewrite II in EQ.
+      all: try discriminate.
+      rewrite EQ in *. subst instr. 
+
+      red in STEP''. desc. red in STEP''. desc.
+      rewrite <- INSTRS, UPC, <- AT_PC' in ISTEP. inversion ISTEP as [EQ']. clear ISTEP. 
+      inversion ISTEP1.
+      all: rewrite II in EQ'.
+      all: try discriminate.
+      rewrite EQ' in *. subst instr.
+      set (sto'' :=
+             {| instrs := instrs sto;
+                pc := pc sto + 1;
+                G := add (G sto) tid (eindex sto + 2) (Astore xmod ordw loc0 new_value)
+                         (DepsFile.expr_deps (depf sto) new_expr)
+                         (DepsFile.lexpr_deps (depf sto) loc_expr) 
+                         (ectrl sti') ∅;
+                eindex := eindex sto + 3;
+                regf := regf sto;
+                depf := depf sto; (* TODO: deal with changed depf after rmw *)
+                ectrl := ectrl sto |}).
+
+      red in MM_SIM. desc.
+      assert (REGF_EQ: regf sto = regf sti).
+      { rewrite MM_SIM2. vauto. }
+      assert (DEPF_EQ: depf sto = depf sti).
+      { rewrite MM_SIM3. vauto. }
+      assert (EINDEX_EQ: eindex sto = eindex sti).
+      { rewrite MM_SIM5. vauto. }
+      assert (ECTRL_EQ: ectrl sto = ectrl sti).
+      { rewrite MM_SIM4. vauto. }
+      
+      exists sto''. splits.
+      { red. exists [Astore Xpln Osc loc0 new_value]. red. splits; [subst; simpl; auto| ].
+        exists st. exists 2. splits.
+        { assert (exists oinstr, Some oinstr = nth_error (instrs sto) (pc sto)).
+          { apply OPT_VAL. apply nth_error_Some.
+            rewrite MM_SIM0.
+            replace (length (instrs sto)) with (length (binstrs bsti)); auto.
+            symmetry. apply compilation_same_length. auto. }
+          desc. pose proof (every_instruction_compiled MM_SIM (pc sto)).
+          forward eapply H0 as COMP; eauto.
+          { replace (pc sto) with (bpc bsti). eauto. }
+          cut (st = oinstr); [congruence| ].
+          inversion COMP. vauto. }
+        assert (ORDR_SC: ordr = Osc).
+        { subst exc. congruence. }
+        assert (ORDW_SC: ordw = Osc).
+        { subst exc. congruence. }
+        rewrite ORDR_SC, ORDW_SC in *.
+        assert (Instr.update (Instr.exchange new_expr) xmod Osc Osc reg loc_expr = Instr.update (Instr.exchange val) Xpln Osc Osc exchange_reg loc) by vauto.
+        inversion H. subst new_expr. subst xmod. subst reg. subst loc_expr. clear H.
+        
+        pose proof (@Ostore tid [Astore Xpln Osc loc0 new_value] sto sto'' st 2 Osc loc val loc0 new_value) as OMM_STEP.
+
+        forward eapply OMM_STEP; eauto.
+        { rewrite REGF_EQ, <- UREGS. auto. }
+        { rewrite REGF_EQ, <- UREGS. auto. }
+        { subst sto''. simpl. congruence. }
+        subst sto''. simpl. omega. }
+      red.
+      pose proof (reach_with_blocks Heqsti BLOCK_REACH) as [n_steps REACH].
+      
+      splits.
+      { subst sto''. simpl. rewrite <- BINSTRS_SAME. auto. }
+      { subst sto''. simpl. destruct BPC' as [BPC' | BPC'].
+         - rewrite BPC'. rewrite MM_SIM0. auto.
+         - desc. congruence. }
+      { red.
+        assert (exists n_steps', (step tid) ^^ n_steps' (init (instrs sti')) sti') as [n_steps' REACH'].
+        { exists (n_steps + 1). rewrite Nat.add_1_r. apply step_prev.
+          exists sti. split.
+          { rewrite <- INSTRS. auto. }
+          red. exists lbls. red. splits; auto.
+          eexists. eauto. }
+        splits.
+        { replace (bG bsti'') with (G sti'') by vauto.
+          rewrite (@E_ADD).
+          2: { repeat eexists. }
+          (* move UG0 at bottom.  *)
+          (* unfold add_rmw in UG0. simpl in UG0.   *)
+          
+          rewrite (@E_ADD_RMW (G sti') (G sti'') tid (eindex sti + 1)).
+          2: { repeat eexists. rewrite <- UINDEX. eapply UG0. }
+          rewrite (@E_ADD (G sti) (G sti') tid (eindex sti)).
+          2: { repeat eexists. eapply UG. }
+          
+          desc.
+          remember (Afence ord) as new_lbl.
+          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto.
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto.
+
+          desc.
+          remember (Aload true ordr loc0 old_value) as new_lbl'.
+          remember (Astore xmod ordw loc0 new_value) as new_lbl''.
+          forward eapply (@label_set_rmw_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' new_lbl'' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto.
+          forward eapply (@label_set_rmw_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' new_lbl'' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto.
+
+          rewrite W_EXT', R_EXT', R_EXT, W_EXT. rewrite UINDEX in *.
+          remember (ThreadEvent tid (eindex sti + 1)) as evr. 
+          remember (ThreadEvent tid (eindex sti + 1 + 1)) as evw. 
+          arewrite (rmw (G sti'') ≡ rmw (G sti) ∪ singl_rel evr evw).
+          { rewrite UG0, UG. unfold add_rmw. simpl.
+            rewrite <- Heqevr, <- Heqevw. basic_solver. }
+          subst new_lbl''. subst new_lbl'. subst new_lbl. simpl in *.
+          rewrite EINDEX_EQ, !set_union_empty_r.
+          remember (eq (ThreadEvent tid (eindex sti))) as nev.
+          replace (ThreadEvent tid (eindex sti + 2)) with evw.
+          2: { rewrite Heqevw. f_equal. omega. }
+          remember (eq evr) as nevr. remember (eq evw) as nevw.
+          do 2 rewrite set_unionA.
+          rewrite set_unionA with (s := R (G sti)). 
+          rewrite set_unionC with (s' := W (G sti) ∪₁ nevw).
+          do 2 rewrite <- set_unionA with (s := R (G sti)).
+          rewrite set_unionA. 
+          rewrite set_inter_union_l. apply set_equiv_union.
+          { rewrite set_inter_minus_r.
+            arewrite (E (G sti) ∩₁ (RW (G sti) ∪₁ (nevw ∪₁ nevr)) ≡₁ E (G sti) ∩₁ RW (G sti)).
+            { rewrite set_inter_union_r.
+              arewrite (E (G sti) ∩₁ (nevw ∪₁ nevr)  ≡₁ ∅); [| basic_solver ].
+              split; [| basic_solver].              
+              arewrite (nevw ∪₁ nevr ⊆₁ fun e => index e >= eindex sti).
+              { red. ins. red in H. destruct H.
+                all: subst; subst; simpl; omega. }
+              rewrite E_bounded; eauto.
+              red. ins. red in H. omega. }
+            rewrite dom_union.
+            rewrite set_minus_union_r.
+            rewrite empty_inter_minus_same with (Y := dom_rel (singl_rel evr evw)).
+            { rewrite set_inter_minus_l. rewrite set_interK.
+              red in MM_SIM1. desc.
+              replace (G sti) with (bG bsti) by vauto.
+              rewrite <- set_inter_minus_r. auto. }
+            red. split; [| basic_solver].
+            arewrite (dom_rel (singl_rel evr evw) ⊆₁ fun e => index e >= eindex sti).
+            { red. ins. red in H. desc. red in H. desc.
+              subst. rewrite Heqevr. simpl. omega. }
+            rewrite E_bounded; eauto. red. ins. do 2 (red in H; desc). omega. } 
+          split.
+          2: { rewrite set_inter_union_l.
+               apply set_subset_union_l.
+               split.
+               2: { rewrite set_inter_union_l. apply set_subset_union_l.
+                    split.
+                    { rewrite set_inter_minus_r.
+                      arewrite (nevr ∩₁ (RW (G sti) ∪₁ (nevw ∪₁ nevr)) ≡₁ nevr) by basic_solver.
+                      rewrite dom_union, set_minus_union_r.
+                      arewrite (nevr \₁ dom_rel (singl_rel evr evw) ⊆₁ ∅) by basic_solver.
+                      basic_solver. }
+                    rewrite set_inter_minus_r.
+                    arewrite (nevw ∩₁ (RW (G sti) ∪₁ (nevw ∪₁ nevr)) ⊆₁ nevw) by basic_solver.
+                    rewrite dom_union, set_minus_union_r.
+                    arewrite (nevw \₁ dom_rel (singl_rel evr evw) ⊆₁ nevw) by basic_solver.
+                    arewrite (nevw \₁ dom_rel (rmw (G sti)) ⊆₁ nevw); [| basic_solver].
+                    rewrite empty_inter_minus_same; [basic_solver |].
+                    red. split; [| basic_solver].
+                    rewrite (rmw_bibounded _ _ _ REACH).
+                    rewrite Heqnevw. red. ins. red in H. desc. subst.
+                    red in H0. desc. subst. simpl in H0. omega. }
+               rewrite set_inter_minus_r.
+               arewrite (nev ∩₁ (RW (G sti) ∪₁ (nevw ∪₁ nevr)) ⊆₁ ∅); [| basic_solver].
+               rewrite set_inter_union_r.
+               apply set_subset_union_l.
+               split.
+               2: { subst. rewrite Heqevw. rewrite Heqevr.
+                    red. ins. red in H. desc. red in H0.
+                    destruct H0; subst; inversion H0; omega. }
+               arewrite (RW (G sti) ⊆₁ (fun e => index e < eindex sti)).
+               2: { rewrite Heqnev. red. ins. red in H. desc.
+                    subst. simpl in H0. omega. }
+               apply set_subset_union_l. split.
+               { forward eapply (@nonnop_bounded n_steps (@is_r actid) r_matcher sti tid) as R_BOUNDED; eauto.
+               { apply r_pl. }
+               red. vauto. }
+               forward eapply (@nonnop_bounded n_steps (@is_w actid) w_matcher sti tid) as W_BOUNDED; eauto.
+               { apply w_pl. }
+               red. vauto. }
+          apply set_subset_inter_r. split; [basic_solver |].
+          apply inclusion_minus. split; [basic_solver| ].
+          rewrite dom_union. rewrite set_inter_union_r.
+          assert (forall {A: Type} (x y: A -> Prop), dom_rel (singl_rel x y) ≡₁ eq x) as DOM_SINGLE. 
+          { ins. basic_solver. }
+          apply set_subset_union_l. split.
+          2: { red. ins. red in H. desc. subst. rewrite <- H in H0.
+               red in H0. desc. red in H0. desc. subst.
+               inversion H0. omega. }
+          rewrite (rmw_bibounded _ _ _ REACH). subst.
+          rewrite Heqevw. red. ins. red in H. desc. rewrite <- H in H0.
+          red in H0. desc. simpl in H0. omega. }        
+        replace (bG bsti'') with (G sti''); [| vauto ].
+        ins. rewrite UG0, UG, UINDEX, EINDEX_EQ. simpl.
+        unfold add, acts_set in EGOx. simpl in EGOx. destruct EGOx.
+        - replace (eindex sti + 1 + 1) with (eindex sti + 2) by omega.
+          rewrite <- H. rewrite EINDEX_EQ. repeat rewrite upds. auto.
+        - assert (E (G sti) x).
+          { red in MM_SIM1. desc. red in RESTR_EVENTS. desc.
+            red in RESTR_EVENTS. unfold acts_set in RESTR_EVENTS.
+            apply RESTR_EVENTS in H. red in H. desc. vauto. }
+          apply (hahn_subset_exp (@E_bounded n_steps tid sti REACH)) in H0. 
+          repeat rewrite updo.
+          2-5: red; ins; subst; simpl in H0; omega.
+          replace (G sti) with (bG bsti); [| vauto ].
+          red in MM_SIM1. desc. apply SAME_LAB. auto. }
+      { subst sto''. replace (bregf bsti'') with (regf sti''); [| vauto ].
+        rewrite UREGS0, UREGS. simpl. admit. }
+      { replace (bdepf bsti'') with (depf sti''); [| vauto ].
+        subst sto''. simpl. rewrite UDEPS0, UDEPS. admit. }
+      { replace (bectrl bsti'') with (ectrl sti''); [| vauto ].
+        simpl. congruence. }
+      { replace (beindex bsti'') with (eindex sti''); [| vauto ].
+        simpl. rewrite UINDEX0, UINDEX. omega. }
     - 
-      (* - .....*)
+
       (* - .....*)
       (* - .....*)
   Admitted.

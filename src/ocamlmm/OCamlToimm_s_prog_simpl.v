@@ -737,17 +737,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     (* Qed.  *)
   Admitted. 
 
-  Lemma empty_inter_minus_same {A: Type} (X Y: A -> Prop):
-    X ∩₁ Y ≡₁ ∅ -> X \₁ Y ≡₁ X.
-  Proof. 
-    ins. red. split; [basic_solver| ].
-    red. ins.
-    red in H. desc.
-    red. split; auto.
-    red in H. specialize (H x).
-    red. ins. apply H. basic_solver. 
-  Qed.
-
   Lemma set_equiv_exp_iff {A : Type} (s s' : A -> Prop):
     s ≡₁ s' <-> forall x : A, s x <-> s' x.
   Proof.
