@@ -325,6 +325,15 @@ Section BoundedProperties.
   Proof. 
     desc. subst G'. unfold add, acts_set. simpl.
     basic_solver. 
-  Qed. 
+  Qed.
+
+  Lemma E_ADD_RMW G G' tid index
+        (ADD: exists lblr lblw foo bar baz bazz, G' = add_rmw G tid index lblr lblw foo bar baz bazz):
+    E G' ≡₁ E G ∪₁ eq (ThreadEvent tid index) ∪₁ eq (ThreadEvent tid (index + 1)).
+  Proof. 
+    desc. subst G'. unfold add_rmw, acts_set. simpl.
+    basic_solver. 
+  Qed.
+  
 
 End BoundedProperties.
