@@ -48,13 +48,25 @@ Section OCaml_IMM_Compilation.
 
   Definition is_thread_block_compiled PO BPI := Forall2 is_instruction_compiled PO BPI. 
 
+  Fixpoint correct_addresses (BPI BPI0: list (list Prog.Instr.t)) :=
+    match BPI with
+    | [] => []
+    | (Instr.ifgoto cond addr0 :: block') :: BPI' =>
+      let target := length (flatten (firstn addr0 BPI0)) in
+      (Instr.ifgoto cond target :: block') :: correct_addresses BPI' BPI0
+    | block :: BPI' => block :: correct_addresses BPI' BPI0
+    end. 
+    
   Definition is_thread_compiled PO PI :=
-    exists BPI, is_thread_block_compiled PO BPI /\ PI = flatten BPI. 
-      
-  Definition is_compiled (po: Prog.Prog.t) (pi: Prog.Prog.t) :=
-    ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id po <-> IdentMap.In t_id pi ⟫ /\
-    ⟪ THREADS_COMPILED: forall thread to ti (TO: Some to = IdentMap.find thread po)
-      (TI: Some ti = IdentMap.find thread pi), is_thread_compiled to ti ⟫. 
+    exists BPI BPI0, is_thread_block_compiled PO BPI0 /\
+                BPI = correct_addresses BPI0 BPI0 /\
+                PI = flatten BPI. 
+
+  Definition is_compiled (ProgO: Prog.Prog.t) (ProgI: Prog.Prog.t) :=
+    ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id ProgO <-> IdentMap.In t_id ProgI ⟫ /\
+    ⟪ THREADS_COMPILED: forall thread PO PI (TO: Some PO = IdentMap.find thread ProgO)
+                          (TI: Some PI = IdentMap.find thread ProgI),
+        is_thread_compiled PO PI ⟫. 
 
   Lemma every_instruction_compiled PO BPI (COMP: is_thread_block_compiled PO BPI)
         i instr block (INSTR: Some instr = nth_error PO i)
@@ -100,19 +112,10 @@ Section OCaml_IMM_Compilation.
       symmetry. eapply IHn. eauto.
   Qed.
 
-  Definition is_corrector (corr: list nat) (PO PI: list Prog.Instr.t) :=
-    length corr = length PO + 1 /\
-    True.
-
-  Lemma compilation_correction PO PI:
-    is_thread_compiled PO PI <-> exists (corrector: list nat),
-      ⟪CORR: is_corrector corrector PO PI  ⟫.
-  Proof. Admitted.
-
-  Lemma ifgoto_corr PO PI corr (CORR: is_corrector corr PO PI):
-      forall cond adr (IN_PROG: In (Instr.ifgoto cond adr) PI),
-      In adr corr.
-  Proof. Admitted.
+  (* Lemma ifgoto_corr PO PI corr (CORR: is_corrector corr PO PI): *)
+  (*     forall cond adr (IN_PROG: In (Instr.ifgoto cond adr) PI), *)
+  (*     In adr corr. *)
+  (* Proof. Admitted. *)
         
 End OCaml_IMM_Compilation.
 
