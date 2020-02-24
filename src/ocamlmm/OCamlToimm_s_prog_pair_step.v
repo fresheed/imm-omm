@@ -162,6 +162,68 @@ Section PairStep.
       specialize (SAME_LAB x H). congruence.  
   Qed.    
 
+  Definition same_struct {A: Type} (ll1 ll2: list (list A)) :=
+    Forall2 (fun l1 l2 => length l1 = length l2) ll1 ll2.
+  
+  Lemma SAME_STRUCT_PREF {A: Type} (ll1 ll2: list (list A)) (SS: same_struct ll1 ll2) i: 
+    length (flatten (firstn i ll1)) = length (flatten (firstn i ll2)).
+  Proof.
+    generalize dependent ll2. generalize dependent i.
+    induction ll1.
+    { ins. inversion SS. subst. auto. }
+    ins. inversion SS. subst.
+    destruct i.
+    { simpl. auto. }
+    simpl. do 2 rewrite length_app. f_equal; auto.  
+  Qed. 
+    
+  Lemma NONEMPTY_PREF {A: Type} (ll: list (list A)) (NE: Forall (fun l => l <> []) ll)
+        i j (SAME_LEN: length (flatten (firstn i ll)) = length (flatten (firstn j ll))) (INDEXI: i < length ll) (INDEXJ: j < length ll ): 
+    i = j.
+  Proof.
+    generalize dependent i. generalize dependent j.
+    induction ll.
+    { ins. omega. }
+    ins. destruct i, j; [auto | | |]. 
+    { simpl in SAME_LEN. rewrite length_app in SAME_LEN.
+      inversion NE. subst. destruct a; vauto. }
+    { simpl in SAME_LEN. rewrite length_app in SAME_LEN.
+      inversion NE. subst. destruct a; vauto. }
+    f_equal.
+    apply IHll.
+    { inversion NE. auto. }
+    { apply lt_S_n. auto. }
+    2: { apply lt_S_n. auto. }
+    simpl in SAME_LEN. do 2 rewrite length_app in SAME_LEN.
+    omega.
+  Qed. 
+  
+  Lemma COMPILED_NONEMPTY  PO BPI (COMP: is_thread_block_compiled PO BPI):
+    Forall (fun l : list Instr.t => l <> []) BPI.
+  Proof.
+    apply ForallE. intros block BLOCK.
+    apply In_nth_error in BLOCK. desc. symmetry in BLOCK. 
+    red in COMP. desc.
+    assert (exists block0, Some block0 = nth_error BPI0 n) as [block0 BLOCK0].
+    { apply OPT_VAL, nth_error_Some.
+      replace (length BPI0) with (length BPI).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. eapply Forall2_length. eauto. }
+    cut (block0 <> []).
+    2: { assert (exists instr, Some instr = nth_error PO n) as [instr INSTR].
+         { apply OPT_VAL, nth_error_Some.
+           replace (length PO) with (length BPI0).
+           { apply nth_error_Some, OPT_VAL. eauto. }
+           symmetry. eapply Forall2_length. eauto. }
+         pose proof (Forall2_index COMP _ INSTR BLOCK0).
+         inversion H; simpl; vauto. }
+    ins. red. ins. red in H. apply H.
+    apply length_zero_iff_nil. apply length_zero_iff_nil in H0.
+    rewrite <- H0.
+    pose proof (Forall2_index COMP0 _ BLOCK0 BLOCK). red in H1.
+    eapply Forall2_length; eauto.  
+  Qed. 
+  
   Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
         tid bsti' (OSEQ_STEP: omm_block_step tid bsti bsti')
         (BLOCK_REACH: (block_step tid)＊ (binit (binstrs bsti)) bsti):
@@ -182,6 +244,7 @@ Section PairStep.
       apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP.
       assert (AT_PC: Some ld = nth_error (instrs sti) (pc sti)).
       { forward eapply (@near_pc ld [ld] 0 _ bsti sti); eauto.
+        Unshelve. 2: { eauto. }
         rewrite Nat.add_0_r. auto. }
       red in BLOCK_STEP. desc. red in BLOCK_STEP. desc.
       rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
@@ -247,8 +310,9 @@ Section PairStep.
           2: { repeat eexists. eapply UG. }
           desc.
           remember (Aload false ord (RegFile.eval_lexpr (regf sti) lexpr) val) as new_lbl. 
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto. 
+          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto.
           forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto. 
+          Unshelve. all: try eauto. 
  
           rewrite R_EXT, W_EXT. subst new_lbl. simpl in *.
           arewrite (rmw (G sti') ≡ rmw (G sti)).
@@ -308,10 +372,12 @@ Section PairStep.
       red in BLOCK_STEP. destruct BLOCK_STEP as [sti' [STEP' STEP'']]. 
       assert (AT_PC: Some f = nth_error (instrs sti) (pc sti)).
       { forward eapply (@near_pc f [f; st] 0 _ bsti sti); eauto.
+        Unshelve. 2: { eauto. }
         rewrite Nat.add_0_r. auto. }
       assert (AT_PC': Some st = nth_error (instrs sti) (pc sti + 1)).
-      { forward eapply (@near_pc st [f; st] 1 _ bsti sti); eauto. }
-
+      { forward eapply (@near_pc st [f; st] 1 _ bsti sti).
+        Unshelve. all: eauto. }
+      
       red in STEP'. desc. red in STEP'. desc.
       rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
       inversion ISTEP0.
@@ -378,7 +444,7 @@ Section PairStep.
         inversion H. subst lexpr. subst expr. clear H. 
 
         pose proof (@Ostore tid lbls0 sto sto'' st 1 Orlx loc val l v) as OMM_STEP.
-
+        
         forward eapply OMM_STEP; eauto.
         (* TODO: modify equalities above to operate with sti' ? *)
         { rewrite REGF_EQ, <- UREGS. auto. }
@@ -413,12 +479,14 @@ Section PairStep.
           desc.
           remember (Afence ord) as new_lbl. 
           forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto. 
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto. 
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto.
+          Unshelve. all: try eauto. 
           
           desc.
           remember (Astore xmd ord0 l v) as new_lbl'. 
           forward eapply (@label_set_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto. 
           forward eapply (@label_set_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto. 
+          Unshelve. all: try eauto. 
 
           rewrite W_EXT', R_EXT', R_EXT, W_EXT.
           arewrite (rmw (G sti'') ≡ rmw (G sti)).
@@ -509,9 +577,11 @@ Section PairStep.
       red in BLOCK_STEP. destruct BLOCK_STEP as [sti' [STEP' STEP'']]. 
       assert (AT_PC: Some f = nth_error (instrs sti) (pc sti)).
       { forward eapply (@near_pc f [f; ld] 0 _ bsti sti); eauto.
+        Unshelve. 2: eauto. 
         rewrite Nat.add_0_r. auto. }
       assert (AT_PC': Some ld = nth_error (instrs sti) (pc sti + 1)).
-      { forward eapply (@near_pc ld [f; ld] 1 _ bsti sti); eauto. }
+      { forward eapply (@near_pc ld [f; ld] 1 _ bsti sti).
+        Unshelve. all: eauto. }
 
       red in STEP'. desc. red in STEP'. desc.
       rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
@@ -519,7 +589,7 @@ Section PairStep.
       all: rewrite II in EQ.
       all: try discriminate.
       rewrite EQ in *. subst instr. 
-
+      
       red in STEP''. desc. red in STEP''. desc.
       rewrite <- INSTRS, UPC, <- AT_PC' in ISTEP. inversion ISTEP as [EQ']. clear ISTEP. 
       inversion ISTEP1.
@@ -604,14 +674,18 @@ Section PairStep.
           desc.
           remember (Afence ord) as new_lbl. 
           forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto. 
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto. 
+          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto.
+          Unshelve. all: try eauto. 
           
           desc.
           remember (Aload false ord0 (RegFile.eval_lexpr (regf sto) lexpr) val) as new_lbl'. 
           forward eapply (@label_set_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto. 
           forward eapply (@label_set_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto. 
-
+          Unshelve.
+          2, 3: rewrite UG0, Heqnew_lbl'; replace (regf sto) with (regf sti') by congruence; repeat eexists. 
+                
           rewrite W_EXT', R_EXT', R_EXT, W_EXT.
+          all: eauto. 
           arewrite (rmw (G sti'') ≡ rmw (G sti)).
           { rewrite UG0, UG. vauto. }
           subst new_lbl'. subst new_lbl. simpl in *.  
@@ -700,10 +774,11 @@ Section PairStep.
       red in BLOCK_STEP. destruct BLOCK_STEP as [sti' [STEP' STEP'']]. 
       assert (AT_PC: Some f = nth_error (instrs sti) (pc sti)).
       { forward eapply (@near_pc f [f; exc] 0 _ bsti sti); eauto.
+        Unshelve. 2: eauto. 
         rewrite Nat.add_0_r. auto. }
       assert (AT_PC': Some exc = nth_error (instrs sti) (pc sti + 1)).
-      { forward eapply (@near_pc exc [f; exc] 1 _ bsti sti); eauto. }
-
+      { forward eapply (@near_pc exc [f; exc] 1 _ bsti sti).
+        Unshelve. all: eauto. }
       red in STEP'. desc. red in STEP'. desc.
       rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
       inversion ISTEP0.
@@ -800,12 +875,15 @@ Section PairStep.
           remember (Afence ord) as new_lbl.
           forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto.
           forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto.
+          Unshelve. all: try eauto. 
 
           desc.
           remember (Aload true ordr loc0 old_value) as new_lbl'.
           remember (Astore xmod ordw loc0 new_value) as new_lbl''.
           forward eapply (@label_set_rmw_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' new_lbl'' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto.
           forward eapply (@label_set_rmw_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' new_lbl'' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto.
+          Unshelve. 
+          2, 3: rewrite UG0, Heqnew_lbl'; replace (regf sto) with (regf sti') by congruence; repeat eexists. 
 
           rewrite W_EXT', R_EXT', R_EXT, W_EXT. rewrite UINDEX in *.
           remember (ThreadEvent tid (eindex sti + 1)) as evr. 
@@ -924,6 +1002,7 @@ Section PairStep.
       apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP.
       assert (AT_PC: Some asn = nth_error (instrs sti) (pc sti)).
       { forward eapply (@near_pc asn [asn] 0 _ bsti sti); eauto.
+        Unshelve. 2: eauto. 
         rewrite Nat.add_0_r. auto. }
       red in BLOCK_STEP. desc. red in BLOCK_STEP. desc.
       rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
@@ -987,6 +1066,7 @@ Section PairStep.
       apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP.
       assert (AT_PC: Some igt = nth_error (instrs sti) (pc sti)).
       { forward eapply (@near_pc igt [igt] 0 _ bsti sti); eauto.
+        Unshelve. 2: eauto. 
         rewrite Nat.add_0_r. auto. }
       red in BLOCK_STEP. desc. red in BLOCK_STEP. desc.
       rewrite <- AT_PC in ISTEP. inversion ISTEP as [EQ]. clear ISTEP. 
@@ -1029,18 +1109,7 @@ Section PairStep.
       { rewrite MM_SIM4. vauto. }
       exists sto'. splits.
       { red. exists []. red. splits; [subst; simpl; auto| ].
-        
-        
-        (* assert (exists block0, Some block0 = nth_error BPI0 (bpc bsti)) as [block0 BLOCK0].  *)
-        (* { apply OPT_VAL, nth_error_Some. *)
-        (*   replace (length BPI0) with (length (binstrs bsti)); auto. *)
-        (*   symmetry. eapply Forall2_length; eauto. } *)
-        (* assert (exists addr0, block0 = [Instr.ifgoto e addr0]) as [addr0 BLOCK0'].  *)
-        (* { cut ((block_corrected BPI0) block0 [igt]). *)
-        (*   { intros BC. inversion BC. subst. inversion H3. subst. *)
-        (*     inversion H2; eauto. subst. vauto. } *)
-        (*   eapply Forall2_index; eauto. }         *)
-        
+                
         exists (Instr.ifgoto cond addr0). exists 0. splits; auto. 
         pose proof (@Oif_ tid [] sto sto' (Instr.ifgoto cond addr0) 0 cond addr0) as OMM_STEP.
         rewrite REGF_EQ, DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. 
@@ -1062,16 +1131,14 @@ Section PairStep.
         pose proof (Forall2_index MM_SIM6 _ BLOCK0 AT_BLOCK).
         red in H. inversion H. subst. inversion H3; vauto; subst.
         subst addr.
-        set (same_struct := fun {A: Type} (ll1 ll2: list (list A)) => Forall2 (fun l1 l2 => length l1 = length l2) ll1 ll2).
-        assert (forall {A: Type} (ll1 ll2: list (list A)) (SS: same_struct _ ll1 ll2) i,
-                   length (flatten (firstn i ll1)) = length (flatten (firstn i ll2))) as SAME_STRUCT_PREF by admit.
-        assert (same_struct _ BPI0 (binstrs bsti')) as SAME_STRUCT_CORR by admit.
-        rewrite (SAME_STRUCT_PREF _ _ _ SAME_STRUCT_CORR) in H6. 
-        assert (forall {A: Type} (ll: list (list A)) (NE: Forall (fun l => l <> []) ll)
-                  i j, length (flatten (firstn i ll)) = length (flatten (firstn j ll)) -> i = j) as NONEMPTY_PREF by admit.
+        assert (same_struct BPI0 (binstrs bsti')) as SAME_STRUCT_CORR.
+        { rewrite <- BINSTRS_SAME. red. admit. }  
+        rewrite (SAME_STRUCT_PREF SAME_STRUCT_CORR) in H6. 
         apply NONEMPTY_PREF in H6; auto.
+        (* TODO: prove these premises with restricted gotos *)
+        2: { admit. }
+        2: { admit. }
         rewrite <- BINSTRS_SAME.
-        assert (forall PO BPI, is_thread_block_compiled PO BPI -> Forall (fun l : list Instr.t => l <> []) BPI) as COMPILED_NONEMPTY by admit.
         eapply COMPILED_NONEMPTY. red. eexists; eauto. } 
       { subst sto'. simpl. replace (bG bsti') with (G sti'); [| vauto ].
         rewrite UG. replace (G sti) with (bG bsti); [| vauto ]. auto. }
