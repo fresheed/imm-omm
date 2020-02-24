@@ -9,6 +9,7 @@ Require Import imm_s.
 Require Import OCamlToimm_s_prog. 
 Require Import ClosuresProperties. 
 Require Import Prog.
+Require Import Utils. 
 Require Import ProgToExecution.
 Require Import ProgToExecutionProperties.
 From PromisingLib Require Import Basic Loc.
@@ -46,55 +47,88 @@ Section OCaml_IMM_Compilation.
       let igt := (Instr.ifgoto e n) in
       is_instruction_compiled (igt) ([igt]).
 
-  Definition is_thread_block_compiled PO BPI := Forall2 is_instruction_compiled PO BPI. 
+  Inductive address_corrected: list (list Prog.Instr.t) -> Prog.Instr.t -> Prog.Instr.t -> Prop :=
+  | corrected_ifgoto BPI0 cond addr0:
+      let addr := length (flatten (firstn addr0 BPI0))
+      in address_corrected BPI0 (Instr.ifgoto cond addr0) (Instr.ifgoto cond addr)
+  | corrected_exact BPI0 instr
+                    (NOT_IFGOTO: ~ (match instr with | Instr.ifgoto _ _ => True | _ => False end)):
+      address_corrected BPI0 instr instr.
 
-  Fixpoint correct_addresses (BPI BPI0: list (list Prog.Instr.t)) :=
-    match BPI with
-    | [] => []
-    | (Instr.ifgoto cond addr0 :: block') :: BPI' =>
-      let target := length (flatten (firstn addr0 BPI0)) in
-      (Instr.ifgoto cond target :: block') :: correct_addresses BPI' BPI0
-    | block :: BPI' => block :: correct_addresses BPI' BPI0
-    end. 
-    
+  Definition block_corrected BPI0 block0 block := Forall2 (address_corrected BPI0) block0 block. 
+      
+  Definition is_thread_block_compiled PO BPI :=
+    exists BPI0, Forall2 is_instruction_compiled PO BPI0 /\
+            Forall2 (block_corrected BPI0) BPI0 BPI. 
+
   Definition is_thread_compiled PO PI :=
-    exists BPI BPI0, is_thread_block_compiled PO BPI0 /\
-                BPI = correct_addresses BPI0 BPI0 /\
-                PI = flatten BPI. 
+    exists BPI, is_thread_block_compiled PO BPI /\ PI = flatten BPI. 
 
   Definition is_compiled (ProgO: Prog.Prog.t) (ProgI: Prog.Prog.t) :=
     ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id ProgO <-> IdentMap.In t_id ProgI ⟫ /\
     ⟪ THREADS_COMPILED: forall thread PO PI (TO: Some PO = IdentMap.find thread ProgO)
                           (TI: Some PI = IdentMap.find thread ProgI),
-        is_thread_compiled PO PI ⟫. 
+        is_thread_compiled PO PI ⟫.
 
+  Lemma Forall2_index {A B: Type} (l1: list A) (l2: list B) P
+        (FORALL2: Forall2 P l1 l2)
+        x y i (XI: Some x = nth_error l1 i) (YI: Some y = nth_error l2 i):
+    P x y.
+  Proof.
+    generalize dependent l2. generalize dependent l1.
+    set (T := fun i => forall l1 : list A,
+                  Some x = nth_error l1 i ->
+                  forall l2 : list B, Forall2 P l1 l2 -> Some y = nth_error l2 i -> P x y).
+    eapply (strong_induction T).
+    ins. red. ins. unfold T in IH.
+    destruct l1; [destruct n; vauto |]. destruct l2; [destruct n; vauto |]. 
+    destruct n eqn:N.
+    { subst. simpl in *. inversion H. inversion H1. subst.
+      inversion H0. auto. }
+    subst. simpl in *. eapply IH; eauto.
+    inversion H0. auto.
+  Qed.
+
+
+  Lemma Forall2_length {A B: Type} (l1: list A) (l2: list B) P
+        (FORALL2: Forall2 P l1 l2):
+    length l1 = length l2.
+  Proof.
+    generalize dependent l2. induction l1.
+    { ins. inversion FORALL2. auto. }
+    ins. inversion FORALL2. subst. simpl. f_equal.
+    apply IHl1. auto.
+  Qed. 
+      
   Lemma every_instruction_compiled PO BPI (COMP: is_thread_block_compiled PO BPI)
         i instr block (INSTR: Some instr = nth_error PO i)
         (BLOCK: Some block = nth_error BPI i):
-    is_instruction_compiled instr block.
+    (is_instruction_compiled instr block /\ (~ (match instr with | Instr.ifgoto _ _ => True | _ => False end))) \/
+    (exists cond addr0 addr, instr = Instr.ifgoto cond addr0 /\ block = [Instr.ifgoto cond addr]). 
   Proof.
-    generalize dependent BPI. generalize dependent i.
-    generalize dependent instr. generalize dependent block. 
-    induction PO.
-    - ins.
-      assert (forall {A: Type}, nth_error ([]: list A) i = None). 
-      { ins. apply nth_error_None. simpl. omega. }
-      rewrite H in INSTR. vauto.
-    - ins. inversion COMP. subst.
-      destruct (NPeano.Nat.zero_or_succ i).
-      + subst. simpl in *. congruence.
-      + desc. subst. simpl in *. 
-        apply (@IHPO block instr m INSTR l' H3 BLOCK). 
-  Qed. 
+    red in COMP. desc.
+    assert (exists block0, Some block0 = nth_error BPI0 i) as [block0 BLOCK0].
+    { apply OPT_VAL, nth_error_Some.
+      replace (length BPI0) with (length BPI).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. eapply Forall2_length. eauto. }
+    cut (is_instruction_compiled instr block0 /\ (block_corrected BPI0) block0 block).
+    2: split; eapply Forall2_index; eauto. 
+    intros [COMP' BC]. inversion COMP'.
+    6: { subst. right. inversion BC. subst.
+         inversion H3. subst.
+         inversion H1.
+         { subst. repeat eexists. }
+         subst. exfalso. apply NOT_IFGOTO. subst igt. vauto. }
+    all: subst; left; inversion BC; subst; inversion H3; subst; inversion H1; auto.
+    all: subst; inversion H5; subst; inversion H2; subst; auto.
+  Qed.     
 
   Lemma compilation_same_length PO BPI (COMP: is_thread_block_compiled PO BPI):
     length PO = length BPI.
   Proof.
-    generalize dependent BPI.
-    induction PO.
-    { ins. inversion COMP. auto. }
-    ins. inversion COMP. simpl.
-    intuition.
+    red in COMP. desc.
+    eapply eq_trans; eapply Forall2_length; eauto. 
   Qed. 
 
   Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
