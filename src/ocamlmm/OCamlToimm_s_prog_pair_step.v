@@ -869,6 +869,14 @@ Section PairStep.
       { rewrite MM_SIM5. vauto. }
       assert (ECTRL_EQ: ectrl sto = ectrl sti).
       { rewrite MM_SIM4. vauto. }
+      assert (forall A B, (~ ~ A <-> ~ ~ B) -> A <-> B) as NN_IFF. 
+      { intros A B [IMP1 IMP2]. split; ins; apply NNPP; auto. }
+      
+      assert (Instr.update (Instr.exchange new_expr) xmod ordr ordw reg loc_expr = Instr.update (Instr.exchange val) Xpln Osc Osc exchange_reg loc).
+      { subst exc. congruence. }
+      inversion H. subst new_expr. subst xmod. subst ordr.
+      subst ordw. subst reg. subst loc_expr. clear H.
+      
       assert (RegFile.eval_lexpr (regf sto) loc = RegFile.eval_lexpr (regf sti) loc) as LEXPR_SAME.
       { apply eval_lexpr_same; [subst sti; simpl; auto| ].
         forward eapply exchange_reg_dedicated as ERD. 
@@ -877,18 +885,16 @@ Section PairStep.
           replace (flatten (binstrs bsti)) with (instrs sti); eauto.
           subst sti. vauto. }
         simpl in ERD. apply not_iff_compat in ERD.
-        assert (forall A B, (~ ~ A <-> ~ ~ B) -> A <-> B).
-        { intros A B [IMP1 IMP2]. split; ins; apply NNPP; auto. }
-        apply H in ERD. apply ERD. auto. }
+        apply NN_IFF in ERD. apply ERD. auto. }
       assert (RegFile.eval_expr (regf sto) val = RegFile.eval_expr (regf sti) val) as VAL_SAME.
-      { foobar. 
-        apply eval_expr_same; [subst sti; simpl; auto| ].
-        cut (~ In exchange_reg (instr_regs st)).
-        { ins. red. ins. apply H. apply in_or_app. auto. }
-        eapply exchange_reg_dedicated; auto. 
+      { apply eval_expr_same; [subst sti; simpl; auto| ].
+        forward eapply exchange_reg_dedicated as ERD. 
         { exists (instrs sto). red. eexists. eauto. }
-        eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto.
-        subst sti. vauto. }        
+        { Unshelve. 2: exact exc. eapply nth_error_In.
+          replace (flatten (binstrs bsti)) with (instrs sti); eauto.
+          subst sti. vauto. }
+        simpl in ERD. apply not_iff_compat in ERD.
+        apply NN_IFF in ERD. apply ERD. auto. }
         
       exists sto''. splits.
       { red. exists [Astore Xpln Osc loc0 new_value]. red. splits; [subst; simpl; auto| ].
@@ -905,19 +911,26 @@ Section PairStep.
           destruct COMP as [[COMP NOT_IGT] | COMP]. 
           { inversion COMP. vauto. } 
           desc. inversion COMP0. }
-        assert (ORDR_SC: ordr = Osc).
-        { subst exc. congruence. }
-        assert (ORDW_SC: ordw = Osc).
-        { subst exc. congruence. }
-        rewrite ORDR_SC, ORDW_SC in *.
-        assert (Instr.update (Instr.exchange new_expr) xmod Osc Osc reg loc_expr = Instr.update (Instr.exchange val) Xpln Osc Osc exchange_reg loc) by vauto.
-        inversion H. subst new_expr. subst xmod. subst reg. subst loc_expr. clear H.
+        (* assert (ORDR_SC: ordr = Osc). *)
+        (* { subst exc. congruence. } *)
+        (* assert (ORDW_SC: ordw = Osc). *)
+        (* { subst exc. congruence. } *)
+        (* rewrite ORDR_SC, ORDW_SC in *. *)
+  (* H1 : new_expr = val *)
+  (* H2 : xmod = Xpln *)
+  (* H3 : ordr = Osc *)
+  (* H4 : ordw = Osc *)
+  (* H5 : reg = exchange_reg *)
+  (* H6 : loc_expr = loc *)
+  (* ============================ *)
+        
+        assert (Instr.update (Instr.exchange val) Xpln Osc Osc exchange_reg loc = Instr.update (Instr.exchange val) Xpln Osc Osc exchange_reg loc) by vauto.
         
         pose proof (@Ostore tid [Astore Xpln Osc loc0 new_value] sto sto'' st 2 Osc loc val loc0 new_value) as OMM_STEP.
 
         forward eapply OMM_STEP; eauto.
         { rewrite LEXPR_SAME, <- UREGS. auto. }
-        { rewrite LEXPR_SAME. , <- UREGS. auto. }
+        { rewrite VAL_SAME , <- UREGS. auto. }
         { subst sto''. simpl. congruence. }
         subst sto''. simpl. omega. }
       red.
@@ -954,12 +967,13 @@ Section PairStep.
           Unshelve. all: try eauto. 
 
           desc.
-          remember (Aload true ordr loc0 old_value) as new_lbl'.
-          remember (Astore xmod ordw loc0 new_value) as new_lbl''.
+          remember (Aload true Osc loc0 old_value) as new_lbl'.
+          remember (Astore Xpln Osc loc0 new_value) as new_lbl''.
           forward eapply (@label_set_rmw_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' new_lbl'' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto.
           forward eapply (@label_set_rmw_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' new_lbl'' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto.
-          Unshelve. 
-          2, 3: rewrite UG0, Heqnew_lbl'; replace (regf sto) with (regf sti') by congruence; repeat eexists. 
+
+          Unshelve.
+          2, 3:  rewrite UG0, Heqnew_lbl'; repeat eexists. 
 
           rewrite W_EXT', R_EXT', R_EXT, W_EXT. rewrite UINDEX in *.
           remember (ThreadEvent tid (eindex sti + 1)) as evr. 
@@ -1068,9 +1082,9 @@ Section PairStep.
           red in MM_SIM1. desc. apply SAME_LAB. auto. }
       { subst sto''. replace (bregf bsti'') with (regf sti''); [| vauto ].
         rewrite UREGS0, UREGS. simpl.
-        RegFile.t
-        
-        admit. }
+        ins. unfold RegFun.add.
+        destruct (LocSet.Facts.eq_dec reg exchange_reg); vauto.
+        unfold RegFun.find. unfold bst2st. simpl. auto. }
       { replace (bdepf bsti'') with (depf sti''); [| vauto ].
         subst sto''. simpl. rewrite UDEPS0, UDEPS. admit. }
       { replace (bectrl bsti'') with (ectrl sti''); [| vauto ].
@@ -1098,14 +1112,27 @@ Section PairStep.
                 ectrl := ectrl sto;
                 eindex := eindex sto |}).
       red in MM_SIM. desc.
-      assert (REGF_EQ: regf sto = regf sti). 
-      { rewrite MM_SIM2. vauto. }
+      (* assert (REGF_EQ: regf sto = regf sti).  *)
+      (* { rewrite MM_SIM2. vauto. } *)
       assert (DEPF_EQ: depf sto = depf sti). 
       { rewrite MM_SIM3. vauto. }
       assert (EINDEX_EQ: eindex sto = eindex sti). 
       { rewrite MM_SIM5. vauto. }
       assert (ECTRL_EQ: ectrl sto = ectrl sti). 
       { rewrite MM_SIM4. vauto. }
+      assert (Instr.assign lhs rhs = Instr.assign reg expr).
+      { subst asn. congruence. }
+      inversion H. subst lhs. subst rhs. clear H. 
+      
+      assert (RegFile.eval_expr (regf sto) expr = RegFile.eval_expr (regf sti) expr) as VAL_SAME.
+      { apply eval_expr_same; [subst sti; simpl; auto| ].
+        forward eapply exchange_reg_dedicated as ERD. 
+        { exists (instrs sto). red. eexists. eauto. }
+        { Unshelve. 2: exact asn. eapply nth_error_In.
+          replace (flatten (binstrs bsti)) with (instrs sti); eauto.
+          subst sti. vauto. }
+        simpl in ERD. intuition. }
+
       exists sto'. splits.
       { red. exists []. red. splits; [subst; simpl; auto| ].
         exists asn. exists 0. splits.
@@ -1122,10 +1149,9 @@ Section PairStep.
           { inversion COMP. vauto. } 
           desc. inversion COMP0. }
         pose proof (@Oassign tid [] sto sto' asn 0 reg expr) as OMM_STEP.
-        rewrite REGF_EQ, DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. 
+        rewrite DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. 
         forward eapply OMM_STEP; eauto.
-        { subst sto'. simpl. congruence. }
-        subst sto'. simpl. congruence. }
+        { subst sto'. simpl. congruence. } }
       red. splits.
       { subst sto'. simpl. rewrite <- BINSTRS_SAME. auto. }
       {  subst sto'. simpl. destruct BPC' as [BPC' | BPC']. 
@@ -1134,7 +1160,10 @@ Section PairStep.
       { subst sto'. simpl. replace (bG bsti') with (G sti'); [| vauto ].
         rewrite UG. vauto. }
       { subst sto'. replace (bregf bsti') with (regf sti'); [| vauto ].
-        simpl. congruence. }
+        simpl.
+        ins. rewrite UREGS. unfold RegFun.add.
+        destruct (LocSet.Facts.eq_dec reg0 reg); vauto.
+        unfold RegFun.find. unfold bst2st. simpl. auto. }
       { subst sto'. replace (bdepf bsti') with (depf sti'); [| vauto ].
         simpl. congruence. }
       { subst sto'. replace (bectrl bsti') with (ectrl sti'); [| vauto ].
@@ -1178,34 +1207,44 @@ Section PairStep.
                 eindex := eindex sto |}).
       red in MM_SIM. desc.
       remember (bst2st bsti) as sti. remember (bst2st bsti') as sti'.
-      assert (REGF_EQ: regf sto = regf sti). 
-      { rewrite MM_SIM2. vauto. }
       assert (DEPF_EQ: depf sto = depf sti). 
       { rewrite MM_SIM3. vauto. }
       assert (EINDEX_EQ: eindex sto = eindex sti). 
       { rewrite MM_SIM5. vauto. }
       assert (ECTRL_EQ: ectrl sto = ectrl sti). 
       { rewrite MM_SIM4. vauto. }
+
+      assert (RegFile.eval_expr (regf sto) cond = RegFile.eval_expr (regf sti) cond) as VAL_SAME.
+      { apply eval_expr_same; [subst sti; simpl; auto| ].
+        forward eapply exchange_reg_dedicated as ERD. 
+        { exists (instrs sto). red. eexists. split; eauto.
+          red. eauto. }
+        { Unshelve. 2: exact igt. eapply nth_error_In.
+          replace (flatten (binstrs bsti)) with (instrs sti); eauto.
+          subst sti. vauto. }
+        simpl in ERD. intuition. }
+
       exists sto'. splits.
       { red. exists []. red. splits; [subst; simpl; auto| ].
                 
         exists (Instr.ifgoto cond addr0). exists 0. splits; auto. 
         pose proof (@Oif_ tid [] sto sto' (Instr.ifgoto cond addr0) 0 cond addr0) as OMM_STEP.
-        rewrite REGF_EQ, DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. 
+        rewrite DEPF_EQ, EINDEX_EQ, ECTRL_EQ in *. 
         forward eapply OMM_STEP; eauto.
         2: { subst sto'. simpl. congruence. }
         destruct (Const.eq_dec (RegFile.eval_expr (regf sti) cond)) eqn:ICOND.
-        { subst sto'. simpl. rewrite REGF_EQ. rewrite ICOND. auto. }
-        subst sto'. simpl. rewrite REGF_EQ, ICOND. auto. }
+        { subst sto'. simpl. rewrite VAL_SAME.  rewrite ICOND. auto. }
+        subst sto'. simpl. rewrite VAL_SAME, ICOND. auto. }
       red. 
       splits.
       { subst sto'. simpl. rewrite <- BINSTRS_SAME.
         red. eexists. eauto. }
       { subst sto'. simpl.
-        destruct (Const.eq_dec (RegFile.eval_expr (regf sto) cond) 0) eqn:OCOND.
-        { rewrite <- REGF_EQ, OCOND in UPC. unfold bst2st in UPC. simpl in UPC.
+        rewrite VAL_SAME. 
+        destruct (Const.eq_dec (RegFile.eval_expr (regf sti) cond) 0) eqn:OCOND.
+        { (* rewrite OCOND in UPC. unfold bst2st in UPC. simpl in UPC. *)
           admit. }
-        rewrite <- REGF_EQ, OCOND in UPC. unfold bst2st in UPC. simpl in UPC.
+        (* rewrite <- REGF_EQ, OCOND in UPC. unfold bst2st in UPC. simpl in UPC. *)
         assert (Some [Instr.ifgoto cond addr0] = nth_error BPI0 (bpc bsti)) as BLOCK0 by admit.
         pose proof (Forall2_index MM_SIM6 _ BLOCK0 AT_BLOCK).
         red in H. inversion H. subst. inversion H3; vauto; subst.
@@ -1222,7 +1261,7 @@ Section PairStep.
       { subst sto'. simpl. replace (bG bsti') with (G sti'); [| vauto ].
         rewrite UG. replace (G sti) with (bG bsti); [| vauto ]. auto. }
       { subst sto'. simpl. replace (bregf bsti') with (regf sti'); [| vauto ].
-        simpl. congruence. }
+        ins. rewrite UREGS. subst sti. simpl. apply MM_SIM2. auto. }
       { subst sto'. replace (bdepf bsti') with (depf sti'); [| vauto ].
         simpl. congruence. }
       { subst sto'. replace (bectrl bsti') with (ectrl sti'); [| vauto ].

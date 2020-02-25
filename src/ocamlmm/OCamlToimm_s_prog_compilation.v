@@ -191,7 +191,7 @@ Section OCaml_IMM_Compilation.
         instr (INSTR: In instr PI):
     ~ In exchange_reg (instr_regs instr) <->
     ~ match instr with
-      | Instr.update (Instr.exchange _) _ _ _ reg lexpr => reg = exchange_reg /\ ~ In exchange_reg (lexpr_regs lexpr)
+      | Instr.update (Instr.exchange expr) _ _ _ reg lexpr => reg = exchange_reg /\ ~ In exchange_reg (lexpr_regs lexpr) /\ ~ In exchange_reg (expr_regs expr)
       | _ => False
       end. 
   Proof. Admitted.
