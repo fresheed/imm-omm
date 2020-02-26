@@ -195,6 +195,48 @@ Section OCaml_IMM_Compilation.
       | _ => False
       end. 
   Proof. Admitted.
+
+  Lemma exchange_reg_dedicated' PI (COMP: exists PO, is_thread_compiled PO PI)
+        instr (INSTR: In instr PI):
+    match instr with
+    | Instr.assign reg expr => reg <> exchange_reg /\ ~ In exchange_reg (expr_regs expr)
+    | Instr.load _ reg lexpr => reg <> exchange_reg /\ ~ In exchange_reg (lexpr_regs lexpr)
+    | Instr.store _ lexpr expr => ~ In exchange_reg (expr_regs expr) /\ ~ In exchange_reg (lexpr_regs lexpr)
+    | Instr.update rmw _ _ _ reg lexpr => ~ In exchange_reg (rmw_regs rmw) /\ ~ In exchange_reg (lexpr_regs lexpr)
+    | Instr.ifgoto expr _ => ~ In exchange_reg (expr_regs expr)
+    | _ => True
+    end.
+  Proof. Admitted.
+
+  Definition lexpr_of lexpr instr :=
+    match instr with
+    | Instr.load _ _ lexpr' 
+    | Instr.store _ lexpr' _ 
+    | Instr.update _ _ _ _ _ lexpr' => lexpr = lexpr'
+    | _ => False
+    end.
+    
+  Definition expr_of expr instr :=
+    match instr with 
+    | Instr.assign _ expr'
+    | Instr.store _ _ expr'
+    | Instr.ifgoto expr' _ => expr = expr'
+    | _ => False
+    end.
+  
+  Definition rmw_expr_of expr rmw :=
+    match rmw with 
+    | Instr.exchange expr' 
+    | Instr.fetch_add expr' => expr = expr'
+    | Instr.cas expr1 expr2 => expr = expr1 \/ expr = expr2
+    end.
+
+  Definition safe_reg_of reg instr :=
+    match instr with 
+    | Instr.assign reg' _
+    | Instr.load _ reg' _ => reg = reg'
+    | _ => False
+    end. 
   
   Lemma eval_expr_same st st'
         (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
@@ -208,7 +250,18 @@ Section OCaml_IMM_Compilation.
       apply REGF_SIM. simpl in NOT_EXC. intuition.
     - destruct op1, op2; vauto; simpl in NOT_EXC; intuition.
   Qed. 
-      
+
+  Lemma eval_instr_expr PI (COMP: exists PO, is_thread_compiled PO PI)
+        st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
+        instr (INSTR: In instr PI) expr (EXPR_OF: expr_of expr instr):
+    RegFile.eval_expr (regf st) expr = RegFile.eval_expr (regf st') expr.
+  Proof.
+    apply eval_expr_same; auto.
+    forward eapply exchange_reg_dedicated' as DED; eauto.
+    red in EXPR_OF. 
+    destruct instr; desc; vauto.
+  Qed. 
+    
   Lemma eval_lexpr_same st st'
         (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
         lexpr (NOT_EXC: ~ In exchange_reg (lexpr_regs lexpr)):
@@ -220,6 +273,100 @@ Section OCaml_IMM_Compilation.
     apply eval_expr_same; auto.  
   Qed. 
 
+  Lemma eval_instr_lexpr PI (COMP: exists PO, is_thread_compiled PO PI)
+        st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
+        instr (INSTR: In instr PI) lexpr (EXPR_OF: lexpr_of lexpr instr):
+    RegFile.eval_lexpr (regf st) lexpr = RegFile.eval_lexpr (regf st') lexpr.
+  Proof.
+    apply eval_lexpr_same; auto.
+    forward eapply exchange_reg_dedicated' as DED; eauto.
+    red in EXPR_OF. 
+    destruct instr; desc; vauto.
+  Qed. 
+    
+  Lemma eval_rmw_expr PI (COMP: exists PO, is_thread_compiled PO PI)
+        st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
+        rmw (INSTR: exists x orr orw lhs loc, In (Instr.update rmw x orr orw lhs loc) PI)
+        expr (EXPR_OF: rmw_expr_of expr rmw):
+    RegFile.eval_expr (regf st) expr = RegFile.eval_expr (regf st') expr.
+  Proof.
+    desc. apply eval_expr_same; auto.
+    forward eapply exchange_reg_dedicated' as DED; eauto.
+    red in EXPR_OF. 
+    destruct rmw; desc; vauto.
+    simpl in DED.
+    red. ins. apply DED.
+    apply in_or_app. 
+    des; vauto. 
+  Qed. 
+    
+  Lemma eval_safe_reg PI (COMP: exists PO, is_thread_compiled PO PI)
+        st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
+        instr (INSTR: In instr PI) reg (SAFE_REG_OF: safe_reg_of reg instr):
+    regf st reg = regf st' reg.
+  Proof.
+    apply REGF_SIM; auto.
+    forward eapply exchange_reg_dedicated' as DED; eauto.
+    red in SAFE_REG_OF. 
+    destruct instr; desc; vauto.
+  Qed.
+
+  Lemma eval_expr_deps_same st st'
+        (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg),
+            depf st reg = depf st' reg)
+        expr (NOT_EXC: ~ In exchange_reg (expr_regs expr)):
+    DepsFile.expr_deps (depf st) expr = DepsFile.expr_deps (depf st') expr.
+  Proof.
+    unfold DepsFile.expr_deps, DepsFile.val_deps. destruct expr; vauto.
+    - destruct val; vauto. simpl in NOT_EXC. unfold RegFun.find.
+      apply REGF_SIM. intuition.
+    - destruct op; vauto. destruct op0; vauto. simpl in NOT_EXC. 
+      unfold RegFun.find.
+      apply REGF_SIM. intuition.
+    - destruct op1, op2; vauto; unfold RegFun.find; simpl in NOT_EXC.
+      + replace (depf st' reg) with (depf st reg); auto.
+      + replace (depf st' reg) with (depf st reg); auto.
+      + replace (depf st' reg) with (depf st reg); auto.
+        replace (depf st' reg0) with (depf st reg0); auto.
+        apply REGF_SIM. intuition.
+  Qed. 
+        
+  Lemma eval_instr_expr_deps PI (COMP: exists PO, is_thread_compiled PO PI)
+        st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg),
+                   depf st reg = depf st' reg)
+        instr (INSTR: In instr PI) expr (EXPR_OF: expr_of expr instr):
+    DepsFile.expr_deps (depf st) expr = DepsFile.expr_deps (depf st') expr.
+  Proof.
+    apply eval_expr_deps_same; auto.
+    forward eapply exchange_reg_dedicated' as DED; eauto.
+    red in EXPR_OF. 
+    destruct instr; desc; vauto.    
+  Qed.     
+    
+  Lemma eval_lexpr_deps_same st st'
+        (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg),
+            depf st reg = depf st' reg)
+        lexpr (NOT_EXC: ~ In exchange_reg (lexpr_regs lexpr)):
+    DepsFile.lexpr_deps (depf st) lexpr = DepsFile.lexpr_deps (depf st') lexpr.
+  Proof.
+    unfold DepsFile.lexpr_deps. destruct lexpr; vauto.
+    unfold DepsFile.val_deps. destruct r;vauto.
+    unfold RegFun.find. apply REGF_SIM.
+    red. ins. apply NOT_EXC. vauto.
+  Qed. 
+    
+  Lemma eval_instr_lexpr_deps PI (COMP: exists PO, is_thread_compiled PO PI)
+        st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg),
+                   depf st reg = depf st' reg)
+        instr (INSTR: In instr PI) lexpr (EXPR_OF: lexpr_of lexpr instr):
+    DepsFile.lexpr_deps (depf st) lexpr = DepsFile.lexpr_deps (depf st') lexpr.
+  Proof.
+    apply eval_lexpr_deps_same; auto.
+    forward eapply exchange_reg_dedicated' as DED; eauto.
+    red in EXPR_OF. 
+    destruct instr; desc; vauto.    
+  Qed.     
+    
 End OCaml_IMM_Compilation.
 
 
