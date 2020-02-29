@@ -429,12 +429,21 @@ Section OCaml_IMM_Correspondence.
     ⟪SAME_CO: GI.(co) ≡ GO.(co)⟫ /\
     ⟪EXT_RF: GO.(rf) ≡ GI.(rf) ⨾ ⦗set_compl (dom_rel GI.(rmw))⦘⟫.        
 
+  (* Definition mm_similar_states (sto: state) (bsti: block_state) := *)
+  (*   is_thread_block_compiled sto.(instrs) bsti.(binstrs)  /\ *)
+  (*   sto.(pc) = bsti.(bpc) /\ *)
+  (*   same_behavior_local sto.(G) bsti.(bG) /\ *)
+  (*   sto.(regf) = bsti.(bregf) /\ *)
+  (*   sto.(depf) = bsti.(bdepf) /\ *)
+  (*   sto.(ectrl) = bsti.(bectrl) /\ *)
+  (*   sto.(eindex) = bsti.(beindex). *)
+
   Definition mm_similar_states (sto: state) (bsti: block_state) :=
     is_thread_block_compiled sto.(instrs) bsti.(binstrs)  /\
     sto.(pc) = bsti.(bpc) /\
     same_behavior_local sto.(G) bsti.(bG) /\
-    sto.(regf) = bsti.(bregf) /\
-    sto.(depf) = bsti.(bdepf) /\
+    (forall reg (NOT_EXC: reg <> exchange_reg), sto.(regf) reg = bsti.(bregf) reg) /\
+    (forall reg (NOT_EXC: reg <> exchange_reg), sto.(depf) reg = bsti.(bdepf) reg) /\
     sto.(ectrl) = bsti.(bectrl) /\
     sto.(eindex) = bsti.(beindex).
 
@@ -471,9 +480,12 @@ Section OCaml_IMM_Correspondence.
     rewrite H1. auto. 
   Qed.
 
-  Lemma BPC_CHANGE bst bst' tid (OMM_BLOCK_STEP: omm_block_step tid bst bst')
+  Lemma BPC_CHANGE bst bst' tid PO BPI0
+        (COMPILED: Forall2 is_instruction_compiled PO BPI0)
+        (CORRECTED: Forall2 (block_corrected BPI0) BPI0 (binstrs bst))
         block (BLOCK: Some block = nth_error (binstrs bst) (bpc bst))
-        BPI0 block0 (CORR: block_corrected BPI0 block0 block):
+        block0 (BLOCK0: Some block0 = nth_error BPI0 (bpc bst))
+        (BLOCK_STEP: block_step_helper block tid bst bst'):
     bpc bst' =
     match block, block0 with
     | [Instr.ifgoto cond _], [Instr.ifgoto _ addr0]
@@ -481,7 +493,37 @@ Section OCaml_IMM_Correspondence.
         then bpc bst + 1 else addr0
     | _, _  => bpc bst + 1
     end. 
-  Proof. Admitted. 
+  Proof.
+    assert (block_corrected BPI0 block0 block) as CORR_BLOCK.
+    { eapply Forall2_index; eauto. } 
+    assert (exists oinstr, Some oinstr = nth_error PO (bpc bst)) as [oinstr OINSTR]. 
+    { apply OPT_VAL. apply nth_error_Some.
+      replace (length PO) with (length BPI0).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. eapply Forall2_length. eauto. }
+    assert (is_instruction_compiled oinstr block0) as COMP_BLOCK.
+    { eapply Forall2_index; eauto. }
+    admit. 
+    (* foobar.  *)
+    (* inversion COMP_BLOCK.  *)
+    (* all: subst. *)
+    (* - subst ld. inversion CORR_BLOCK. subst. inversion H3. subst. clear H3. *)
+    (*   inversion H1. subst. *)
+    (*   clear H1. clear NOT_IFGOTO. clear CORR_BLOCK.  *)
+    (*   red in BLOCK_STEP. desc. simpl in BLOCK_STEP0. *)
+    (*   remember (bst2st bst) as sti. remember (bst2st bst') as sti'.  *)
+      
+    (*   apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP0. *)
+    (*   do 2 (red in BLOCK_STEP0; desc). *)
+    (*   inversion ISTEP0. *)
+    (*   all: rewrite II in *.  *)
+    (*   all: try discriminate. *)
+    (*   rewrite EQ in *. subst instr.  *)
+      
+      
+    
+    (* red in CORR.  *)
+  Admitted. 
   
   (* (OMM_BLOCK_STEP: omm_block_step tid bst bst'): *)
   Lemma ___BPC_CHANGE___ bst bst' tid

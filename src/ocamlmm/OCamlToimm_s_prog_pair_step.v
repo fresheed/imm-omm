@@ -224,16 +224,7 @@ Section PairStep.
     eapply Forall2_length; eauto.  
   Qed. 
   
-  Definition mm_similar_states_weak (sto: state) (bsti: block_state) :=
-    is_thread_block_compiled sto.(instrs) bsti.(binstrs)  /\
-    sto.(pc) = bsti.(bpc) /\
-    same_behavior_local sto.(G) bsti.(bG) /\
-    (forall reg (NOT_EXC: reg <> exchange_reg), sto.(regf) reg = bsti.(bregf) reg) /\
-    (forall reg (NOT_EXC: reg <> exchange_reg), sto.(depf) reg = bsti.(bdepf) reg) /\
-    sto.(ectrl) = bsti.(bectrl) /\
-    sto.(eindex) = bsti.(beindex).
-
-  Lemma INSTR_LEXPR_HELPER sto bsti (MM_SIM: mm_similar_states_weak sto bsti)
+  Lemma INSTR_LEXPR_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
         sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) lexpr (EXPR_OF: lexpr_of lexpr instr):
     RegFile.eval_lexpr (regf sto) lexpr = RegFile.eval_lexpr (regf sti) lexpr.
   Proof. 
@@ -244,7 +235,7 @@ Section PairStep.
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed. 
 
-  Lemma INSTR_EXPR_HELPER sto bsti (MM_SIM: mm_similar_states_weak sto bsti)
+  Lemma INSTR_EXPR_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
         sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) expr (EXPR_OF: expr_of expr instr):
     RegFile.eval_expr (regf sto) expr = RegFile.eval_expr (regf sti) expr.
   Proof. 
@@ -255,7 +246,7 @@ Section PairStep.
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed.
   
-  Lemma INSTR_LEXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states_weak sto bsti)
+  Lemma INSTR_LEXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
         sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) lexpr (EXPR_OF: lexpr_of lexpr instr):
     DepsFile.lexpr_deps (depf sto) lexpr = DepsFile.lexpr_deps (depf sti) lexpr.
   Proof. 
@@ -266,7 +257,7 @@ Section PairStep.
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed.
   
-  Lemma INSTR_EXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states_weak sto bsti)
+  Lemma INSTR_EXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
         sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) expr (EXPR_OF: expr_of expr instr):
     DepsFile.expr_deps (depf sto) expr = DepsFile.expr_deps (depf sti) expr.
   Proof. 
@@ -277,10 +268,11 @@ Section PairStep.
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed.
   
-  Lemma pair_step sto bsti (MM_SIM: mm_similar_states_weak sto bsti)
+  Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
         tid bsti' (OSEQ_STEP: omm_block_step tid bsti bsti')
+        (BPC'_BOUND: bpc bsti' <= length (binstrs bsti))
         (BLOCK_REACH: (block_step tid)＊ (binit (binstrs bsti)) bsti):
-    exists sto', Ostep tid sto sto' /\ mm_similar_states_weak sto' bsti'.
+    exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
   Proof.
     pose proof (block_step_nonterminal (bs_extract OSEQ_STEP)) as BST_NONTERM.
     red in OSEQ_STEP. desc. 
@@ -302,9 +294,9 @@ Section PairStep.
     assert (block_corrected BPI0 block0 block) as CORR_BLOCK.
     { eapply Forall2_index; eauto. } 
     forward eapply (@BPC_CHANGE bsti bsti') as BPC'; eauto.
-    { red. splits; eauto.
-      { eexists. red. splits; eauto. }
-      exists PO. vauto. } 
+    { red. splits; eauto. }
+      (* { eexists. red. splits; eauto. } *)
+      (* exists PO. vauto. }  *)
     inversion COMP_BLOCK; subst; simpl in *. 
     - replace block with [ld] in *.
       2: { subst ld. inversion CORR_BLOCK. inversion H3. subst.
@@ -1318,6 +1310,104 @@ Section PairStep.
         simpl. congruence. }
   Admitted.
 
+ 
+  Lemma DIFF_LE x y (LT: x <= y): exists d, y = x + d. 
+  Proof.
+    ins. destruct (y - x) eqn:DIFF.
+    { exists 0. omega. }
+    exists (S n). omega. 
+  Qed. 
 
+  Lemma MIN_PLUS x d: Init.Nat.min x (x + d) = x.
+  Proof. 
+    generalize dependent d.  induction x. 
+    { ins. }
+    ins. f_equal. auto.
+  Qed. 
+
+  Lemma firstn_ge_incl {A: Type} (l: list (list A)) i j (LE: i <= j):
+    firstn j l = firstn i l ++ skipn i (firstn j l).
+  Proof. 
+    destruct (lt_dec j (length l)) as [LTj | GEj]. 
+    2: { rewrite firstn_all2 with (n := j); [| omega].
+         symmetry. eapply firstn_skipn. }
+    rewrite <- firstn_skipn with (n := i) at 1.
+    rewrite firstn_firstn.
+    rewrite (NPeano.Nat.min_l _ _ LE). 
+    eauto.
+  Qed. 
+
+  Lemma skipn_app n : forall {A: Type} (l1 l2: list A),
+      skipn n (l1 ++ l2) = (skipn n l1) ++ (skipn (n - length l1) l2).
+  Proof. Admitted.
+  
+  Lemma skipn_firstn_comm : forall {A: Type} m n (l: list A),
+      skipn m (firstn n l) = firstn (n - m) (skipn m l).
+  Proof. Admitted.
+
+  Lemma skipn_firstn_nil {A: Type} (l: list A) i:
+    skipn i (firstn i l) = [].
+  Proof.
+    generalize dependent l. induction i; vauto. ins. destruct l; auto.
+  Qed. 
+    
+  Lemma firstn_skipn_comm : forall {A: Type} m n (l: list A),
+      firstn m (skipn n l) = skipn n (firstn (n + m) l).
+  Proof. Admitted. 
+
+  Lemma ll_index_shift {A: Type} (ll: list (list A)) i j
+         block (ITH: Some block = nth_error ll i) (NE: Forall (fun l => l <> []) ll)
+         (J_BOUND: j <= length ll)
+         (FLT_SHIFT: length (flatten (firstn j ll)) = length (flatten (firstn i ll)) + length block):
+    j = i + 1.
+   Proof.
+     destruct (dec_le j i) as [LE | GT].
+     { rewrite (firstn_ge_incl ll LE) in FLT_SHIFT.  
+       rewrite flatten_app, length_app in FLT_SHIFT.
+       cut (length block > 0); [ins; omega |]. 
+       eapply Forall_forall in NE; vauto.
+       eapply nth_error_In. eauto. }
+     apply not_le in GT.
+     rewrite (@firstn_ge_incl _ ll i j) in FLT_SHIFT; [| omega].
+     assert (exists d, j = i + S d).
+     { forward eapply (@DIFF_LE i j); [omega |]. 
+       ins. desc. subst. destruct d; vauto. omega. }
+     desc. subst.
+     cut (d = 0); [ins; omega|].
+     destruct d; auto. 
+     rewrite flatten_app, length_app in FLT_SHIFT.
+     apply plus_reg_l in FLT_SHIFT.
+     replace (i + S (S d)) with ((i + 1 + d) + 1) in FLT_SHIFT by omega.
+     assert (exists block', Some block' = nth_error ll (i + 1 + d)) as [block' BLOCK'].
+     { apply OPT_VAL, nth_error_Some. omega. }
+     erewrite first_end in FLT_SHIFT; eauto.
+     rewrite skipn_app in FLT_SHIFT.
+     replace (i - length (firstn (i + 1 + d) ll)) with 0 in FLT_SHIFT.
+     2: { rewrite firstn_length_le; omega. }
+     rewrite <- firstn_skipn with (l := ll) (n := i + 1) in FLT_SHIFT.
+     erewrite first_end in FLT_SHIFT; eauto.
+     rewrite <- app_assoc in FLT_SHIFT.
+     replace i with (length (firstn i ll)) in FLT_SHIFT at 2.
+     2: { apply firstn_length_le. omega. }
+     rewrite <- plus_assoc in FLT_SHIFT. 
+     rewrite firstn_app_2 in FLT_SHIFT.
+     simpl in FLT_SHIFT.
+     rewrite skipn_app in FLT_SHIFT.
+     replace (length (firstn i ll)) with i in FLT_SHIFT. 
+     2: { symmetry. apply firstn_length_le. omega. }
+     rewrite skipn_firstn_nil in FLT_SHIFT. 
+     rewrite Nat.sub_diag in FLT_SHIFT. simpl in FLT_SHIFT.
+     rewrite !flatten_app, !length_app in FLT_SHIFT. simpl in FLT_SHIFT.
+     rewrite app_nil_r in FLT_SHIFT.
+     cut (length block' <> 0); [ins; omega| ]. 
+     pose proof (Forall_forall (fun l : list A => l <> []) ll).
+     cut (block' <> []).
+     { ins. destruct block'; vauto. }
+     apply H; auto.  
+     eapply nth_error_In. eauto.
+     (* ??? Proof General successfully goes there but Qed fails *)
+     (* Qed.  *)     
+   Admitted. 
+     
 
 End PairStep.  
