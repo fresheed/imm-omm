@@ -45,7 +45,7 @@ Section OCaml_IMM_Compilation.
       is_instruction_compiled (asn) ([asn])
   | compiled_ifgoto e n:
       let igt := (Instr.ifgoto e n) in
-      is_instruction_compiled (igt) ([igt]).
+      is_instruction_compiled (igt) ([igt]).  
 
   Inductive address_corrected: list (list Prog.Instr.t) -> Prog.Instr.t -> Prog.Instr.t -> Prop :=
   | corrected_ifgoto BPI0 cond addr0:
@@ -62,7 +62,7 @@ Section OCaml_IMM_Compilation.
             Forall2 (block_corrected BPI0) BPI0 BPI. 
 
   Definition is_thread_compiled PO PI :=
-    exists BPI, is_thread_block_compiled PO BPI /\ PI = flatten BPI. 
+    exists BPI, is_thread_block_compiled PO BPI /\ PI = flatten BPI.
 
   Definition is_compiled (ProgO: Prog.Prog.t) (ProgI: Prog.Prog.t) :=
     ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id ProgO <-> IdentMap.In t_id ProgI ⟫ /\
@@ -70,6 +70,11 @@ Section OCaml_IMM_Compilation.
                           (TI: Some PI = IdentMap.find thread ProgI),
         is_thread_compiled PO PI ⟫.
 
+  Lemma compilation_addresses_restricted PO BPI (COMP: is_thread_block_compiled PO BPI)
+        cond addr0 i (IN: Some (Instr.ifgoto cond addr0) = nth_error PO i):
+    addr0 <= length PO.
+  Proof. Admitted.     
+  
   Lemma Forall2_index {A B: Type} (l1: list A) (l2: list B) P
         (FORALL2: Forall2 P l1 l2)
         x y i (XI: Some x = nth_error l1 i) (YI: Some y = nth_error l2 i):
