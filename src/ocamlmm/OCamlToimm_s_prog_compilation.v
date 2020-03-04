@@ -43,6 +43,8 @@ Section OCaml_IMM_Compilation.
   | compiled_assign lhs rhs:
       let asn := (Instr.assign lhs rhs) in
       is_instruction_compiled (asn) ([asn])
+  (* Note that is_instruction_compiled doesn't mean that in the compiled program a given instruction will be replaced with specified block.  *)
+  (* ifgoto instruction is an example since eventually the address will be corrected *)
   | compiled_ifgoto e n:
       let igt := (Instr.ifgoto e n) in
       is_instruction_compiled (igt) ([igt]).  
