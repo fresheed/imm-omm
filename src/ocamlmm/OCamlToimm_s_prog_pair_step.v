@@ -275,7 +275,7 @@ Section PairStep.
     exists (S n). omega. 
   Qed. 
 
-  Lemma firstn_ge_incl {A: Type} (l: list (list A)) i j (LE: i <= j):
+  Lemma firstn_ge_incl {A: Type} (l: list A) i j (LE: i <= j):
     firstn j l = firstn i l ++ skipn i (firstn j l).
   Proof. 
     destruct (lt_dec j (length l)) as [LTj | GEj]. 
