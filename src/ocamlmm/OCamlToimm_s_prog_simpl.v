@@ -283,30 +283,16 @@ Section OCamlMM_TO_IMM_S_PROG.
     ins. destruct l; vauto.
     simpl. apply le_n_S. auto.
   Qed. 
-
-  Lemma sublist_whole_size {A: Type} (l: list A) sub i
-        (SL: sub = sublist l i (length sub)):
-    length sub <= length l.
-  Proof.
-    (* rewrite SL. unfold sublist. *)
-    (* cut (length (firstn (length sub) l) <= length l); [|apply firstn_length_leq]. *)
-    (* ins. *)
-    (* cut (length (firstn (length sub) (skipn i l)) <= length (firstn (length sub) l)); [omega | ]. *)
-    (* replace l with (firstn i l ++ skipn i l) at 2; [| apply firstn_skipn]. *)
-    (* rewrite firstn_app. rewrite app_length.  *)
-  Admitted. 
     
   Lemma ll_l_corr {A: Type} ll (l: list A) (FLT: l = flatten ll) block b
         (NE_LL: Forall (fun l => l <> []) ll)
         P (MINPROP: min_prop P)
         (P_LL: Forall P ll)
         (NE_B: block <> [])
-        (BLOCK_P: P block)
-    :
+        (BLOCK_P: P block):
     block = sublist l (length (flatten (firstn b ll))) (length block)
     <-> Some block = nth_error ll b.
   Proof.
-  (*   foobar_check_weaker.  *)
     generalize dependent block. generalize dependent ll. generalize dependent l. 
     induction b.
     { intros. unfold sublist. rewrite FLT. simpl.
@@ -318,8 +304,9 @@ Section OCamlMM_TO_IMM_S_PROG.
         { rewrite <- Nat.add_0_r with (n := length l0).
           rewrite firstn_app_2. simpl. symmetry. apply app_nil_r. }
         assert (length block <= length l) as LEN_B.
-        { eapply sublist_whole_size. unfold sublist.
-          Unshelve. 2: exact 0. simpl. vauto. }
+        { rewrite <- FLT in BLOCK.
+          apply (@f_equal _ _ (@length _)) in BLOCK.
+          pose proof (firstn_length_leq l (length block)). omega. }
         assert (length l0 <= length l) as LEN_L0. 
         { subst l. simpl. rewrite app_length. omega. }
         destruct (lt_eq_lt_dec (length block) (length l0)) as [[LT | EQ] | GT].
@@ -626,36 +613,86 @@ Section OCamlMM_TO_IMM_S_PROG.
       all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). }
     Qed.
 
+  (* Fixpoint get_b (b pc_target: nat) (BPI: list (list Instr.t)): nat. *)
+  (*   destruct (ge_dec (length (flatten (firstn b BPI))) pc_target). *)
+  (*   { exact b. } *)
+  (*   exact (get_b (b + 1) pc_target BPI). *)
+  (* Qed.  *)
+  Fixpoint get_b_helper (b pc_target: nat) (BPI: list (list Instr.t)) :=
+    match pc_target, BPI with
+    | 0, _ => Some b
+    | pc_target, [] => None
+    | pc_target, block :: BPI' => get_b_helper (S b) (pc_target - length block) BPI'
+    end. 
+  Definition get_b pc_target BPI := get_b_helper 0 pc_target BPI.
   
+  Fixpoint get_borders_helper (BPI: list (list Instr.t)) b :=
+    match BPI with
+    | [] => [b]
+    | block :: BPI' => b :: get_borders_helper BPI' (b + length block)
+    end. 
+  Definition get_borders (BPI: list (list Instr.t)) := get_borders_helper BPI 0.
+
+  Lemma acb_then_border st BPI (ONBLOCK: at_compilation_block st)
+    (FLT: instrs st = flatten BPI) (COMP: exists PO, is_thread_block_compiled PO BPI):
+    exists bindex, Some (pc st) = nth_error (get_borders BPI) bindex.
+  Proof.
+    
+  Admitted.
+
+  Lemma get_borders_len BPI s: length (get_borders_helper BPI s) = length BPI + 1.
+  Proof.
+    generalize dependent s. induction BPI; vauto.
+    ins. f_equal. auto.
+  Qed. 
+
+  Lemma borders_flt BPI b border
+        (BORDER: Some border = nth_error (get_borders BPI) b):
+    border = length (flatten (firstn b BPI)).
+  Proof.
+    assert (b <= length BPI).
+    { assert (b < length (get_borders BPI)).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      pose proof get_borders_len BPI 0. unfold get_borders in H. omega. }    
+    replace (nth_error (get_borders BPI) b) with (nth_error (get_borders (firstn b BPI)) b) in BORDER.
+    2: { unfold get_borders. remember 0 as start. clear Heqstart. 
+         clear dependent border.
+         generalize dependent b. generalize dependent start.          
+         induction BPI.
+         { ins. assert (b = 0) by omega. subst. simpl. auto. }
+         ins. destruct b.
+         { simpl. auto. }
+         simpl. apply IHBPI. omega. }    
+    assert (forall BPI rborder (RB: Some rborder = nth_error (get_borders BPI) (length BPI)), rborder = length (flatten BPI)).
+    { clear dependent border. clear dependent b. clear dependent BPI.
+      unfold get_borders. intros BPI.
+      rewrite <- Nat.add_0_r with (n := length (flatten BPI)).
+      remember 0 as start. clear Heqstart. generalize dependent start. 
+      induction BPI.
+      { ins. vauto. }
+      ins. rewrite app_length. rewrite plus_comm with (n := length a).
+      rewrite <- plus_assoc. rewrite plus_comm with (n := length a). 
+      apply IHBPI. auto. } 
+    apply H0. 
+    replace (length (firstn b BPI)) with b; auto. 
+    symmetry. apply firstn_length_le. auto.
+  Qed. 
+    
   Lemma acb_iff_bst st (COMP: exists PO, is_thread_compiled PO (instrs st)):
     at_compilation_block st <-> exists bst, ⟪ST: st = bst2st bst ⟫. 
   Proof.
     split.
     { intros ACB. desc. red in COMP. desc.
-      admit.
-      (* TODO: try to employ no_acb_between ? *)
-
-      
-      (* red in ACB. des. *)
-      (* 2: { exists (bst_from_st st BPI (length BPI)). *)
-      (*      unfold bst2st. simpl. rewrite firstn_all. rewrite <- COMP0. *)
-      (*      apply is_terminal_pc_bounded in ACB. rewrite <- ACB. *)
-      (*      apply state_record_equality. } *)
-      (* cut (exists b, pc st = length (flatten (firstn b BPI))). *)
-      (* { ins. desc. exists (bst_from_st st BPI b).  *)
-      (*   unfold bst2st. simpl. rewrite <- H, <- COMP0. *)
-      (*   apply state_record_equality. } *)
-      (* red in ACB. desc. *)
-      (* (* generalize dependent block. generalize dependent oinstr. *) *)
-      (* assert (forall pc_st, *)
-      (*            forall (oinstr : Instr.t) (block : list Instr.t), *)
-      (*              block = sublist (instrs st) pc_st (length block) -> *)
-      (*              is_instruction_compiled oinstr block -> *)
-      (*              exists b : nat, pc_st + length block *)
-      (*                       = length (flatten (firstn (b + 1) BPI))). *)
-      (* { admit. } *)
-      (* (* maybe try inductive Definition?*)       *)
-    }
+      red in ACB. des.
+      2: { exists (bst_from_st st BPI (length BPI)).
+           unfold bst2st. simpl. rewrite firstn_all. rewrite <- COMP0.
+           apply is_terminal_pc_bounded in ACB. rewrite <- ACB.
+           apply state_record_equality. }
+      forward eapply acb_then_border as [b BORDER]; eauto.
+      { red. eauto. }
+      exists (bst_from_st st BPI b). red. unfold bst2st. simpl.
+      erewrite <- borders_flt; eauto.
+      rewrite <- COMP0. apply state_record_equality. }
     intros. desc. red. red in COMP. desc.
     assert (binstrs bst = BPI) by admit. subst. 
     destruct (ge_dec (bpc bst) (length (binstrs bst))) as [TERM | NONTERM].
