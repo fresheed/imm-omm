@@ -284,6 +284,48 @@ Section OCamlMM_TO_IMM_S_PROG.
     simpl. apply le_n_S. auto.
   Qed. 
     
+  Lemma start_block_deterministic {A: Type} P (MINPROP: min_prop P)
+        ll l (block' : list A)
+        (FLT : l = flatten (block' :: ll))        
+        (NE_LL : Forall (fun l : list A => l <> []) (block' :: ll))
+        (P_LL : Forall P (block' :: ll))
+        (block : list A)
+        (NE_B : block <> [])
+        (BLOCK_P : P block)
+        (BLOCK : block = firstn (length block) (flatten (block' :: ll)))
+        (L0 : block' = firstn (length block') (block' ++ flatten ll)):
+    block = block'.
+  Proof. 
+    assert (length block <= length l) as LEN_B.
+    { rewrite <- FLT in BLOCK.
+      apply (@f_equal _ _ (@length _)) in BLOCK.
+      pose proof (firstn_length_leq l (length block)). omega. }
+    assert (length block' <= length l) as LEN_L0. 
+    { subst l. simpl. rewrite app_length. omega. }
+    destruct (lt_eq_lt_dec (length block) (length block')) as [[LT | EQ] | GT].
+    2: { forward eapply (@firstn_ge_incl _ l (length block) (length block')) as PREF; [omega| ].
+         rewrite EQ in PREF at 2. rewrite skipn_firstn_nil in PREF.
+         rewrite app_nil_r in PREF. simpl in BLOCK. congruence. }
+    { forward eapply (@firstn_ge_incl _ l (length block) (length block')) as PREF; [omega| ].
+      exfalso.
+      subst l. simpl in *. rewrite <- BLOCK, <- L0 in PREF.
+      inversion  P_LL. subst. 
+      red in MINPROP. specialize (MINPROP block' H1 block (skipn (length block) block')).
+      apply MINPROP; vauto.
+      apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF.
+      red. ins. apply NE_B. apply length_zero_iff_nil.
+      apply length_zero_iff_nil in H. omega. }
+    forward eapply (@firstn_ge_incl _ l (length block') (length block)) as PREF; [omega| ].
+    exfalso. 
+    subst l. simpl in *. rewrite <- BLOCK, <- L0 in PREF.
+    inversion  P_LL. subst. 
+    red in MINPROP. specialize (MINPROP block BLOCK_P block' (skipn (length block') block)).
+    apply MINPROP; vauto.
+    apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF.
+    red. ins. inversion NE_LL. subst. apply H4.
+    apply length_zero_iff_nil.  apply length_zero_iff_nil in H. omega.
+  Qed. 
+        
   Lemma ll_l_corr {A: Type} ll (l: list A) (FLT: l = flatten ll) block b
         (NE_LL: Forall (fun l => l <> []) ll)
         P (MINPROP: min_prop P)
@@ -303,6 +345,7 @@ Section OCamlMM_TO_IMM_S_PROG.
         assert (l0 = firstn (length l0) (l0 ++ flatten ll)) as L0. 
         { rewrite <- Nat.add_0_r with (n := length l0).
           rewrite firstn_app_2. simpl. symmetry. apply app_nil_r. }
+        from_here. 
         assert (length block <= length l) as LEN_B.
         { rewrite <- FLT in BLOCK.
           apply (@f_equal _ _ (@length _)) in BLOCK.
