@@ -63,8 +63,19 @@ Section OCaml_IMM_Compilation.
     exists BPI0, Forall2 is_instruction_compiled PO BPI0 /\
             Forall2 (block_corrected BPI0) BPI0 BPI. 
 
+  Definition itbc_weak PO BPI :=
+    exists BPI0 BPI0',
+      Forall2 is_instruction_compiled PO BPI0 /\
+      Forall2 (block_corrected BPI0') BPI0 BPI.
+
   Definition is_thread_compiled PO PI :=
     exists BPI, is_thread_block_compiled PO BPI /\ PI = flatten BPI.
+
+  Lemma itbc_implies_itbcw PO BPI (COMP: is_thread_block_compiled PO BPI):
+    itbc_weak PO BPI.
+  Proof.
+    red in COMP. red. desc. eauto.
+  Qed. 
 
   Definition is_compiled (ProgO: Prog.Prog.t) (ProgI: Prog.Prog.t) :=
     ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id ProgO <-> IdentMap.In t_id ProgI ⟫ /\
@@ -131,11 +142,17 @@ Section OCaml_IMM_Compilation.
     all: subst; inversion H5; subst; inversion H2; subst; auto.
   Qed.     
 
-  Lemma compilation_same_length PO BPI (COMP: is_thread_block_compiled PO BPI):
+  Lemma compilation_same_length_weak PO BPI (COMP: itbc_weak PO BPI):
     length PO = length BPI.
   Proof.
     red in COMP. desc.
     eapply eq_trans; eapply Forall2_length; eauto. 
+  Qed. 
+
+  Lemma compilation_same_length PO BPI (COMP: is_thread_block_compiled PO BPI):
+    length PO = length BPI.
+  Proof.
+    apply compilation_same_length_weak. apply itbc_implies_itbcw. auto.
   Qed. 
 
   Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):

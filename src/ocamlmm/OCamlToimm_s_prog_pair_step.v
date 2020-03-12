@@ -198,11 +198,6 @@ Section PairStep.
     omega.
   Qed. 
   
-  Definition itbc_weak PO BPI :=
-    exists BPI0 BPI0',
-      Forall2 is_instruction_compiled PO BPI0 /\
-      Forall2 (block_corrected BPI0') BPI0 BPI.
-
   Lemma COMPILED_NONEMPTY_weak  PO BPI (COMP: itbc_weak PO BPI):
     Forall (fun l : list Instr.t => l <> []) BPI.
   Proof.
@@ -232,7 +227,7 @@ Section PairStep.
   Lemma COMPILED_NONEMPTY  PO BPI (COMP: is_thread_block_compiled PO BPI):
     Forall (fun l : list Instr.t => l <> []) BPI.
   Proof.
-    eapply COMPILED_NONEMPTY_weak. red. red in COMP. desc. eauto.
+    eapply COMPILED_NONEMPTY_weak. eapply itbc_implies_itbcw. eauto.  
   Qed. 
     
   Lemma INSTR_LEXPR_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)

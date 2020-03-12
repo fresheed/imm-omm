@@ -284,46 +284,93 @@ Section OCamlMM_TO_IMM_S_PROG.
     simpl. apply le_n_S. auto.
   Qed. 
     
-  Lemma start_block_deterministic {A: Type} P (MINPROP: min_prop P)
-        ll l (block' : list A)
-        (FLT : l = flatten (block' :: ll))        
-        (NE_LL : Forall (fun l : list A => l <> []) (block' :: ll))
-        (P_LL : Forall P (block' :: ll))
+  (* Lemma start_block_deterministic {A: Type} P (MINPROP: min_prop P) *)
+  (*       ll *)
+  (*       (block' : list A) *)
+  (*       (* l *) *)
+  (*       (* (FLT : l = flatten (block' :: ll))         *) *)
+  (*       (NE_LL : Forall (fun l : list A => l <> []) (block' :: ll)) *)
+  (*       (P_LL : Forall P (block' :: ll)) *)
+  (*       (block : list A) *)
+  (*       (NE_B : block <> []) *)
+  (*       (BLOCK_P : P block) *)
+  (*       (BLOCK : block = firstn (length block) (flatten (block' :: ll))) *)
+  (*       (BLOCK' : block' = firstn (length block') (block' ++ flatten ll)): *)
+  (*   block = block'. *)
+  (* Proof.  *)
+  (*   assert (length block <= length (block' :: ll)) as LEN_B. *)
+  (*   { (* rewrite <- FLT in BLOCK. *) *)
+  (*     apply (@f_equal _ _ (@length _)) in BLOCK. *)
+  (*     pose proof (firstn_length_leq (block' :: ll)(length block)). *)
+  (*     simpl in *. omega. } *)
+  (*   assert (length block' <= length l) as LEN_BLOCK'.  *)
+  (*   { subst l. simpl. rewrite app_length. omega. } *)
+  (*   destruct (lt_eq_lt_dec (length block) (length block')) as [[LT | EQ] | GT]. *)
+  (*   2: { forward eapply (@firstn_ge_incl _ (block' :: ll)(length block) (length block')) as PREF; [omega| ]. *)
+  (*        rewrite EQ in PREF at 2. rewrite skipn_firstn_nil in PREF. *)
+  (*        rewrite app_nil_r in PREF. simpl in BLOCK. congruence. } *)
+  (*   { forward eapply (@firstn_ge_incl _ (block' :: ll)(length block) (length block')) as PREF; [omega| ]. *)
+  (*     exfalso. *)
+  (*     subst l. simpl in *. rewrite <- BLOCK, <- BLOCK' in PREF. *)
+  (*     inversion  P_LL. subst.  *)
+  (*     red in MINPROP. specialize (MINPROP block' H1 block (skipn (length block) block')). *)
+  (*     apply MINPROP; vauto. *)
+  (*     apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF. *)
+  (*     red. ins. apply NE_B. apply length_zero_iff_nil. *)
+  (*     apply length_zero_iff_nil in H. omega. } *)
+  (*   forward eapply (@firstn_ge_incl _ (block' :: ll)(length block') (length block)) as PREF; [omega| ]. *)
+  (*   exfalso.  *)
+  (*   subst l. simpl in *. rewrite <- BLOCK, <- BLOCK' in PREF. *)
+  (*   inversion  P_LL. subst.  *)
+  (*   red in MINPROP. specialize (MINPROP block BLOCK_P block' (skipn (length block') block)). *)
+  (*   apply MINPROP; vauto. *)
+  (*   apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF. *)
+  (*   red. ins. inversion NE_LL. subst. apply H4. *)
+  (*   apply length_zero_iff_nil.  apply length_zero_iff_nil in H. omega. *)
+  (* Qed.  *)
+
+  Lemma start_block_deterministic
+        (A : Type)
+        (P : list A -> Prop)
         (block : list A)
-        (NE_B : block <> [])
-        (BLOCK_P : P block)
-        (BLOCK : block = firstn (length block) (flatten (block' :: ll)))
-        (L0 : block' = firstn (length block') (block' ++ flatten ll)):
-    block = block'.
-  Proof. 
-    assert (length block <= length l) as LEN_B.
-    { rewrite <- FLT in BLOCK.
-      apply (@f_equal _ _ (@length _)) in BLOCK.
-      pose proof (firstn_length_leq l (length block)). omega. }
-    assert (length block' <= length l) as LEN_L0. 
-    { subst l. simpl. rewrite app_length. omega. }
-    destruct (lt_eq_lt_dec (length block) (length block')) as [[LT | EQ] | GT].
-    2: { forward eapply (@firstn_ge_incl _ l (length block) (length block')) as PREF; [omega| ].
+        (block' : list A)
+        (ll : list (list A))
+        (MINPROP : min_prop P)
+        (NEblock: block <> [])
+        (Pblock: P block)
+        (NE_B : block' <> [])
+        (BLOCK'_P : P block')
+        (BLOCK' : block' = firstn (length block') (flatten (block :: ll))):
+    block' = block.
+  Proof.
+    assert (block = firstn (length block) (block ++ flatten ll)) as L0. 
+    { rewrite <- Nat.add_0_r with (n := length block).
+      rewrite firstn_app_2. simpl. symmetry. apply app_nil_r. }
+    assert (length block' <= length (flatten (block :: ll))) as LEN_B.
+    { apply (@f_equal _ _ (@length _)) in BLOCK'.
+      pose proof (firstn_length_leq (flatten (block :: ll)) (length block')). omega. }
+    assert (length block <= length (flatten (block :: ll))) as LEN_L0. 
+    { simpl. rewrite app_length. omega. }
+    destruct (lt_eq_lt_dec (length block') (length block)) as [[LT | EQ] | GT].
+    2: { forward eapply (@firstn_ge_incl _ (flatten (block :: ll)) (length block') (length block)) as PREF; [omega| ].
          rewrite EQ in PREF at 2. rewrite skipn_firstn_nil in PREF.
-         rewrite app_nil_r in PREF. simpl in BLOCK. congruence. }
-    { forward eapply (@firstn_ge_incl _ l (length block) (length block')) as PREF; [omega| ].
+         rewrite app_nil_r in PREF. simpl in BLOCK'. congruence. }
+    { forward eapply (@firstn_ge_incl _ (flatten (block :: ll)) (length block') (length block)) as PREF; [omega| ].
       exfalso.
-      subst l. simpl in *. rewrite <- BLOCK, <- L0 in PREF.
-      inversion  P_LL. subst. 
-      red in MINPROP. specialize (MINPROP block' H1 block (skipn (length block) block')).
+      simpl in *. rewrite <- BLOCK', <- L0 in PREF.
+      red in MINPROP. specialize (MINPROP block Pblock block' (skipn (length block') block)).
       apply MINPROP; vauto.
       apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF.
       red. ins. apply NE_B. apply length_zero_iff_nil.
       apply length_zero_iff_nil in H. omega. }
-    forward eapply (@firstn_ge_incl _ l (length block') (length block)) as PREF; [omega| ].
+    forward eapply (@firstn_ge_incl _ (flatten (block :: ll)) (length block) (length block')) as PREF; [omega| ].
     exfalso. 
-    subst l. simpl in *. rewrite <- BLOCK, <- L0 in PREF.
-    inversion  P_LL. subst. 
-    red in MINPROP. specialize (MINPROP block BLOCK_P block' (skipn (length block') block)).
+    simpl in *. rewrite <- BLOCK', <- L0 in PREF.
+    red in MINPROP. specialize (MINPROP block' BLOCK'_P block (skipn (length block) block')).
     apply MINPROP; vauto.
     apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF.
-    red. ins. inversion NE_LL. subst. apply H4.
-    apply length_zero_iff_nil.  apply length_zero_iff_nil in H. omega.
+    red. ins. apply NEblock.
+    apply length_zero_iff_nil.  apply length_zero_iff_nil in H. omega. 
   Qed. 
         
   Lemma ll_l_corr {A: Type} ll (l: list A) (FLT: l = flatten ll) block b
@@ -341,42 +388,11 @@ Section OCamlMM_TO_IMM_S_PROG.
       split.
       { intros BLOCK. destruct ll.
         { simpl in BLOCK. rewrite firstn_nil in BLOCK. vauto. }
-        f_equal. (* simpl in BLOCK. *)
-        assert (l0 = firstn (length l0) (l0 ++ flatten ll)) as L0. 
-        { rewrite <- Nat.add_0_r with (n := length l0).
-          rewrite firstn_app_2. simpl. symmetry. apply app_nil_r. }
-        from_here. 
-        assert (length block <= length l) as LEN_B.
-        { rewrite <- FLT in BLOCK.
-          apply (@f_equal _ _ (@length _)) in BLOCK.
-          pose proof (firstn_length_leq l (length block)). omega. }
-        assert (length l0 <= length l) as LEN_L0. 
-        { subst l. simpl. rewrite app_length. omega. }
-        destruct (lt_eq_lt_dec (length block) (length l0)) as [[LT | EQ] | GT].
-        2: { forward eapply (@firstn_ge_incl _ l (length block) (length l0)) as PREF; [omega| ].
-             rewrite EQ in PREF at 2. rewrite skipn_firstn_nil in PREF.
-             rewrite app_nil_r in PREF. simpl in BLOCK. congruence. }
-        { forward eapply (@firstn_ge_incl _ l (length block) (length l0)) as PREF; [omega| ].
-          exfalso.
-          subst l. simpl in *. rewrite <- BLOCK, <- L0 in PREF.
-          inversion  P_LL. subst. 
-          red in MINPROP. specialize (MINPROP l0 H1 block (skipn (length block) l0)).
-          apply MINPROP; vauto.
-          apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF.
-          red. ins. apply NE_B. apply length_zero_iff_nil.
-          apply length_zero_iff_nil in H. omega. }
-        forward eapply (@firstn_ge_incl _ l (length l0) (length block)) as PREF; [omega| ].
-        exfalso. 
-        subst l. simpl in *. rewrite <- BLOCK, <- L0 in PREF.
-        inversion  P_LL. subst. 
-        red in MINPROP. specialize (MINPROP block BLOCK_P l0 (skipn (length l0) block)).
-        apply MINPROP; vauto.
-        apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF.
-        red. ins. inversion NE_LL. subst. apply H4.
-        apply length_zero_iff_nil.  apply length_zero_iff_nil in H. omega. }
+        f_equal.
+        eapply start_block_deterministic; eauto; [inv NE_LL| inv P_LL]. }
       intros BLOCK. destruct ll; vauto. simpl.
       rewrite <- Nat.add_0_r with (n := length l0). rewrite firstn_app_2.
-      simpl. symmetry. apply app_nil_r. }
+      simpl. symmetry. apply app_nil_r. } 
     ins. destruct ll; vauto.
     { simpl. unfold sublist. simpl. rewrite firstn_nil. vauto. }
     simpl. rewrite app_length. unfold sublist.
@@ -391,7 +407,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     { inversion NE_LL. vauto. }
     inversion P_LL. vauto.
   Qed. 
-
 
   Lemma instr_compiled_min_prop:
     min_prop (fun blk : list Instr.t =>
@@ -419,8 +434,8 @@ Section OCamlMM_TO_IMM_S_PROG.
     apply H with (i := S i). simpl. auto. 
   Qed.
 
-  Lemma resulting_block_compiled PO BPI b block
-        (COMP : is_thread_block_compiled PO BPI)
+  Lemma resulting_block_compiled_weak PO BPI b block
+        (COMP : itbc_weak PO BPI)
         (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
         (BLOCK: Some block = nth_error BPI b):
     exists oinstr : Instr.t, is_instruction_compiled oinstr block.
@@ -435,10 +450,10 @@ Section OCamlMM_TO_IMM_S_PROG.
     { apply OPT_VAL. apply nth_error_Some.
       replace (length PO) with (length BPI).
       { apply nth_error_Some, OPT_VAL. eauto. }
-      symmetry. apply compilation_same_length. red. eauto. }
+      symmetry. apply compilation_same_length_weak. red. eauto. }
     assert (is_instruction_compiled oinstr block0) as COMP_.
     { eapply Forall2_index; eauto. }
-    assert (block_corrected BPI0 block0 block) as CORR.
+    assert (block_corrected BPI0' block0 block) as CORR.
     { eapply Forall2_index; eauto. }
     assert (exists oinstr0 : Instr.t, is_instruction_compiled oinstr0 block) as COMP'.
     { inversion COMP_. 
@@ -449,6 +464,15 @@ Section OCamlMM_TO_IMM_S_PROG.
             inversion H1; vauto).
       all: (inversion H5; subst; inversion H2; subst; vauto). }
     splits; auto.
+  Qed. 
+
+  Lemma resulting_block_compiled PO BPI b block
+        (COMP : is_thread_block_compiled PO BPI)
+        (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
+        (BLOCK: Some block = nth_error BPI b):
+    exists oinstr : Instr.t, is_instruction_compiled oinstr block.
+  Proof.
+    eapply resulting_block_compiled_weak; eauto. eapply itbc_implies_itbcw. eauto. 
   Qed. 
 
     Lemma ll_l_corr_helper BPI PI (FLT: PI = flatten BPI) block b
@@ -483,9 +507,13 @@ Section OCamlMM_TO_IMM_S_PROG.
     eapply ll_l_corr_helper; vauto.
   Qed. 
 
+  Definition on_block_pc pc PI block := 
+    ⟪BLOCK: block = sublist PI pc (length block)⟫ /\
+    ⟪COMP_BLOCK: exists oinstr : Instr.t, is_instruction_compiled oinstr block⟫. 
+  
   (* TODO: remove it since exact instruction is known when block_start is called? *)
-  Lemma block_start st block instr (BLOCK: on_block st block)
-        (AT_PC: Some instr = nth_error (instrs st) (pc st)):
+  Lemma block_start pc PI block instr (BLOCK: on_block_pc pc PI block)
+        (AT_PC: Some instr = nth_error PI pc):
     (exists mode, instr = Prog.Instr.fence mode) \/
     (exists loc expr, instr = Prog.Instr.load Orlx loc expr) \/
     (exists cond loc, instr = Prog.Instr.ifgoto cond loc) \/
@@ -495,47 +523,96 @@ Section OCamlMM_TO_IMM_S_PROG.
     inversion COMP_BLOCK.
     all: subst; simpl in *.
     (* TODO: refactor *)
-    - assert (AT_PC1: Some ld = nth_error (instrs st) (pc st)).
+    - assert (AT_PC1: Some ld = nth_error PI pc).
       { apply eq_trans with (y := nth_error [ld] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r (pc st)).
+        rewrite <- (NPeano.Nat.add_0_r pc).
         eapply sublist_items; eauto. }
       rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
       right. left. subst ld. eauto.
-    - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)).
-      { apply eq_trans with (y := nth_error [f; st0] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r (pc st)).
+    - assert (AT_PC1: Some f = nth_error PI pc).
+      { apply eq_trans with (y := nth_error [f; st] 0); auto.
+        rewrite <- (NPeano.Nat.add_0_r pc).
         eapply sublist_items; eauto. }
       rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
       left. subst f. eauto.
-    - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)).
+    - assert (AT_PC1: Some f = nth_error PI pc).
       { apply eq_trans with (y := nth_error [f; ld] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r (pc st)).
+        rewrite <- (NPeano.Nat.add_0_r pc).
         eapply sublist_items; eauto. }
       rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
       left. subst f. eauto.
-    - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)).
+    - assert (AT_PC1: Some f = nth_error PI pc).
       { apply eq_trans with (y := nth_error [f; exc] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r (pc st)).
+        rewrite <- (NPeano.Nat.add_0_r pc).
         eapply sublist_items; eauto. }
       rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
       left. subst f. eauto.
-    - assert (AT_PC1: Some asn = nth_error (instrs st) (pc st)).
+    - assert (AT_PC1: Some asn = nth_error PI pc).
       { apply eq_trans with (y := nth_error [asn] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r (pc st)).
+        rewrite <- (NPeano.Nat.add_0_r pc).
         eapply sublist_items; eauto. }
       rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
       do 3 right. subst asn. eauto.
-    - assert (AT_PC1: Some igt = nth_error (instrs st) (pc st)).
+    - assert (AT_PC1: Some igt = nth_error PI pc).
       { apply eq_trans with (y := nth_error [igt] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r (pc st)).
+        rewrite <- (NPeano.Nat.add_0_r pc).
         eapply sublist_items; eauto. }
       rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
       do 2 right. left. subst igt. eauto.
   Qed.
 
-  Lemma block_mid st block instr (BLOCK: on_block st block)
+  (* Lemma block_start_st st block instr (BLOCK: on_block st block) *)
+  (*       (AT_PC: Some instr = nth_error (instrs st) (pc st)): *)
+  (*   (exists mode, instr = Prog.Instr.fence mode) \/ *)
+  (*   (exists loc expr, instr = Prog.Instr.load Orlx loc expr) \/ *)
+  (*   (exists cond loc, instr = Prog.Instr.ifgoto cond loc) \/ *)
+  (*   (exists reg expr, instr = Prog.Instr.assign reg expr). *)
+  (* Proof. *)
+  (*   red in BLOCK. desc. *)
+  (*   inversion COMP_BLOCK. *)
+  (*   all: subst; simpl in *. *)
+  (*   (* TODO: refactor *) *)
+  (*   - assert (AT_PC1: Some ld = nth_error (instrs st) (pc st)). *)
+  (*     { apply eq_trans with (y := nth_error [ld] 0); auto. *)
+  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
+  (*     right. left. subst ld. eauto. *)
+  (*   - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)). *)
+  (*     { apply eq_trans with (y := nth_error [f; st0] 0); auto. *)
+  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
+  (*     left. subst f. eauto. *)
+  (*   - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)). *)
+  (*     { apply eq_trans with (y := nth_error [f; ld] 0); auto. *)
+  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
+  (*     left. subst f. eauto. *)
+  (*   - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)). *)
+  (*     { apply eq_trans with (y := nth_error [f; exc] 0); auto. *)
+  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
+  (*     left. subst f. eauto. *)
+  (*   - assert (AT_PC1: Some asn = nth_error (instrs st) (pc st)). *)
+  (*     { apply eq_trans with (y := nth_error [asn] 0); auto. *)
+  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
+  (*     do 3 right. subst asn. eauto. *)
+  (*   - assert (AT_PC1: Some igt = nth_error (instrs st) (pc st)). *)
+  (*     { apply eq_trans with (y := nth_error [igt] 0); auto. *)
+  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
+  (*     do 2 right. left. subst igt. eauto. *)
+  (* Qed. *)
+
+  Lemma block_mid pc PI block instr (BLOCK: on_block_pc pc PI block)
         (BLOCK_LEN: length block >= 2)
-        (AT_PC1: Some instr = nth_error (instrs st) (pc st + 1)):
+        (AT_PC1: Some instr = nth_error PI (pc + 1)):
     (exists loc expr, instr = Prog.Instr.store Orlx loc expr) \/
     (exists loc expr, instr = Prog.Instr.load Osc loc expr) \/
     (exists expr loc, instr = Prog.Instr.update (Prog.Instr.exchange expr) Xpln Osc Osc exchange_reg loc).
@@ -548,29 +625,61 @@ Section OCamlMM_TO_IMM_S_PROG.
     all: try omega.
     (* now only 2-blocks remain*)
     (* TODO: refactor *)
-    { assert (AT_PC1': Some st0 = nth_error (instrs st) (pc st + 1)).
-      { apply eq_trans with (y := nth_error [f; st0] 1); auto.
+    { assert (AT_PC1': Some st = nth_error PI (pc + 1)).
+      { apply eq_trans with (y := nth_error [f; st] 1); auto.
         eapply sublist_items; eauto. }
-      replace instr with st0; [| congruence].
-      subst st0. eauto. }
-    { assert (AT_PC1': Some ld = nth_error (instrs st) (pc st + 1)).
+      replace instr with st; [| congruence].
+      subst st. eauto. }
+    { assert (AT_PC1': Some ld = nth_error PI (pc + 1)).
       { apply eq_trans with (y := nth_error [f; ld] 1); auto.
         eapply sublist_items; eauto. }
       replace instr with ld; [| congruence].
       subst ld. eauto. }
-    { assert (AT_PC1': Some exc = nth_error (instrs st) (pc st + 1)).
+    { assert (AT_PC1': Some exc = nth_error PI (pc + 1)).
       { apply eq_trans with (y := nth_error [f; exc] 1); auto.
         eapply sublist_items; eauto. }
       replace instr with exc; [| congruence].
       subst exc. eauto. }
   Qed.
-      
-  Lemma no_acb_between st1 st2 tid block n (STEPS: (step tid) ^^ n st1 st2)
-        (BLOCK: on_block st1 block) (LT: n < length block) (NZ: n <> 0):
-    not (at_compilation_block st2).
+
+  (* Lemma block_mid_st st block instr (BLOCK: on_block st block) *)
+  (*       (BLOCK_LEN: length block >= 2) *)
+  (*       (AT_PC1: Some instr = nth_error (instrs st) (pc st + 1)): *)
+  (*   (exists loc expr, instr = Prog.Instr.store Orlx loc expr) \/ *)
+  (*   (exists loc expr, instr = Prog.Instr.load Osc loc expr) \/ *)
+  (*   (exists expr loc, instr = Prog.Instr.update (Prog.Instr.exchange expr) Xpln Osc Osc exchange_reg loc). *)
+  (* Proof. *)
+  (*   red in BLOCK. desc. *)
+  (*   inversion COMP_BLOCK. *)
+  (*   all: (rename H into OINSTR; rename H0 into BLOCK_CONTENTS). *)
+  (*   all: subst block; simpl in *. *)
+  (*   (* trivial cases for single instruction blocks *) *)
+  (*   all: try omega. *)
+  (*   (* now only 2-blocks remain*) *)
+  (*   (* TODO: refactor *) *)
+  (*   { assert (AT_PC1': Some st0 = nth_error (instrs st) (pc st + 1)). *)
+  (*     { apply eq_trans with (y := nth_error [f; st0] 1); auto. *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     replace instr with st0; [| congruence]. *)
+  (*     subst st0. eauto. } *)
+  (*   { assert (AT_PC1': Some ld = nth_error (instrs st) (pc st + 1)). *)
+  (*     { apply eq_trans with (y := nth_error [f; ld] 1); auto. *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     replace instr with ld; [| congruence]. *)
+  (*     subst ld. eauto. } *)
+  (*   { assert (AT_PC1': Some exc = nth_error (instrs st) (pc st + 1)). *)
+  (*     { apply eq_trans with (y := nth_error [f; exc] 1); auto. *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     replace instr with exc; [| congruence]. *)
+  (*     subst exc. eauto. } *)
+  (* Qed. *)
+
+  Lemma no_acb_between_pc pc1 pc2 n (PC2: pc2 = pc1 + n)
+        block (* (BLOCK: on_block st1 block) *)
+        PI (BLOCK: on_block_pc pc1 PI block)
+        (LT: n < length block) (NZ: n <> 0):
+    not ((exists block', on_block_pc pc2 PI block') \/ pc2 >= length PI).
   Proof.
-    assert (SAME_INSTRS: instrs st2 = instrs st1).
-    { symmetry. apply steps_same_instrs. eexists. eapply crt_num_steps. eauto. }
     pose proof BLOCK as BLOCK1.
     red in BLOCK. desc.
     inversion COMP_BLOCK.
@@ -582,202 +691,174 @@ Section OCamlMM_TO_IMM_S_PROG.
     (* now only 2-blocks remain*)
     all: replace n with 1 in *; [| omega].
     (* TODO: refactor *)
-    { assert (AT_PC1: Some st = nth_error (instrs st1) (pc st1 + 1)).
+    { assert (AT_PC1: Some st = nth_error PI (pc1 + 1)).
       { apply eq_trans with (y := nth_error [f; st] 1); auto.
         eapply sublist_items; eauto. }
-      assert (AT_PC: Some f = nth_error (instrs st1) (pc st1)).
+      assert (AT_PC: Some f = nth_error PI pc1).
       { apply eq_trans with (y := nth_error [f; st] 0); auto.
-        replace (pc st1) with (pc st1 + 0) by omega.
+        replace pc1 with (pc1 + 0) by omega.
         eapply sublist_items; eauto. }
-      assert (NEXT_PC: pc st2 = pc st1 + 1).
-      { apply (same_relation_exp (pow_unit (step tid))) in STEPS.
-        red in STEPS. desc. red in STEPS. desc.
-        inversion ISTEP0; auto.
-        rewrite II, <- AT_PC in ISTEP. discriminate. }
+      (* assert (NEXT_PC: pc st2 = pc st1 + 1). *)
+      (* { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
+      (*   red in STEPS. desc. red in STEPS. desc. *)
+      (*   inversion ISTEP0; auto. *)
+      (*   rewrite II, <- AT_PC in ISTEP. discriminate. } *)
       
-      red. intros ACB2. red in ACB2.
+      red. intros ACB2. (* red in ACB2. *)
       destruct ACB2 as [[block2 BLOCK2]| TERM2].
-      2: { red in TERM2. rewrite NEXT_PC, SAME_INSTRS in TERM2.
-           pose proof (nth_error_None (instrs st1) (pc st1 + 1)) as CONTRA.
-           destruct CONTRA. forward eapply H0; try omega.
-           intros. rewrite H1 in AT_PC1. discriminate. }
+      2: { subst pc2.           
+           red in TERM2. (* rewrite NEXT_PC, SAME_INSTRS in TERM2. *)
+           pose proof (nth_error_None PI (pc1 + 1)) as CONTRA.
+           apply not_iff_compat in CONTRA. destruct CONTRA as [CONTRA _].
+           forward eapply CONTRA; [apply OPT_VAL; eauto| ].
+           ins. } 
       forward eapply (block_start) as PC1_INSTR; eauto.
-      { rewrite NEXT_PC, SAME_INSTRS. eauto. }
+      { rewrite PC2. eauto. }
       forward eapply (block_mid BLOCK1) as PC1_INSTR'; eauto.
       des.
       all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). }
-    { assert (AT_PC1: Some ld = nth_error (instrs st1) (pc st1 + 1)).
+    { assert (AT_PC1: Some ld = nth_error PI (pc1 + 1)).
       { apply eq_trans with (y := nth_error [f; ld] 1); auto.
         eapply sublist_items; eauto. }
-      assert (AT_PC: Some f = nth_error (instrs st1) (pc st1)).
+      assert (AT_PC: Some f = nth_error PI pc1).
       { apply eq_trans with (y := nth_error [f; ld] 0); auto.
-        replace (pc st1) with (pc st1 + 0) by omega.
+        replace pc1 with (pc1 + 0) by omega.
         eapply sublist_items; eauto. }
-      assert (NEXT_PC: pc st2 = pc st1 + 1).
-      { apply (same_relation_exp (pow_unit (step tid))) in STEPS.
-        red in STEPS. desc. red in STEPS. desc.
-        inversion ISTEP0; auto.
-        rewrite II, <- AT_PC in ISTEP. discriminate. }
+      (* assert (NEXT_PC: pc st2 = pc st1 + 1). *)
+      (* { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
+      (*   red in STEPS. desc. red in STEPS. desc. *)
+      (*   inversion ISTEP0; auto. *)
+      (*   rewrite II, <- AT_PC in ISTEP. discriminate. } *)
       
-      red. intros ACB2. red in ACB2.
+      red. intros ACB2. 
       destruct ACB2 as [[block2 BLOCK2]| TERM2].
-      2: { red in TERM2. rewrite NEXT_PC, SAME_INSTRS in TERM2.
-           pose proof (nth_error_None (instrs st1) (pc st1 + 1)) as CONTRA.
+      2: { red in TERM2. (* rewrite NEXT_PC, SAME_INSTRS in TERM2. *)
+           pose proof (nth_error_None PI (pc1 + 1)) as CONTRA.
            destruct CONTRA. forward eapply H0; try omega.
            intros. rewrite H1 in AT_PC1. discriminate. }
       forward eapply (block_start) as PC1_INSTR; eauto.
-      { rewrite NEXT_PC, SAME_INSTRS. eauto. }
+      { rewrite PC2. eauto. }
       forward eapply (block_mid BLOCK1) as PC1_INSTR'; eauto.
       des.
       all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). }
-    { assert (AT_PC1: Some exc = nth_error (instrs st1) (pc st1 + 1)).
+    { assert (AT_PC1: Some exc = nth_error PI (pc1 + 1)).
       { apply eq_trans with (y := nth_error [f; exc] 1); auto.
         eapply sublist_items; eauto. }
-      assert (AT_PC: Some f = nth_error (instrs st1) (pc st1)).
+      assert (AT_PC: Some f = nth_error PI pc1).
       { apply eq_trans with (y := nth_error [f; exc] 0); auto.
-        replace (pc st1) with (pc st1 + 0) by omega.
+        replace pc1 with (pc1 + 0) by omega.
         eapply sublist_items; eauto. }
-      assert (NEXT_PC: pc st2 = pc st1 + 1).
-      { apply (same_relation_exp (pow_unit (step tid))) in STEPS.
-        red in STEPS. desc. red in STEPS. desc.
-        inversion ISTEP0; auto.
-        rewrite II, <- AT_PC in ISTEP. discriminate. }
+      (* assert (NEXT_PC: pc st2 = pc st1 + 1). *)
+      (* { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
+      (*   red in STEPS. desc. red in STEPS. desc. *)
+      (*   inversion ISTEP0; auto. *)
+      (*   rewrite II, <- AT_PC in ISTEP. discriminate. } *)
       
-      red. intros ACB2. red in ACB2.
+      red. intros ACB2. 
       destruct ACB2 as [[block2 BLOCK2]| TERM2].
-      2: { red in TERM2. rewrite NEXT_PC, SAME_INSTRS in TERM2.
-           pose proof (nth_error_None (instrs st1) (pc st1 + 1)) as CONTRA.
+      2: { red in TERM2. rewrite PC2 in TERM2.
+           pose proof (nth_error_None PI (pc1 + 1)) as CONTRA.
            destruct CONTRA. forward eapply H0; try omega.
            intros. rewrite H1 in AT_PC1. discriminate. }
       forward eapply (block_start) as PC1_INSTR; eauto.
-      { rewrite NEXT_PC, SAME_INSTRS. eauto. }
+      { rewrite PC2. eauto. }
       forward eapply (block_mid BLOCK1) as PC1_INSTR'; eauto.
       des.
       all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). }
-    Qed.
-
-  (* Fixpoint get_b (b pc_target: nat) (BPI: list (list Instr.t)): nat. *)
-  (*   destruct (ge_dec (length (flatten (firstn b BPI))) pc_target). *)
-  (*   { exact b. } *)
-  (*   exact (get_b (b + 1) pc_target BPI). *)
-  (* Qed.  *)
-  Fixpoint get_b_helper (b pc_target: nat) (BPI: list (list Instr.t)) :=
-    match pc_target, BPI with
-    | 0, _ => Some b
-    | pc_target, [] => None
-    | pc_target, block :: BPI' => get_b_helper (S b) (pc_target - length block) BPI'
-    end. 
-  Definition get_b pc_target BPI := get_b_helper 0 pc_target BPI.
-  
-  Fixpoint get_borders_helper (BPI: list (list Instr.t)) b :=
-    match BPI with
-    | [] => [b]
-    | block :: BPI' => b :: get_borders_helper BPI' (b + length block)
-    end. 
-  Definition get_borders (BPI: list (list Instr.t)) := get_borders_helper BPI 0.
-
-  Lemma get_borders_len BPI s: length (get_borders_helper BPI s) = length BPI + 1.
-  Proof.
-    generalize dependent s. induction BPI; vauto.
-    ins. f_equal. auto.
-  Qed. 
-
-  Lemma borders_flt BPI b border
-        (BORDER: Some border = nth_error (get_borders BPI) b):
-    border = length (flatten (firstn b BPI)).
-  Proof.
-    assert (b <= length BPI).
-    { assert (b < length (get_borders BPI)).
-      { apply nth_error_Some, OPT_VAL. eauto. }
-      pose proof get_borders_len BPI 0. unfold get_borders in H. omega. }    
-    replace (nth_error (get_borders BPI) b) with (nth_error (get_borders (firstn b BPI)) b) in BORDER.
-    2: { unfold get_borders. remember 0 as start. clear Heqstart. 
-         clear dependent border.
-         generalize dependent b. generalize dependent start.          
-         induction BPI.
-         { ins. assert (b = 0) by omega. subst. simpl. auto. }
-         ins. destruct b.
-         { simpl. auto. }
-         simpl. apply IHBPI. omega. }    
-    assert (forall BPI rborder (RB: Some rborder = nth_error (get_borders BPI) (length BPI)), rborder = length (flatten BPI)).
-    { clear dependent border. clear dependent b. clear dependent BPI.
-      unfold get_borders. intros BPI.
-      rewrite <- Nat.add_0_r with (n := length (flatten BPI)).
-      remember 0 as start. clear Heqstart. generalize dependent start. 
-      induction BPI.
-      { ins. vauto. }
-      ins. rewrite app_length. rewrite plus_comm with (n := length a).
-      rewrite <- plus_assoc. rewrite plus_comm with (n := length a). 
-      apply IHBPI. auto. } 
-    apply H0. 
-    replace (length (firstn b BPI)) with b; auto. 
-    symmetry. apply firstn_length_le. auto.
   Qed. 
     
-  Lemma acb_then_border st BPI (ONBLOCK: at_compilation_block st)
-    (FLT: instrs st = flatten BPI) (COMP: exists PO, is_thread_block_compiled PO BPI):
-    exists bindex, Some (pc st) = nth_error (get_borders BPI) bindex.
-  Proof.
-    red in ONBLOCK. des.
-    2: { admit. }
-    (* pose proof @ll_l_corr. *)
-    (* red in ONBLOCK. desc. unfold sublist in PROG_BLOCK.  *)
-    (* foobar_prove_for_general_property. *)
-    (* show that if (only?) blocks satisfy a property, no sublist in between can satisfy it*)
-    
-    pose proof borders_flt.
-    specialize (H BPI). 
-    
-    (* assert (exists lborder rborder lb rb, *)
-    (*            Some lborder = nth_error (get_borders BPI) lb /\ *)
-    (*            Some rborder = nth_error (get_borders BPI) (lb + 1) /\ *)
-    (*            lb <= pc st /\ rb > pc st) by admit.  *)
 
+  (* Lemma no_acb_between st1 st2 tid block n (STEPS: (step tid) ^^ n st1 st2) *)
+  (*       (BLOCK: on_block st1 block) (LT: n < length block) (NZ: n <> 0): *)
+  (*   not (at_compilation_block st2). *)
+  (* Proof. *)
+  (*   assert (SAME_INSTRS: instrs st2 = instrs st1). *)
+  (*   { symmetry. apply steps_same_instrs. eexists. eapply crt_num_steps. eauto. } *)
+  (*   pose proof BLOCK as BLOCK1. *)
+  (*   red in BLOCK. desc. *)
+  (*   inversion COMP_BLOCK. *)
+  (*   all: rename H into OINSTR. *)
+  (*   all: rename H0 into BLOCK_CONTENTS. *)
+  (*   all: subst block; simpl in *. *)
+  (*   (* trivial cases for single instruction blocks *) *)
+  (*   all: try (replace (n) with (0) in *; [vauto | omega]). *)
+  (*   (* now only 2-blocks remain*) *)
+  (*   all: replace n with 1 in *; [| omega]. *)
+  (*   (* TODO: refactor *) *)
+  (*   { assert (AT_PC1: Some st = nth_error (instrs st1) (pc st1 + 1)). *)
+  (*     { apply eq_trans with (y := nth_error [f; st] 1); auto. *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     assert (AT_PC: Some f = nth_error (instrs st1) (pc st1)). *)
+  (*     { apply eq_trans with (y := nth_error [f; st] 0); auto. *)
+  (*       replace (pc st1) with (pc st1 + 0) by omega. *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     assert (NEXT_PC: pc st2 = pc st1 + 1). *)
+  (*     { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
+  (*       red in STEPS. desc. red in STEPS. desc. *)
+  (*       inversion ISTEP0; auto. *)
+  (*       rewrite II, <- AT_PC in ISTEP. discriminate. } *)
+      
+  (*     red. intros ACB2. red in ACB2. *)
+  (*     destruct ACB2 as [[block2 BLOCK2]| TERM2]. *)
+  (*     2: { red in TERM2. rewrite NEXT_PC, SAME_INSTRS in TERM2. *)
+  (*          pose proof (nth_error_None (instrs st1) (pc st1 + 1)) as CONTRA. *)
+  (*          destruct CONTRA. forward eapply H0; try omega. *)
+  (*          intros. rewrite H1 in AT_PC1. discriminate. } *)
+  (*     forward eapply (block_start) as PC1_INSTR; eauto. *)
+  (*     { rewrite NEXT_PC, SAME_INSTRS. eauto. } *)
+  (*     forward eapply (block_mid BLOCK1) as PC1_INSTR'; eauto. *)
+  (*     des. *)
+  (*     all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). } *)
+  (*   { assert (AT_PC1: Some ld = nth_error (instrs st1) (pc st1 + 1)). *)
+  (*     { apply eq_trans with (y := nth_error [f; ld] 1); auto. *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     assert (AT_PC: Some f = nth_error (instrs st1) (pc st1)). *)
+  (*     { apply eq_trans with (y := nth_error [f; ld] 0); auto. *)
+  (*       replace (pc st1) with (pc st1 + 0) by omega. *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     assert (NEXT_PC: pc st2 = pc st1 + 1). *)
+  (*     { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
+  (*       red in STEPS. desc. red in STEPS. desc. *)
+  (*       inversion ISTEP0; auto. *)
+  (*       rewrite II, <- AT_PC in ISTEP. discriminate. } *)
+      
+  (*     red. intros ACB2. red in ACB2. *)
+  (*     destruct ACB2 as [[block2 BLOCK2]| TERM2]. *)
+  (*     2: { red in TERM2. rewrite NEXT_PC, SAME_INSTRS in TERM2. *)
+  (*          pose proof (nth_error_None (instrs st1) (pc st1 + 1)) as CONTRA. *)
+  (*          destruct CONTRA. forward eapply H0; try omega. *)
+  (*          intros. rewrite H1 in AT_PC1. discriminate. } *)
+  (*     forward eapply (block_start) as PC1_INSTR; eauto. *)
+  (*     { rewrite NEXT_PC, SAME_INSTRS. eauto. } *)
+  (*     forward eapply (block_mid BLOCK1) as PC1_INSTR'; eauto. *)
+  (*     des. *)
+  (*     all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). } *)
+  (*   { assert (AT_PC1: Some exc = nth_error (instrs st1) (pc st1 + 1)). *)
+  (*     { apply eq_trans with (y := nth_error [f; exc] 1); auto. *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     assert (AT_PC: Some f = nth_error (instrs st1) (pc st1)). *)
+  (*     { apply eq_trans with (y := nth_error [f; exc] 0); auto. *)
+  (*       replace (pc st1) with (pc st1 + 0) by omega. *)
+  (*       eapply sublist_items; eauto. } *)
+  (*     assert (NEXT_PC: pc st2 = pc st1 + 1). *)
+  (*     { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
+  (*       red in STEPS. desc. red in STEPS. desc. *)
+  (*       inversion ISTEP0; auto. *)
+  (*       rewrite II, <- AT_PC in ISTEP. discriminate. } *)
+      
+  (*     red. intros ACB2. red in ACB2. *)
+  (*     destruct ACB2 as [[block2 BLOCK2]| TERM2]. *)
+  (*     2: { red in TERM2. rewrite NEXT_PC, SAME_INSTRS in TERM2. *)
+  (*          pose proof (nth_error_None (instrs st1) (pc st1 + 1)) as CONTRA. *)
+  (*          destruct CONTRA. forward eapply H0; try omega. *)
+  (*          intros. rewrite H1 in AT_PC1. discriminate. } *)
+  (*     forward eapply (block_start) as PC1_INSTR; eauto. *)
+  (*     { rewrite NEXT_PC, SAME_INSTRS. eauto. } *)
+  (*     forward eapply (block_mid BLOCK1) as PC1_INSTR'; eauto. *)
+  (*     des. *)
+  (*     all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). } *)
+  (*   Qed. *)
 
-
-
-    (* remember (pc st) as pc_st.  *)
-    (* generalize dependent block. generalize dependent Heqpc_st. *)
-    (* generalize dependent st. generalize dependent pc_st.  *)
-    (* pose proof strong_induction. *)
-    (* set (P := (fun pc_st => forall st, *)
-    (*                instrs st = flatten BPI ->  *)
-    (*                pc_st = pc st -> *)
-    (*                forall block : list Instr.t, *)
-    (*                  on_block st block -> *)
-    (*                  exists bindex : nat, Some pc_st = nth_error (get_borders BPI) bindex)).  *)
-    (* specialize (H P). *)
-    (* apply H. *)
-    (* intros pc_st. subst P. simpl. clear H. *)
-    (* intros IH. intros st INSTRS PC_ST block BLOCK.  *)
-    (* set (set_pc := fun pc => {| instrs := instrs st; *)
-    (*                          pc := pc; *)
-    (*                          G := G st; *)
-    (*                          eindex := eindex st;  *)
-    (*                          regf := regf st; *)
-    (*                          depf := depf st; *)
-    (*                          ectrl := ectrl st |}). *)
-    (* assert (exists d block' st', d > 0 /\ st' = set_pc (pc_st - d) /\ on_block st' block').  *)
-                                       
-
-
-    
-    (* destruct (gt_0_eq (pc st)). *)
-    (* 2: { admit. } *)
-    (* assert (exists d bindex', Some (pc st - d) = nth_error (get_borders BPI) bindex *)
-    
-
-    
-    (* assert (decidable (exists bindex : nat, Some (pc st) = nth_error (get_borders BPI) bindex)) as DEC by admit. *)
-    (* destruct DEC; auto. *)
-    (* exfalso. *)
-    (* assert (forall bindex, Some (pc st) <> nth_error (get_borders BPI) bindex). *)
-    (* { firstorder. } *)
-    
-    (* red in ONBLOCK. desc. *)
-    (* pose proof borders_flt.  *)
-    (* red in COMP. desc. *)
-  Admitted.
 
   Lemma skipn_0 {A: Type} (l: list A): skipn 0 l = l.
   Proof. destruct l; vauto. Qed. 
@@ -795,7 +876,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     { desc. exists PO. red. red in COMP. desc. eauto. }
     clear COMP. 
     generalize dependent BPI.
-    (* generalize dependent pc.  *)
     set (P := fun pc =>   forall BPI : list (list Instr.t),
   block = sublist (flatten BPI) pc (length block) ->
   (exists PO : list Instr.t, itbc_weak PO BPI) ->
@@ -829,11 +909,29 @@ Section OCamlMM_TO_IMM_S_PROG.
       rewrite firstn_O. symmetry. apply app_nil_r. }
     destruct (gt_0_eq pc).
     2: { subst. exists 0. simpl in *. f_equal.
-         unfold sublist in BLOCK. rewrite skipn_0 in BLOCK. 
-         admit. }
-    exfalso. foobar_show_incompatibility_of_block_and_blk0. 
+         unfold sublist in BLOCK. rewrite skipn_0 in BLOCK.
+         eapply (start_block_deterministic (P := fun blk => exists oinstr, is_instruction_compiled oinstr blk)); eauto.
+         { apply instr_compiled_min_prop. }
+         { desc. pose proof (COMPILED_NONEMPTY_weak COMP).
+           inv H. }
+         { desc.
+           eapply resulting_block_compiled_weak; eauto.
+           { eapply COMPILED_NONEMPTY_weak; eauto. }
+           Unshelve. 2: exact 0. vauto. }
+         desc. inversion COMP_BLOCK; vauto. }
+    exfalso.
+    forward eapply (@no_acb_between_pc 0 pc pc) as NOACB; eauto. 
+    { Unshelve. 2: exact (blk0 ++ flatten BPI'). 
+      red. splits; vauto.
+      desc. eapply resulting_block_compiled_weak; eauto.
+      { eapply COMPILED_NONEMPTY_weak; eauto. }
+      Unshelve. 2: exact 0. auto. }
+    { omega. }
+    apply not_or in NOACB. desc.
+    apply NOACB. exists block. red. splits; eauto.
+  Qed. 
       
-  Lemma acb_iff_bst st (COMP: exists PO, is_thread_compiled PO (instrs st))e:
+  Lemma acb_iff_bst st (COMP: exists PO, is_thread_compiled PO (instrs st)):
     at_compilation_block st <-> exists bst, ⟪ST: st = bst2st bst ⟫. 
   Proof.
     split.
@@ -843,10 +941,22 @@ Section OCamlMM_TO_IMM_S_PROG.
            unfold bst2st. simpl. rewrite firstn_all. rewrite <- COMP0.
            apply is_terminal_pc_bounded in ACB. rewrite <- ACB.
            apply state_record_equality. }
+      red in ACB. desc. 
+      forward eapply (@on_block_iff_bindex BPI block (pc st)) as [BLOCK_INDEX _]; vauto. 
+      { congruence. }
+      forward eapply BLOCK_INDEX as [b BLOCK]; eauto.
+      unfold sublist in PROG_BLOCK. 
+      (* problem: block can appear in multiple positions*)
+      foobar. 
+      exists (bst_from_st st BPI b). unfold bst2st, bst_from_st. simpl.
+      rewrite <- H, <- COMP0. 
+
+      
       cut (exists b, pc st = length (flatten (firstn b BPI))).
       { ins. desc. exists (bst_from_st st BPI b). unfold bst2st, bst_from_st. simpl.
-        rewrite <- H, <- COMP0. apply state_record_equality. } 
-      red in ACB. desc. 
+        rewrite <- H, <- COMP0. apply state_record_equality. }
+      cut (exists b : nat, Some block = nth_error BPI b).
+
 
         (* forward eapply acb_then_border as [b BORDER]; eauto. *)
       (* { red. eauto. } *)
