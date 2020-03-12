@@ -633,13 +633,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     end. 
   Definition get_borders (BPI: list (list Instr.t)) := get_borders_helper BPI 0.
 
-  Lemma acb_then_border st BPI (ONBLOCK: at_compilation_block st)
-    (FLT: instrs st = flatten BPI) (COMP: exists PO, is_thread_block_compiled PO BPI):
-    exists bindex, Some (pc st) = nth_error (get_borders BPI) bindex.
-  Proof.
-    
-  Admitted.
-
   Lemma get_borders_len BPI s: length (get_borders_helper BPI s) = length BPI + 1.
   Proof.
     generalize dependent s. induction BPI; vauto.
@@ -678,7 +671,126 @@ Section OCamlMM_TO_IMM_S_PROG.
     symmetry. apply firstn_length_le. auto.
   Qed. 
     
-  Lemma acb_iff_bst st (COMP: exists PO, is_thread_compiled PO (instrs st)):
+  Lemma acb_then_border st BPI (ONBLOCK: at_compilation_block st)
+    (FLT: instrs st = flatten BPI) (COMP: exists PO, is_thread_block_compiled PO BPI):
+    exists bindex, Some (pc st) = nth_error (get_borders BPI) bindex.
+  Proof.
+    red in ONBLOCK. des.
+    2: { admit. }
+    (* pose proof @ll_l_corr. *)
+    (* red in ONBLOCK. desc. unfold sublist in PROG_BLOCK.  *)
+    (* foobar_prove_for_general_property. *)
+    (* show that if (only?) blocks satisfy a property, no sublist in between can satisfy it*)
+    
+    pose proof borders_flt.
+    specialize (H BPI). 
+    
+    (* assert (exists lborder rborder lb rb, *)
+    (*            Some lborder = nth_error (get_borders BPI) lb /\ *)
+    (*            Some rborder = nth_error (get_borders BPI) (lb + 1) /\ *)
+    (*            lb <= pc st /\ rb > pc st) by admit.  *)
+
+
+
+
+    (* remember (pc st) as pc_st.  *)
+    (* generalize dependent block. generalize dependent Heqpc_st. *)
+    (* generalize dependent st. generalize dependent pc_st.  *)
+    (* pose proof strong_induction. *)
+    (* set (P := (fun pc_st => forall st, *)
+    (*                instrs st = flatten BPI ->  *)
+    (*                pc_st = pc st -> *)
+    (*                forall block : list Instr.t, *)
+    (*                  on_block st block -> *)
+    (*                  exists bindex : nat, Some pc_st = nth_error (get_borders BPI) bindex)).  *)
+    (* specialize (H P). *)
+    (* apply H. *)
+    (* intros pc_st. subst P. simpl. clear H. *)
+    (* intros IH. intros st INSTRS PC_ST block BLOCK.  *)
+    (* set (set_pc := fun pc => {| instrs := instrs st; *)
+    (*                          pc := pc; *)
+    (*                          G := G st; *)
+    (*                          eindex := eindex st;  *)
+    (*                          regf := regf st; *)
+    (*                          depf := depf st; *)
+    (*                          ectrl := ectrl st |}). *)
+    (* assert (exists d block' st', d > 0 /\ st' = set_pc (pc_st - d) /\ on_block st' block').  *)
+                                       
+
+
+    
+    (* destruct (gt_0_eq (pc st)). *)
+    (* 2: { admit. } *)
+    (* assert (exists d bindex', Some (pc st - d) = nth_error (get_borders BPI) bindex *)
+    
+
+    
+    (* assert (decidable (exists bindex : nat, Some (pc st) = nth_error (get_borders BPI) bindex)) as DEC by admit. *)
+    (* destruct DEC; auto. *)
+    (* exfalso. *)
+    (* assert (forall bindex, Some (pc st) <> nth_error (get_borders BPI) bindex). *)
+    (* { firstorder. } *)
+    
+    (* red in ONBLOCK. desc. *)
+    (* pose proof borders_flt.  *)
+    (* red in COMP. desc. *)
+  Admitted.
+
+  Lemma skipn_0 {A: Type} (l: list A): skipn 0 l = l.
+  Proof. destruct l; vauto. Qed. 
+  
+  Lemma on_block_iff_bindex BPI
+        block pc (SL: block = sublist (flatten BPI) pc (length block))
+        (COMP: exists PO, is_thread_block_compiled PO BPI):
+    (exists oinstr, is_instruction_compiled oinstr block) <-> exists b, Some block = nth_error BPI b.
+  Proof.
+    split.
+    2: { ins. desc. eapply resulting_block_compiled; eauto.
+         eapply COMPILED_NONEMPTY; eauto. }
+    intros COMP_BLOCK.
+    assert (COMP': exists PO, itbc_weak PO BPI).
+    { desc. exists PO. red. red in COMP. desc. eauto. }
+    clear COMP. 
+    generalize dependent BPI.
+    (* generalize dependent pc.  *)
+    set (P := fun pc =>   forall BPI : list (list Instr.t),
+  block = sublist (flatten BPI) pc (length block) ->
+  (exists PO : list Instr.t, itbc_weak PO BPI) ->
+  exists b : nat, Some block = nth_error BPI b).
+    generalize dependent pc. apply (strong_induction P).
+    intros pc IH. red. intros BPI BLOCK COMP.
+    destruct BPI as [| blk0 BPI']. 
+    { exfalso. unfold sublist in BLOCK.
+      desc. 
+      destruct pc; simpl in BLOCK; rewrite firstn_nil in BLOCK; inversion COMP_BLOCK; vauto. }
+    destruct (ge_dec pc (length blk0)) as [GE | LT].
+    { assert (block = sublist (flatten BPI') (pc - length blk0) (length block)).
+      { rewrite BLOCK at 1.
+        simpl. unfold sublist at 1.
+        rewrite skipn_app. unfold sublist.
+        rewrite firstn_app.
+        rewrite skipn_all2; [| omega]. rewrite firstn_nil. simpl.
+        rewrite Nat.sub_0_r. auto. }
+      forward eapply (IH (pc - length blk0)) as IHprev. 
+      { desc. forward eapply COMPILED_NONEMPTY_weak as NE; eauto.
+        inversion NE. subst. destruct blk0; vauto. simpl in *. omega. }
+      red in IHprev. forward eapply (IHprev BPI' H) as [b' BLOCK']. 
+      { desc. destruct PO as [| oinstr_ PO']. 
+        { red in COMP. desc. inversion COMP. subst. inversion COMP0. }
+        exists PO'. red. red in COMP. destruct COMP as [BPI0 [BPI0' [COMP CORR]]].
+        inversion CORR. subst. inversion COMP. subst. eauto. }
+      exists (S b'). auto. }
+    apply not_ge in LT.
+    assert (blk0 = firstn (length blk0) (blk0 ++ flatten BPI')) as BLK0.
+    { rewrite <- Nat.add_0_r with (n := length blk0). rewrite firstn_app_2.
+      rewrite firstn_O. symmetry. apply app_nil_r. }
+    destruct (gt_0_eq pc).
+    2: { subst. exists 0. simpl in *. f_equal.
+         unfold sublist in BLOCK. rewrite skipn_0 in BLOCK. 
+         admit. }
+    exfalso. foobar_show_incompatibility_of_block_and_blk0. 
+      
+  Lemma acb_iff_bst st (COMP: exists PO, is_thread_compiled PO (instrs st))e:
     at_compilation_block st <-> exists bst, ⟪ST: st = bst2st bst ⟫. 
   Proof.
     split.
@@ -688,11 +800,18 @@ Section OCamlMM_TO_IMM_S_PROG.
            unfold bst2st. simpl. rewrite firstn_all. rewrite <- COMP0.
            apply is_terminal_pc_bounded in ACB. rewrite <- ACB.
            apply state_record_equality. }
-      forward eapply acb_then_border as [b BORDER]; eauto.
-      { red. eauto. }
-      exists (bst_from_st st BPI b). red. unfold bst2st. simpl.
-      erewrite <- borders_flt; eauto.
-      rewrite <- COMP0. apply state_record_equality. }
+      cut (exists b, pc st = length (flatten (firstn b BPI))).
+      { ins. desc. exists (bst_from_st st BPI b). unfold bst2st, bst_from_st. simpl.
+        rewrite <- H, <- COMP0. apply state_record_equality. } 
+      red in ACB. desc. 
+
+        (* forward eapply acb_then_border as [b BORDER]; eauto. *)
+      (* { red. eauto. } *)
+      (* exists (bst_from_st st BPI b). red. unfold bst2st. simpl. *)
+      (* erewrite <- borders_flt; eauto. *)
+      (* rewrite <- COMP0. apply state_record_equality. *)
+
+    }
     intros. desc. red. red in COMP. desc.
     assert (binstrs bst = BPI) by admit. subst. 
     destruct (ge_dec (bpc bst) (length (binstrs bst))) as [TERM | NONTERM].
