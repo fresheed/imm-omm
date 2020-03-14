@@ -236,7 +236,8 @@ Section PairStep.
   Proof. 
     red in MM_SIM. desc.
     eapply eval_instr_lexpr; eauto. 
-    { exists (instrs sto). red. eexists. eauto. }
+    { exists (instrs sto). red. unfold is_thread_compiled_with.
+      eexists. eauto. }
     { replace (regf sti) with (bregf bsti); vauto. }
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed. 
@@ -247,7 +248,8 @@ Section PairStep.
   Proof. 
     red in MM_SIM. desc.
     eapply eval_instr_expr; eauto. 
-    { exists (instrs sto). red. eexists. eauto. }
+    { exists (instrs sto). red. unfold is_thread_compiled_with.
+      eexists. eauto. }
     { replace (regf sti) with (bregf bsti); vauto. }
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed.
@@ -258,7 +260,8 @@ Section PairStep.
   Proof. 
     red in MM_SIM. desc.
     eapply eval_instr_lexpr_deps; eauto. 
-    { exists (instrs sto). red. eexists. eauto. }
+    { exists (instrs sto). red. unfold is_thread_compiled_with.
+      eexists. eauto. }
     { replace (regf sti) with (bregf bsti); vauto. }
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed.
@@ -269,7 +272,8 @@ Section PairStep.
   Proof. 
     red in MM_SIM. desc.
     eapply eval_instr_expr_deps; eauto. 
-    { exists (instrs sto). red. eexists. eauto. }
+    { exists (instrs sto). red. unfold is_thread_compiled_with.
+      eexists. eauto. }
     { replace (regf sti) with (bregf bsti); vauto. }
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed.
@@ -1111,7 +1115,9 @@ Section PairStep.
       { eapply INSTR_LEXPR_DEPS_HELPER; eauto. vauto. }
       assert (RegFile.eval_expr (regf sto) val = RegFile.eval_expr (regf sti) val) as EXPR_SAME.
       { eapply eval_rmw_expr; eauto. 
-        { exists (instrs sto). red. eexists. eauto. }
+        { exists (instrs sto). red.
+          unfold is_thread_compiled_with.
+          eexists. eauto. }
         { replace (regf sti) with (bregf bsti); vauto. }
         2: { Unshelve. 2: exact (Instr.exchange val). vauto. }
         repeat eexists. 

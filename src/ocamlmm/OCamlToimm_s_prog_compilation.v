@@ -68,8 +68,11 @@ Section OCaml_IMM_Compilation.
       Forall2 is_instruction_compiled PO BPI0 /\
       Forall2 (block_corrected BPI0') BPI0 BPI.
 
+  Definition is_thread_compiled_with PO PI BPI :=
+    is_thread_block_compiled PO BPI /\ PI = flatten BPI.
+
   Definition is_thread_compiled PO PI :=
-    exists BPI, is_thread_block_compiled PO BPI /\ PI = flatten BPI.
+    exists BPI, is_thread_compiled_with PO PI BPI. 
 
   Lemma itbc_implies_itbcw PO BPI (COMP: is_thread_block_compiled PO BPI):
     itbc_weak PO BPI.
