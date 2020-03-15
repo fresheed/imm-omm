@@ -451,10 +451,12 @@ Section OCaml_IMM_Correspondence.
     ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ (RW GI \₁ dom_rel (GI.(rmw))) ⟫ /\
     ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫. 
 
+  Definition RWO GI := (RW GI \₁ dom_rel (rmw GI)). 
+
   Definition same_behavior (GO GI: execution) :=
     ⟪SAME_LOCAL: same_behavior_local GO GI ⟫ /\
-    ⟪SAME_CO: GI.(co) ≡ GO.(co)⟫ /\
-    ⟪EXT_RF: GO.(rf) ≡ GI.(rf) ⨾ ⦗set_compl (dom_rel GI.(rmw))⦘⟫.        
+    ⟪SAME_CO: GO.(co) ≡ GI.(co) ⟫ /\
+    ⟪RESTR_RF: GO.(rf) ≡ restr_rel (RWO GI) GI.(rf) ⟫.
 
   (* Definition mm_similar_states (sto: state) (bsti: block_state) := *)
   (*   is_thread_block_compiled sto.(instrs) bsti.(binstrs)  /\ *)

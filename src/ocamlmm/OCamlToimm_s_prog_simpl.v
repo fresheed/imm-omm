@@ -1266,35 +1266,33 @@ Section OCamlMM_TO_IMM_S_PROG.
       replace SGI with (bG bsti_fin); auto. }
   Qed. 
 
-  Definition RWO GI := (RW GI \₁ dom_rel (rmw GI)). 
-
-  Lemma same_beh_implies_similar_rels GO GI (SB: same_behavior GO GI):
-    ⟪ SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘⟫ /\
-    (* ⟪ SC': Sc GO ≡₁ Sc GI ⟫ /\ *)
-    ⟪ SC': Sc GO ≡₁ RWO GI ∩₁ Sc GI ⟫ /\
-    ⟪ FR': fr GO ≡ ⦗set_compl (dom_rel (rmw GI))⦘ ⨾ fr GI ⟫.
-  Proof.
-    red in SB. des. red in SAME_LOCAL. desc.
-    splits.
-    { unfold Execution.sb.
-      rewrite !seqA. do 2 seq_rewrite <- id_inter.
-      rewrite set_interC.      
-      rewrite <- RESTR_EVENTS. auto. }
-    { admit. }
-    admit. 
-  (*   red in SB. desc. red in SAME_LOCAL. desc.  *)
-  (*   assert (SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘). *)
-  (*   { unfold Execution.sb.         *)
+  (* Lemma same_beh_implies_similar_rels GO GI (SB: same_behavior GO GI): *)
+  (*   ⟪ SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘⟫ /\ *)
+  (*   (* ⟪ SC': Sc GO ≡₁ Sc GI ⟫ /\ *) *)
+  (*   ⟪ SC': Sc GO ≡₁ RWO GI ∩₁ Sc GI ⟫ /\ *)
+  (*   ⟪ FR': fr GO ≡ ⦗set_compl (dom_rel (rmw GI))⦘ ⨾ fr GI ⟫. *)
+  (* Proof. *)
+  (*   red in SB. des. red in SAME_LOCAL. desc. *)
+  (*   splits. *)
+  (*   { unfold Execution.sb. *)
   (*     rewrite !seqA. do 2 seq_rewrite <- id_inter. *)
-  (*     rewrite set_interC.  *)
-  (*     rewrite RESTR_EVENTS.  *)
-  (*     basic_solver. } *)
-  (*   splits; auto.  *)
-  (*   { rewrite SAME_LAB. auto. } *)
-  (*   { unfold fr. rewrite SAME_CO. rewrite <- seqA. apply seq_more; [| basic_solver]. *)
-  (*     rewrite EXT_RF.  basic_solver. } *)
-    (* Qed.  *)
-  Admitted. 
+  (*     rewrite set_interC.       *)
+  (*     rewrite <- RESTR_EVENTS. auto. } *)
+  (*   { admit. } *)
+  (*   admit.  *)
+  (* (*   red in SB. desc. red in SAME_LOCAL. desc.  *) *)
+  (* (*   assert (SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘). *) *)
+  (* (*   { unfold Execution.sb.         *) *)
+  (* (*     rewrite !seqA. do 2 seq_rewrite <- id_inter. *) *)
+  (* (*     rewrite set_interC.  *) *)
+  (* (*     rewrite RESTR_EVENTS.  *) *)
+  (* (*     basic_solver. } *) *)
+  (* (*   splits; auto.  *) *)
+  (* (*   { rewrite SAME_LAB. auto. } *) *)
+  (* (*   { unfold fr. rewrite SAME_CO. rewrite <- seqA. apply seq_more; [| basic_solver]. *) *)
+  (* (*     rewrite EXT_RF.  basic_solver. } *) *)
+  (*   (* Qed.  *) *)
+  (* Admitted.  *)
 
   Lemma set_equiv_exp_iff {A : Type} (s s' : A -> Prop):
     s ≡₁ s' <-> forall x : A, s x <-> s' x.
@@ -1419,37 +1417,43 @@ Section OCamlMM_TO_IMM_S_PROG.
     forall l, lab GO (InitEvent l) = Astore Xpln Opln l 0.
   Proof. Admitted. 
   
-  Lemma Wf_subgraph GO GI (SB: same_behavior GO GI) (WF: Wf GI): Wf GO.
+  Lemma Wf_subgraph GO GI (SAME_BEH: same_behavior GO GI) (WF: Wf GI): Wf GO.
   Proof.
-    pose proof SB as SB'. 
-    pose proof (same_beh_implies_similar_rels SB). 
-    red in SB. desc. red in SAME_LOCAL. desc.
+    pose proof SAME_BEH as SAME_BEH'.
+    red in SAME_BEH. desc. red in SAME_LOCAL. desc.
+    assert (SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘).
+    { unfold Execution.sb.
+      rewrite !seqA. do 2 seq_rewrite <- id_inter.
+      rewrite set_interC.
+      rewrite RESTR_EVENTS.
+      basic_solver. }
+    (* pose proof (same_beh_implies_similar_rels SAME_BEH).  *)
     symmetry in SAME_CO.
     assert (forall (r1 r2 r3: relation actid), r1 ⊆ r2 -> r1 \ r3 ⊆ r2 \r3) as MINUS_INCL. 
     { ins. basic_solver. }
     assert (forall (r1 r3: relation actid) S1 S2, r1 ≡ ⦗S1⦘ ⨾ r1 ⨾ ⦗S2⦘ -> r1 \ r3 ≡ ⦗S1⦘ ⨾ (r1 \ r3) ⨾ ⦗S2⦘) as MINUS_EQUIV. 
     { ins. seq_rewrite H. basic_solver. }
     (* TODO: should we include addr, ctrl equality in same_behavior? *)
-    pose proof (same_beh_implies_similar_intrarels SB'). desc. 
+    pose proof (same_beh_implies_similar_intrarels SAME_BEH'). desc. 
     inversion WF. 
-    assert (rf GO ≡ restr_rel (RWO GI) (rf GI)) as RF_SIM. 
-    { rewrite EXT_RF. rewrite wf_rfD. rewrite restr_relE.
-      rewrite !seqA.
-      arewrite (⦗(RWO GI)⦘ ⨾ ⦗W GI⦘ ≡ ⦗W GI⦘).
-      { rewrite <- id_inter. apply eqv_rel_more. split; [basic_solver| ].
-        apply set_subset_inter_r. split; auto.
-        unfold RWO. 
-        rewrite wf_rmwD.
-        red. ins. red. split; [basic_solver| ]. 
-        red. ins. red in H0. desc. apply seq_eqv_lr in H0. desc.
-        type_solver. }
-      arewrite (⦗R GI⦘ ⨾ ⦗(RWO GI)⦘ ≡ ⦗R GI⦘ ⨾ ⦗set_compl (dom_rel (rmw GI))⦘); [| basic_solver].
-      rewrite <- !id_inter. apply eqv_rel_more.
-      unfold RWO. 
-      seq_rewrite set_inter_minus_r.
-      arewrite (R GI ∩₁ RW GI ≡₁ R GI) by basic_solver. }
+    (* assert (rf GO ≡ restr_rel (RWO GI) (rf GI)) as RF_SIM.  *)
+    (* { rewrite EXT_RF. rewrite wf_rfD. rewrite restr_relE. *)
+    (*   rewrite !seqA. *)
+    (*   arewrite (⦗(RWO GI)⦘ ⨾ ⦗W GI⦘ ≡ ⦗W GI⦘). *)
+    (*   { rewrite <- id_inter. apply eqv_rel_more. split; [basic_solver| ]. *)
+    (*     apply set_subset_inter_r. split; auto. *)
+    (*     unfold RWO.  *)
+    (*     rewrite wf_rmwD. *)
+    (*     red. ins. red. split; [basic_solver| ].  *)
+    (*     red. ins. red in H0. desc. apply seq_eqv_lr in H0. desc. *)
+    (*     type_solver. } *)
+    (*   arewrite (⦗R GI⦘ ⨾ ⦗(RWO GI)⦘ ≡ ⦗R GI⦘ ⨾ ⦗set_compl (dom_rel (rmw GI))⦘); [| basic_solver]. *)
+    (*   rewrite <- !id_inter. apply eqv_rel_more. *)
+    (*   unfold RWO.  *)
+    (*   seq_rewrite set_inter_minus_r. *)
+    (*   arewrite (R GI ∩₁ RW GI ≡₁ R GI) by basic_solver. } *)
     assert (co GO ≡ ⦗E GO⦘ ⨾ co GO ⨾ ⦗E GO⦘) as ECO. 
-    { rewrite RESTR_EVENTS, SAME_CO.
+    { rewrite RESTR_EVENTS, <- SAME_CO.
       rewrite !id_inter. rewrite seq_eqvC. rewrite seqA. rewrite seq_eqvC.
       seq_rewrite <- wf_coE.
       split; [| basic_solver].
@@ -1462,7 +1466,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       apply seq_mori; [basic_solver|].
       apply eqv_rel_mori. auto. }
     assert (rf GO ≡ ⦗E GO⦘ ⨾ rf GO ⨾ ⦗E GO⦘) as ERF. 
-    { rewrite RF_SIM, RESTR_EVENTS. fold (RWO GI).
+    { rewrite RESTR_RF, RESTR_EVENTS. fold (RWO GI).
       rewrite set_interC at 1. do 2 rewrite id_inter.
       rewrite !seqA. do 2 seq_rewrite <- restr_relE.
       rewrite restrC with (d' := (RWO GI)). rewrite restr_restr, set_interK.
@@ -1476,7 +1480,7 @@ Section OCamlMM_TO_IMM_S_PROG.
     assert (CTRL_INCL: ctrl GO ⊆ sb GO).
     { rewrite CTRL_SIM, SB_SIM. apply restr_rel_mori; basic_solver. }
 
-    red in SB'. desc.  
+    red in SAME_BEH'. desc.  
     split; vauto.
     all: try (seq_rewrite NO_RMW; basic_solver). 
     all: try (seq_rewrite NO_RMWDEP; basic_solver). 
@@ -1520,7 +1524,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       apply restr_rel_more; auto. }
     { rewrite CTRL_SIM, SB_SIM. rewrite RESTR_SEQ. apply restr_rel_mori; auto. }
     { rewrite ERF.
-      rewrite RF_SIM; eauto. 
+      rewrite RESTR_RF; eauto. 
       rewrite !seqA. do 2 seq_rewrite <- id_inter.
       rewrite set_interC. rewrite W_SIM, R_SIM; eauto. 
       rewrite set_interC with (s' := R GI). rewrite !id_inter.
@@ -1532,36 +1536,37 @@ Section OCamlMM_TO_IMM_S_PROG.
     { rewrite ERF. red. ins.
       apply seq_eqv_lr in H. desc.
       red.
-      rewrite (same_relation_exp EXT_RF) in H0. apply seq_eqv_r in H0. desc. 
+      rewrite (same_relation_exp RESTR_RF) in H0. red in H0. desc. 
       replace (loc (lab GO) x) with (loc (lab GI) x).
       replace (loc (lab GO) y) with (loc (lab GI) y).
       apply wf_rfl; auto.
       all: unfold loc; rewrite SAME_LAB; auto. }
     { red. ins.
       rewrite (same_relation_exp ERF) in H. apply seq_eqv_lr in H. desc.
-      rewrite (same_relation_exp EXT_RF) in H0. apply seq_eqv_r in H0. desc.
+      rewrite (same_relation_exp RESTR_RF) in H0. red in H0. desc.
       replace (val (lab GO) a) with (val (lab GI) a).
       replace (val (lab GO) b) with (val (lab GI) b).
       apply wf_rfv; auto. 
       all: unfold val; rewrite SAME_LAB; auto. }
-    { rewrite RF_SIM. rewrite restr_relE. rewrite !transp_seq.
+    { rewrite RESTR_RF. rewrite restr_relE. rewrite !transp_seq.
       rewrite !transp_eqv_rel. rewrite seqA, <- restr_relE.
       apply functional_restr. auto. }
     { rewrite ECO at 2.
       rewrite !seqA. do 2 seq_rewrite <- id_inter.
       rewrite set_interC. rewrite W_SIM; eauto. 
       rewrite set_interC at 2. do 2 rewrite id_inter.
-      rewrite SAME_CO at 2. rewrite !seqA. seq_rewrite <- wf_coD.
-      rewrite <- SAME_CO. apply ECO. }
+      rewrite <- SAME_CO at 2. rewrite !seqA. seq_rewrite <- wf_coD.
+      rewrite SAME_CO. apply ECO. }
     { rewrite ECO. red. ins.
       apply seq_eqv_lr in H. desc.
       red.
+      symmetry in SAME_CO. 
       rewrite (same_relation_exp SAME_CO) in H0.
       replace (loc (lab GO) x) with (loc (lab GI) x).
       replace (loc (lab GO) y) with (loc (lab GI) y).
       apply wf_col; auto.
       all: unfold loc; rewrite SAME_LAB; auto. }
-    { rewrite SAME_CO. auto. }
+    { rewrite <- SAME_CO. auto. }
     { ins. specialize (wf_co_total ol).
       forward eapply (@is_total_more _ (E GI ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol)) (E GO ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol))).
       { apply set_equiv_inter; [| basic_solver].
@@ -1570,7 +1575,7 @@ Section OCamlMM_TO_IMM_S_PROG.
         arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
         rewrite empty_inter_minus_same; [auto| ]. 
         rewrite wf_rmwD. type_solver. }
-      { symmetry. eapply SAME_CO. }
+      { eapply SAME_CO. }
       intros [impl _].
       arewrite (E GO ∩₁ W GO ∩₁ (fun x : actid => loc (lab GO) x = ol) ≡₁ E GO ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol)). 
       2: { apply impl. auto. }
@@ -1582,7 +1587,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       { ins. desc. red in H. desc. red in H. desc.
         red. split; [basic_solver|].
         rewrite <- H0. unfold loc. rewrite SAME_LAB; auto. } }
-    { rewrite SAME_CO. auto. }
+    { rewrite <- SAME_CO. auto. }
     { ins.
       eapply SAME_INIT.
       { red. splits; eauto. }
@@ -2057,13 +2062,13 @@ Section CompilationCorrectness.
       specialize (E_STRUCT x EGOx). destruct E_STRUCT; vauto.
       simpl in H. apply find_iff_in in H. destruct H as [PO THREADO]. 
       assert (exists GIi, thread_restricted_execution GI tid GIi) by apply restr_graph. desc.  
-      forward eapply RESTR_SIM as [OTHREADEXEC SBL]; eauto.
+      forward eapply RESTR_SIM as [OTHREADEXEC SAME_BEHL]; eauto.
       split. 
       { eapply E_restr_iff; eauto.
-        red in SBL. desc. 
+        red in SAME_BEHL. desc. 
         apply (set_equiv_exp RESTR_EVENTS) in EGi.
         red in EGi. desc. auto. }
-      red in SBL. desc.
+      red in SAME_BEHL. desc.
       apply (set_equiv_exp RESTR_EVENTS) in EGi.
       desc. red in EGi. desc. red in EGi0. desc. auto.       
       red. split.
@@ -2088,8 +2093,8 @@ Section CompilationCorrectness.
       { apply find_iff_in. red in Compiled. destruct Compiled.
         apply H2. apply find_iff_in. auto. }
       assert (exists GIi, thread_restricted_execution GI thread GIi) as [GIi TREI] by apply restr_graph.      
-      forward eapply RESTR_SIM as [OEXEC SBL]; eauto.
-      destruct SBL. apply (set_equiv_exp H2).
+      forward eapply RESTR_SIM as [OEXEC SAME_BEHL]; eauto.
+      destruct SAME_BEHL. apply (set_equiv_exp H2).
       pose proof TREI as TREI_. destruct TREI. 
       assert (E GIi (ThreadEvent thread index)) as EGIi. 
       { apply (@E_restr_iff _ _ _ _ TREI_); auto. }
@@ -2105,19 +2110,22 @@ Section CompilationCorrectness.
       apply (same_relation_exp tr_rmw) in H6. apply seq_eqv_lr in H6. desc. auto. 
   Admitted. 
 
-  Lemma restr_rel_empty_minus {T: Type} (r r': relation T) (A B: T -> Prop)
-        (NO_INTER: A ∩₁ B ≡₁ ∅):
-    restr_rel A r \ restr_rel B r' ≡ r. 
-  Proof. Admitted. 
-    
   Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI)
         (ExecO: Oprogram_execution OCamlProgO GO):
     ocaml_consistent GO.
   Proof.
-    pose proof (same_beh_implies_similar_rels SB).
+    (* pose proof (same_beh_implies_similar_rels SB). *)
     pose proof (same_beh_implies_similar_intrarels SB) as SIMILAR_INTRA. 
     pose proof (Wf_subgraph SB WFI) as WFO. 
     red in SB. desc. red in SAME_LOCAL. desc.
+    assert (SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘).
+    { (* TODO: extract and remove duplicate *)
+      unfold Execution.sb.
+      rewrite !seqA. do 2 seq_rewrite <- id_inter.
+      rewrite set_interC.
+      rewrite RESTR_EVENTS.
+      basic_solver. }
+    
     assert (HBO': hbo GO ⊆ hbo GI).
     { unfold OCaml.hb.
       apply clos_trans_mori.
@@ -2134,25 +2142,36 @@ Section CompilationCorrectness.
         { ins. red in H. desc. red. split; auto.
           unfold is_sc, Events.mod. rewrite (SAME_LAB); auto. } }
       apply restr_rel_mori; [basic_solver| ].
-      rewrite SAME_CO, EXT_RF. basic_solver. }
+      rewrite SAME_CO, RESTR_RF. basic_solver. }
     red. red in OMM_I.
     splits; auto.
     { red.
       rewrite R_SIM.
       2: { red. splits; eauto. }
-      rewrite RESTR_EVENTS, EXT_RF.
+      rewrite RESTR_EVENTS, RESTR_RF. fold (RWO GI). 
       desc. red in Comp.
-      rewrite set_interA, set_inter_minus_l.
-      arewrite (RW GI ∩₁ R GI ≡₁ R GI) by basic_solver.
-      rewrite set_inter_minus_r. 
-      rewrite codom_eqv1.
-      rewrite set_minusE.
-      apply set_subset_inter; [| basic_solver].
-      vauto. }
+      rewrite restr_relE, <- seqA.
+      rewrite set_interC, <- set_interA. rewrite set_interC with (s := R GI).
+      arewrite (E GI ∩₁ R GI ⊆₁ codom_rel (rf GI)).
+      rewrite <- seqA. rewrite codom_eqv1.
+      apply set_subset_inter; [| basic_solver].      
+      red. ins. red in H. destruct H as [w RFwx]. red. exists w.
+      apply seq_eqv_l. split; auto. red. red.
+      cut (W GI w).
+      { ins. split; [basic_solver| ].
+        pose proof wf_rmwD WFI.
+        pose proof (same_relation_exp_iff (rmw GI) (⦗R_ex GI⦘ ⨾ rmw GI ⨾ ⦗W GI⦘)) as [IMPL _].
+        red. ins. red in H1. desc. 
+        specialize (IMPL H0 w y). destruct IMPL as [IMPL _]. specialize (IMPL H1).
+        apply seq_eqv_lr in IMPL. desc. type_solver. }
+      pose proof (wf_rfD WFI).
+      pose proof (same_relation_exp_iff (rf GI) (⦗W GI⦘ ⨾ rf GI ⨾ ⦗R GI⦘)) as [IMPL _].
+      specialize (IMPL H w x). destruct IMPL. specialize (H0 RFwx).
+      apply seq_eqv_lr in H0. desc. auto. }
     { red. arewrite (rmw GO ≡ ∅₂); basic_solver. }
-    { rewrite HBO', (same_relation_sym SAME_CO). desc.  auto. }
-    { unfold fr. rewrite HBO', (same_relation_sym SAME_CO). 
-      arewrite (rf GO ⊆ rf GI) by rewrite EXT_RF; auto. 
+    { rewrite HBO', SAME_CO. desc.  auto. }
+    { unfold fr. rewrite HBO', SAME_CO. 
+      arewrite (rf GO ⊆ rf GI) by rewrite RESTR_RF; auto. 
       auto. desc. auto. }    
     assert (W_RMW: W GI ⊆₁ RW GI \₁ dom_rel (rmw GI)).
     { rewrite set_minusE.
@@ -2161,30 +2180,55 @@ Section CompilationCorrectness.
       rewrite dom_eqv1. rewrite set_compl_inter.
       unionR left. type_solver. }
     arewrite (rfe GO ⊆ rfe GI).
-    { unfold rfe. rewrite SB', EXT_RF.
-      apply inclusion_minus_l.
-      rewrite rfi_union_rfe at 1. rewrite seq_union_l.
-      apply union_mori.        
-      { rewrite (WFI.(wf_rfiD)). 
-        arewrite (rfi GI ⊆ sb GI).
-        apply seq_mori; [ | basic_solver]. 
-        apply eqv_rel_mori. apply W_RMW. }
-      unfold rfe. basic_solver. }
+    { unfold rfe. rewrite SB', RESTR_RF.
+      fold (RWO GI). rewrite <- restr_relE.
+      rewrite <- restr_minus. basic_solver. }
+    assert (FR' : fr GO ≡ restr_rel (RWO GI) (fr GI)).
+    { unfold Execution.fr. rewrite RESTR_RF.
+      repeat rewrite restr_relE. do 2 rewrite transp_seq.
+      rewrite transp_eqv_rel. 
+      rewrite SAME_CO.
+      rewrite !seqA. do 2 (apply seq_more; [basic_solver| ]).
+      rewrite (wf_coD WFI), !seqA.
+      rewrite seq_eqvC.
+      rewrite <- seqA. 
+      arewrite (⦗RWO GI⦘ ⨾ ⦗W GI⦘ ≡ ⦗W GI⦘); [| basic_solver]. 
+      rewrite <- id_inter. apply eqv_rel_more.
+      split; [basic_solver| ].
+      apply set_subset_inter_r. split; [| basic_solver].
+      auto. }
+    
+    rewrite <- restr_relE.
+    arewrite (restr_rel Sc GO (coe GO ∪ fre GO) ≡ restr_rel (E GO ∩₁ Sc GO) (coe GO ∪ fre GO)).
+    { split; try basic_solver.
+      red. ins. red in H. desc.
+      assert (E GO x /\ E GO y).
+      { red in H. des. 
+        { red in H. red in H. desc.
+          apply (same_relation_exp (wf_coE WFO)) in H.
+          apply seq_eqv_lr in H. desc; auto. }
+        red in H. red in H. desc.
+        apply (same_relation_exp (wf_frE WFO)) in H.
+        apply seq_eqv_lr in H. desc; auto. }
+      desc. red. splits; red; splits; auto. }
+    seq_rewrite SC_SIM .
+    2: { red. splits; eauto. }
+    arewrite (E GO ∩₁ Sc GI ⊆₁ Sc GI) by basic_solver. 
+        
     arewrite (fre GO ⊆ fre GI).
-    { unfold fre. rewrite SB', FR'.
+    { unfold fre. rewrite SB', FR'. fold (RWO GI).
       apply inclusion_minus_l.
-      rewrite fri_union_fre at 1. rewrite seq_union_r.
-      apply union_mori.        
-      { rewrite (WFI.(wf_friD)). 
-        arewrite (fri GI ⊆ sb GI).
-        rewrite <- seqA. 
-        apply seq_mori; [basic_solver |].
-        hahn_frame. apply eqv_rel_mori. apply W_RMW. }
-      unfold fre. basic_solver. }
+      rewrite fri_union_fre at 1.
+      rewrite <- union_restr.
+      apply union_mori.
+      { rewrite <- restr_relE.
+        apply restr_rel_mori; [basic_solver| ].
+        arewrite (fri GI ⊆ sb GI). basic_solver. }
+      apply inclusion_restr. }
     
     arewrite (coe GO ≡ coe GI).
     { unfold coe.      
-      rewrite SB', <- SAME_CO.
+      rewrite SB', SAME_CO. fold (RWO GI). 
       seq_rewrite <- restr_relE. 
       rewrite (WFI.(wf_coD)). rewrite <- restr_relE.      
       rewrite <- restr_minus_alt. rewrite <- restr_minus_alt. 
@@ -2198,11 +2242,10 @@ Section CompilationCorrectness.
       rewrite dom_eqv1.
       red. ins. red. split; auto.
       red. ins. type_solver. }
-
-    rewrite SC'. 
+    
     arewrite (sb GO ⊆ sb GI) by rewrite SB'; basic_solver.
-    desc.
-    arewrite (RWO GI ∩₁ Sc GI ⊆₁ Sc GI); auto. basic_solver. 
+    rewrite restr_relE. 
+    desc. auto. 
   Qed. 
   
   Theorem compilation_correctness: exists (GO: execution),
