@@ -1346,9 +1346,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     split; auto. red. ins. red in H2. basic_solver.
   Qed.
 
-  Lemma SAME_INIT GO GI (SB: same_behavior GO GI): forall l, E GO (InitEvent l) <-> E GI (InitEvent l). 
-  Proof. Admitted. 
-
   Lemma same_beh_implies_similar_intrarels GO GI (SB: same_behavior GO GI):
     ⟪DATA_SIM: data GO ≡ restr_rel (RWO GI) (data GI) ⟫ /\
     ⟪CTRL_SIM: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI) ⟫ /\ 
@@ -1413,10 +1410,6 @@ Section OCamlMM_TO_IMM_S_PROG.
       unfold is_sc, Events.mod. rewrite (SAME_LAB); auto. }
   Qed. 
 
-  Lemma wf_init_same_beh GO GI (SB: same_behavior GO GI) (WF: Wf GI):
-    forall l, lab GO (InitEvent l) = Astore Xpln Opln l 0.
-  Proof. Admitted. 
-  
   Lemma Wf_subgraph GO GI (SAME_BEH: same_behavior GO GI) (WF: Wf GI): Wf GO.
   Proof.
     pose proof SAME_BEH as SAME_BEH'.
@@ -1472,15 +1465,15 @@ Section OCamlMM_TO_IMM_S_PROG.
       rewrite restrC with (d' := (RWO GI)). rewrite restr_restr, set_interK.
       apply restr_rel_more; [basic_solver|].
       rewrite restr_relE. auto. }
-
+    
     assert (DATA_INCL: data GO ⊆ sb GO).
     { rewrite DATA_SIM, SB_SIM. apply restr_rel_mori; basic_solver. }
     assert (ADDR_INCL: addr GO ⊆ sb GO).
     { rewrite ADDR_SIM, SB_SIM. apply restr_rel_mori; basic_solver. }
     assert (CTRL_INCL: ctrl GO ⊆ sb GO).
     { rewrite CTRL_SIM, SB_SIM. apply restr_rel_mori; basic_solver. }
-
-    red in SAME_BEH'. desc.  
+    
+    (* red in SAME_BEH'. desc.   *)
     split; vauto.
     all: try (seq_rewrite NO_RMW; basic_solver). 
     all: try (seq_rewrite NO_RMWDEP; basic_solver). 
@@ -1499,7 +1492,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       rewrite <- seqA with (r2 := ⦗W GI⦘). rewrite <- seqA with (r1 := ⦗R GI⦘).
       seq_rewrite <- restr_relE. apply restr_rel_more; auto. 
       rewrite DATA_SIM. rewrite <- restr_seq_eqv_r, <- restr_seq_eqv_l.
-      apply restr_rel_more; auto. }
+      apply restr_rel_more; auto. red. splits; auto. red. splits; auto. }
     { rewrite (@SUPSET_RESTR _ (addr GO) (sb GO) (E GO)); auto.
       2: { unfold Execution.sb. basic_solver. }
       rewrite !seqA. do 2 seq_rewrite <- id_inter. rewrite set_interC.
@@ -1509,7 +1502,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       rewrite <- seqA with (r2 := ⦗RW GI⦘). rewrite <- seqA with (r1 := ⦗R GI⦘).
       seq_rewrite <- restr_relE. apply restr_rel_more; auto. 
       rewrite ADDR_SIM. rewrite <- restr_seq_eqv_r, <- restr_seq_eqv_l. 
-      apply restr_rel_more; auto. }
+      apply restr_rel_more; auto. red. splits; auto. red. splits; auto. }
     { rewrite <- (seq_id_r (ctrl GO)) at 2.  
       rewrite (@SUPSET_RESTR _ (ctrl GO) (sb GO) (E GO)); auto.
       2: { unfold Execution.sb. basic_solver. }
@@ -1521,7 +1514,8 @@ Section OCamlMM_TO_IMM_S_PROG.
       seq_rewrite <- restr_relE. apply restr_rel_more; auto. 
       rewrite CTRL_SIM. rewrite <- restr_seq_eqv_r, <- restr_seq_eqv_l.
       rewrite seq_id_r. 
-      apply restr_rel_more; auto. }
+      apply restr_rel_more; auto.
+      red. splits; auto. }
     { rewrite CTRL_SIM, SB_SIM. rewrite RESTR_SEQ. apply restr_rel_mori; auto. }
     { rewrite ERF.
       rewrite RESTR_RF; eauto. 
@@ -1532,7 +1526,8 @@ Section OCamlMM_TO_IMM_S_PROG.
       rewrite <- seqA with  (r3 := ⦗E GO⦘). rewrite <- seqA with  (r1 := ⦗W GI⦘).
       seq_rewrite <- restr_relE. apply restr_rel_more; [basic_solver|].
       rewrite <- restr_seq_eqv_r, <- restr_seq_eqv_l.
-      apply restr_rel_more; [basic_solver|]. auto. }
+      apply restr_rel_more; [basic_solver|]. auto.
+      red. splits; auto. red. splits; auto. }
     { rewrite ERF. red. ins.
       apply seq_eqv_lr in H. desc.
       red.
@@ -1556,7 +1551,8 @@ Section OCamlMM_TO_IMM_S_PROG.
       rewrite set_interC. rewrite W_SIM; eauto. 
       rewrite set_interC at 2. do 2 rewrite id_inter.
       rewrite <- SAME_CO at 2. rewrite !seqA. seq_rewrite <- wf_coD.
-      rewrite SAME_CO. apply ECO. }
+      rewrite SAME_CO. apply ECO.
+      red. splits; auto. }
     { rewrite ECO. red. ins.
       apply seq_eqv_lr in H. desc.
       red.
@@ -1586,17 +1582,18 @@ Section OCamlMM_TO_IMM_S_PROG.
         rewrite <- H0. unfold loc. rewrite SAME_LAB; auto. } 
       { ins. desc. red in H. desc. red in H. desc.
         red. split; [basic_solver|].
-        rewrite <- H0. unfold loc. rewrite SAME_LAB; auto. } }
+        rewrite <- H0. unfold loc. rewrite SAME_LAB; auto. }
+      red. splits; auto. }
     { rewrite <- SAME_CO. auto. }
     { ins.
       eapply SAME_INIT.
-      { red. splits; eauto. }
+      red. splits; auto.
       apply wf_init. desc.
-      exists b. split; auto.
-      apply (proj1 RESTR_EVENTS). auto.
+      exists b. split.
+      { apply RESTR_EVENTS. auto. }
       rewrite <- H0. unfold loc. rewrite SAME_LAB; auto. }
-    eapply wf_init_same_beh; eauto.
-    red. splits; eauto. 
+    intros. rewrite SAME_INIT_LAB. 
+    apply wf_init_lab. 
   Qed.
 
   
@@ -1953,7 +1950,7 @@ Section CompilationCorrectness.
 
   Lemma thread_execs_helper: exists GO,
       ⟪ E_STRUCT: forall e : actid, E GO e -> is_init e \/ IdentMap.In (tid e) ProgO ⟫/\
-      ⟪ SAME_INIT: forall e : actid, is_init e -> E GO e <-> E GI e⟫ /\
+      ⟪ SAME_INIT: E GO ∩₁ is_init ≡₁ E GI ∩₁ is_init⟫ /\
       ⟪ SAME_CO: co GI ≡ co GO⟫ /\
       ⟪ EXT_RF: rf GO ≡ rf GI ⨾ ⦗set_compl (dom_rel (rmw GI))⦘ ⟫ /\
       ⟪ RESTR_SIM: forall tid POi
@@ -2017,15 +2014,16 @@ Section CompilationCorrectness.
       Oprogram_execution_corrected OCamlProgO GO /\
       same_behavior GO GI. 
   Proof.
-    pose proof thread_execs_helper. desc.
+    pose proof thread_execs_helper as T_E_H. desc.
     exists GO. split.
     { red. split; auto. 
       ins. specialize (RESTR_SIM _ _ THREAD Gi THREAD_EXEC).
       pose proof (restr_graph GI thread) as [GIi RESTRI]. 
       desc. specialize (RESTR_SIM GIi RESTRI). desc. auto. }
-    red. splits; auto. red. splits. 
-    2: { ins. pose proof EGOx as EGOx_. apply into_restr in EGOx. destruct x.
-         { admit. }
+    red. splits; auto.
+    { red. splits. 
+      2: { ins. pose proof EGOx as EGOx_. apply into_restr in EGOx. destruct x.
+           { admit. }
          destruct EGOx; vauto.
          desc. inversion SAME_TID. subst. rename Gi into GOi. 
          replace (lab GO (ThreadEvent tid ind)) with (lab GOi (ThreadEvent tid ind)).

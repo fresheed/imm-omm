@@ -456,7 +456,9 @@ Section OCaml_IMM_Correspondence.
   Definition same_behavior (GO GI: execution) :=
     ⟪SAME_LOCAL: same_behavior_local GO GI ⟫ /\
     ⟪SAME_CO: GO.(co) ≡ GI.(co) ⟫ /\
-    ⟪RESTR_RF: GO.(rf) ≡ restr_rel (RWO GI) GI.(rf) ⟫.
+    ⟪RESTR_RF: GO.(rf) ≡ restr_rel (RWO GI) GI.(rf) ⟫ /\
+    ⟪SAME_INIT: E GO ∩₁ is_init ≡₁ E GI ∩₁ is_init ⟫ /\
+    ⟪SAME_INIT_LAB: forall l, lab GO (InitEvent l) = lab GI (InitEvent l) ⟫. 
 
   (* Definition mm_similar_states (sto: state) (bsti: block_state) := *)
   (*   is_thread_block_compiled sto.(instrs) bsti.(binstrs)  /\ *)
