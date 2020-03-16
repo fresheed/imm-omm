@@ -1567,6 +1567,7 @@ Section OCamlMM_TO_IMM_S_PROG.
       forward eapply (@is_total_more _ (E GI ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol)) (E GO ∩₁ W GI ∩₁ (fun x : actid => loc (lab GI) x = ol))).
       { apply set_equiv_inter; [| basic_solver].
         rewrite RESTR_EVENTS.
+        unfold RWO. 
         rewrite set_interA. rewrite set_inter_minus_l.
         arewrite (RW GI ∩₁ W GI ≡₁ W GI) by basic_solver.
         rewrite empty_inter_minus_same; [auto| ]. 
@@ -1600,10 +1601,56 @@ Section OCamlMM_TO_IMM_S_PROG.
 End OCamlMM_TO_IMM_S_PROG.
 
 Section CompCorrHelpers.
+
+  Notation "'E' G" := G.(acts_set) (at level 1).
+  Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
+  Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
+  Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
+  Notation "'F' G" := (fun a => is_true (is_nonnop_f G.(lab) a)) (at level 1).
+  Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
+  Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
+  Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
+  Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1). 
+  Notation "'R_ex' G" := (fun a => is_true (R_ex G.(lab) a)) (at level 1).
+  Notation "'hbo'" := (OCaml.hb). 
+  Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
+  Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
+
+  Lemma GI_1thread_omm_premises_block bst tid PO BPI
+        (COMP: is_thread_block_compiled PO BPI) 
+        (BLOCK_STEPS: (omm_block_step tid)＊ (binit BPI) bst):
+    omm_premises_hold (bG bst).
+  Proof.
+    apply crt_num_steps in BLOCK_STEPS. destruct BLOCK_STEPS as [n_steps BLOCK_STEPS].
+    generalize dependent bst. induction n_steps.
+    { ins. red in BLOCK_STEPS. desc. subst. simpl.
+      red. simpl. splits; basic_solver. }
+    ins. red in BLOCK_STEPS. destruct BLOCK_STEPS as [bst_prev [STEPS_PREV STEP_NEXT]].
+    specialize (IHn_steps bst_prev STEPS_PREV). clear STEPS_PREV.
+    red in STEP_NEXT. desc. red in BLOCK_STEP. desc.
+    foobar. 
+  Admitted. 
+
   Lemma GI_1thread_omm_premises tid PO PI (COMP: is_thread_compiled PO PI) Gi
         (EXEC: thread_execution tid PI Gi):
     omm_premises_hold Gi.
-  Proof. Admitted.
+  Proof.
+    red in EXEC. destruct EXEC as [st_fin [STEPS [TERM GRAPH]]]. 
+    red in COMP. desc. red in COMP. desc.
+    set (bst_fin := bst_from_st st_fin BPI (length BPI)).
+    assert (st_fin = bst2st bst_fin) as BST.
+    { replace PI with (instrs st_fin) in *.
+      2: { apply eq_trans with (y := instrs (init PI)); auto.
+           symmetry. apply steps_same_instrs. eauto. }
+      unfold bst2st. simpl. rewrite firstn_all.
+      red in TERM. apply is_terminal_pc_bounded in TERM. 
+      rewrite <- COMP0 in *.
+      rewrite <- TERM. apply state_record_equality. }
+    forward eapply (@steps_imply_ommblocks bst_fin) as BLOCK_STEPS; eauto.
+    { simpl. rewrite <- COMP0, <- BST. eauto. }
+    replace Gi with (bG bst_fin).
+    eapply GI_1thread_omm_premises_block; eauto. 
+  Qed. 
 
 End CompCorrHelpers.
 
@@ -2048,7 +2095,7 @@ Section CompilationCorrectness.
       pose proof (into_restr _ _ EGOx). 
       destruct H.
       { split.
-        { apply SAME_INIT0; auto. }
+        { apply SAME_INIT. split; auto. }
         red. split.
         { cut (W GI x); [basic_solver| ].
           apply (init_w WFI); auto. }
@@ -2083,7 +2130,7 @@ Section CompilationCorrectness.
       apply sb_tid_init in H1. simpl in H1. destruct H1; vauto. }
     ins. red in H. desc.
     destruct x.
-    { apply SAME_INIT0; eauto. }
+    { apply SAME_INIT. split; auto. }
     pose proof (restr_graph GO thread) as [GOi TRE]. 
     eapply E_restr_iff; eauto.     
     { assert (exists PIi, Some PIi = IdentMap.find thread ProgI) by admit.
@@ -2105,7 +2152,8 @@ Section CompilationCorrectness.
       red. ins. red in H5.  
       apply H5. 
       unfold dom_rel. unfold dom_rel in H6. desc. exists y.
-      apply (same_relation_exp tr_rmw) in H6. apply seq_eqv_lr in H6. desc. auto. 
+      apply (same_relation_exp tr_rmw) in H6. apply seq_eqv_lr in H6. desc. auto. } }
+    
   Admitted. 
 
   Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI)

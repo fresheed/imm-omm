@@ -447,11 +447,11 @@ Section OCaml_IMM_Correspondence.
   Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
   Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
 
-  Definition same_behavior_local (GO GI: execution) :=
-    ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ (RW GI \₁ dom_rel (GI.(rmw))) ⟫ /\
-    ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫. 
-
   Definition RWO GI := (RW GI \₁ dom_rel (rmw GI)). 
+
+  Definition same_behavior_local (GO GI: execution) :=
+    ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\
+    ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫. 
 
   Definition same_behavior (GO GI: execution) :=
     ⟪SAME_LOCAL: same_behavior_local GO GI ⟫ /\

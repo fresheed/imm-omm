@@ -541,7 +541,7 @@ Section PairStep.
           forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto.
           forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto. 
           Unshelve. all: try eauto. 
- 
+          unfold RWO. 
           rewrite R_EXT, W_EXT. subst new_lbl. simpl in *.
           arewrite (rmw (G sti') ≡ rmw (G sti)).
           { rewrite UG. vauto. }
@@ -735,6 +735,7 @@ Section PairStep.
           forward eapply (@label_set_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto. 
           Unshelve. all: try eauto. 
 
+          unfold RWO. 
           rewrite W_EXT', R_EXT', R_EXT, W_EXT.
           arewrite (rmw (G sti'') ≡ rmw (G sti)).
           { rewrite UG0, UG. vauto. }
@@ -948,6 +949,7 @@ Section PairStep.
           Unshelve.
           2, 3: rewrite UG0, Heqnew_lbl', LEXPR_SAME, UREGS; repeat eexists.
                         
+          unfold RWO. 
           rewrite W_EXT', R_EXT', R_EXT, W_EXT.
           all: eauto. 
           arewrite (rmw (G sti'') ≡ rmw (G sti)).
@@ -1192,6 +1194,7 @@ Section PairStep.
           Unshelve.
           2, 3:  rewrite UG0, Heqnew_lbl'; repeat eexists. 
 
+          unfold RWO. 
           rewrite W_EXT', R_EXT', R_EXT, W_EXT. rewrite UINDEX in *.
           remember (ThreadEvent tid (eindex sti + 1)) as evr. 
           remember (ThreadEvent tid (eindex sti + 1 + 1)) as evw. 
