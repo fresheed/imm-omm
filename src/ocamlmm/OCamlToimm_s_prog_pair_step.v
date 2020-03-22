@@ -421,7 +421,7 @@ Section PairStep.
      { red in H2. eapply Forall2_length; eauto. }
      apply IHBPI; auto.
    Qed. 
-     
+
    Lemma pair_step sto bsti (MM_SIM: mm_similar_states sto bsti)
         tid bsti' (OSEQ_STEP: omm_block_step tid bsti bsti')
         (BPC'_BOUND: bpc bsti' <= length (binstrs bsti))
@@ -532,42 +532,21 @@ Section PairStep.
         pose proof (reach_with_blocks Heqsti BLOCK_REACH) as [n_steps REACH]. 
         splits.
         { replace (bG bsti') with (G sti') by vauto.
-          rewrite (@E_ADD).
-          2: { repeat eexists. } 
-          rewrite (@E_ADD (G sti) (G sti')).
-          2: { repeat eexists. eapply UG. }
-          desc.
-          remember (Aload false Orlx (RegFile.eval_lexpr (regf sti) lexpr) val) as new_lbl. 
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto.
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto. 
-          Unshelve. all: try eauto. 
-          unfold RWO. 
-          rewrite R_EXT, W_EXT. subst new_lbl. simpl in *.
-          arewrite (rmw (G sti') ≡ rmw (G sti)).
-          { rewrite UG. vauto. }
-          rewrite EINDEX_EQ, set_union_empty_r. 
-          remember (eq (ThreadEvent tid (eindex sti))) as nev.
-          rewrite set_unionA, (set_unionC _ (W (G sti))), <- set_unionA.
-          rewrite set_inter_union_l. apply set_equiv_union.
-          { rewrite set_inter_minus_r.
-            arewrite (E (G sti) ∩₁ (RW (G sti) ∪₁ nev) ≡₁ E (G sti) ∩₁ RW (G sti)).
-            { rewrite set_inter_union_r. 
-              arewrite (E (G sti) ∩₁ nev ≡₁ ∅); [| basic_solver ].
-              split; [| basic_solver].
-              rewrite E_bounded; eauto. vauto.
-              red. ins. red in H. desc. rewrite <- H0 in H. simpl in H. omega. }
-            red in MM_SIM1. desc.
-            replace (G sti) with (bG bsti) by vauto.
-            rewrite <- set_inter_minus_r. auto. }
-          split; [| basic_solver].
-          apply set_subset_inter_r. split; [basic_solver| ].
-          apply inclusion_minus. split; [basic_solver| ]. 
-          subst nev. red. ins. red in H. desc. red. 
-          forward eapply rmw_bibounded; eauto.
-          ins. red in H1. desc.
-          red in H0. desc. specialize (H1 x y).
-          pose proof (H1 H0). desc. 
-          rewrite <- H in H2. simpl in H2. omega. }
+          forward eapply (@E_ADD (G sti) (G sti')) as E_SPLITS; eauto.
+          { repeat eexists. eauto. }
+          forward eapply (@RWO_ADD sti sti') as RWO_SPLITS; eauto.
+          simpl in RWO_SPLITS. 
+          rewrite E_SPLITS, RWO_SPLITS.
+          rewrite set_inter_union_l, !set_inter_union_r.
+          rewrite E_bound_inter; [| eauto| omega]. 
+          rewrite set_interK.
+          rewrite set_interC with (s := eq (ThreadEvent tid (eindex sti))). 
+          rewrite RWO_bound_inter; [| eauto | omega]. 
+          red in MM_SIM1. desc.
+          simpl. rewrite (@E_ADD (G sto)); [| repeat eexists]. 
+          rewrite RESTR_EVENTS. rewrite MM_SIM5.
+          replace (G sti) with (bG bsti) by vauto.
+          basic_solver 100. } 
         (* **** *)
         replace (bG bsti') with (G sti'); [| vauto ]. 
         forward eapply (@sim_lab_extension 0 tid sto sti); eauto.
@@ -716,83 +695,29 @@ Section PairStep.
           eexists. eauto. }
         splits.
         { replace (bG bsti'') with (G sti'') by vauto.
-          rewrite (@E_ADD).
-          2: { repeat eexists. } 
-          rewrite (@E_ADD (G sti') (G sti'') tid (eindex sti + 1)).
-          2: { repeat eexists. rewrite <- UINDEX. eapply UG0. }
-          rewrite (@E_ADD (G sti) (G sti') tid (eindex sti)).
-          2: { repeat eexists. eapply UG. }
-          
-          desc.
-          remember (Afence ord) as new_lbl. 
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto. 
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto.
-          Unshelve. all: try eauto. 
-          
-          desc.
-          remember (Astore xmd ord0 l v) as new_lbl'. 
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto. 
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto. 
-          Unshelve. all: try eauto. 
-
-          unfold RWO. 
-          rewrite W_EXT', R_EXT', R_EXT, W_EXT.
-          arewrite (rmw (G sti'') ≡ rmw (G sti)).
-          { rewrite UG0, UG. vauto. }
-          subst new_lbl'. subst new_lbl. simpl in *.  
-          rewrite EINDEX_EQ, !set_union_empty_r. 
-          remember (eq (ThreadEvent tid (eindex sti))) as nev.
-          rewrite UINDEX. remember (eq (ThreadEvent tid (eindex sti + 1))) as nev'.
-          rewrite <- set_unionA, set_unionA. 
-          rewrite set_inter_union_l. apply set_equiv_union.
-          { rewrite set_inter_minus_r.
-            arewrite (E (G sti) ∩₁ (RW (G sti) ∪₁ nev') ≡₁ E (G sti) ∩₁ RW (G sti)).
-            { rewrite set_inter_union_r. 
-              arewrite (E (G sti) ∩₁ nev' ≡₁ ∅); [| basic_solver ].
-              split; [| basic_solver].
-              rewrite E_bounded; eauto. vauto.
-              red. ins. red in H. desc. rewrite <- H0 in H. simpl in H. omega. }
-            red in MM_SIM1. desc.
-            replace (G sti) with (bG bsti) by vauto.
-            rewrite <- set_inter_minus_r. auto. }
-          split.
-          2: { rewrite set_inter_union_l. apply set_subset_union_l.
-               split; [| basic_solver].
-               rewrite set_inter_minus_r. rewrite set_inter_union_r.
-               arewrite (nev ∩₁ nev' ≡₁ ∅).
-               { subst. red. split; [| basic_solver].
-                 red. ins. red in H. desc. rewrite <- H in H0.
-                 inversion H0. omega. }
-               arewrite (nev ∩₁ RW (G sti) ≡₁ ∅).
-               2: basic_solver.
-               red. split; [| basic_solver]. 
-               red. ins. red in H. desc. rewrite Heqnev in H.
-               red in H0. destruct H0.
-               + forward eapply (@nonnop_bounded n_steps (@is_r actid) r_matcher sti tid) as R_BOUNDED; eauto. 
-               { apply r_pl. }
-               { red. vauto. }
-                 do 2 red in R_BOUNDED. specialize (R_BOUNDED x H0).
-                 rewrite <- H in R_BOUNDED. simpl in R_BOUNDED. omega.
-               + forward eapply (@nonnop_bounded n_steps (@is_w actid) w_matcher sti tid) as W_BOUNDED; eauto. 
-               { apply w_pl. }
-               { red. vauto. }
-                 do 2 red in W_BOUNDED. specialize (W_BOUNDED x H0).
-                 rewrite <- H in W_BOUNDED. simpl in W_BOUNDED. omega. }
-               
-          apply set_subset_inter_r. split; [basic_solver| ].
-          apply inclusion_minus. split; [basic_solver| ]. 
-          subst nev. red. ins. red in H. desc. red. 
-          forward eapply rmw_bibounded; eauto.
-          ins. red in H1. desc.
-          red in H0. desc. specialize (H1 x y).
-
-          assert (rmw (G sti') x y) as RMW'xy. 
-          { assert (rmw (G sti') ≡ rmw (G sti)). 
-            { rewrite UG. vauto. }
-            apply (same_relation_exp H2). auto. }
-          
-          pose proof (H1 RMW'xy). desc. 
-          rewrite Heqnev' in H. rewrite <- H in H2. simpl in H2. omega. }
+          forward eapply (@E_ADD (G sti') (G sti'')) as E_SPLITS'; eauto.
+          { repeat eexists. eauto. }
+          forward eapply (@RWO_ADD sti' sti'') as RWO_SPLITS'; eauto.
+          forward eapply (@E_ADD (G sti) (G sti')) as E_SPLITS; eauto.
+          { repeat eexists. eauto. }
+          forward eapply (@RWO_ADD sti sti') as RWO_SPLITS; eauto.
+          simpl in RWO_SPLITS', RWO_SPLITS. 
+          rewrite E_SPLITS', RWO_SPLITS', E_SPLITS, RWO_SPLITS. 
+          rewrite !set_inter_union_l, !set_inter_union_r.
+          rewrite UINDEX.
+          rewrite E_bound_inter; [| eauto | omega]. 
+          rewrite set_interC with (s := eq (ThreadEvent tid (eindex sti))).
+          rewrite set_interC with (s := eq (ThreadEvent tid (eindex sti + 1))).
+          repeat (rewrite RWO_bound_inter; [| eauto | omega]).
+          rewrite diff_events_empty; [| omega]. 
+          remove_emptiness. 
+          rewrite set_interK. 
+          red in MM_SIM1. desc.
+          simpl. rewrite (@E_ADD (G sto')); [| repeat eexists]. 
+          simpl.
+          rewrite RESTR_EVENTS. rewrite MM_SIM5.
+          replace (G sti) with (bG bsti) by vauto.
+          basic_solver 100. }
         
         replace (bG bsti'') with (G sti''); [| vauto ]. 
         forward eapply (@sim_lab_extension 1 tid sto sti); eauto.
@@ -929,85 +854,29 @@ Section PairStep.
           eexists. eauto. }
         splits.
         { replace (bG bsti'') with (G sti'') by vauto.
-          rewrite (@E_ADD).
-          2: { repeat eexists. } 
-          rewrite (@E_ADD (G sti') (G sti'') tid (eindex sti + 1)).
-          2: { repeat eexists. rewrite <- UINDEX. eapply UG0. }
-          rewrite (@E_ADD (G sti) (G sti') tid (eindex sti)).
-          2: { repeat eexists. eapply UG. }
-          
-          desc.
-          remember (Afence ord) as new_lbl. 
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto. 
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto.
-          Unshelve. all: try eauto. 
-          
-          desc.
-          remember (Aload false ord0 (RegFile.eval_lexpr (regf sto) lexpr) val) as new_lbl'. 
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto. 
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto.
-          Unshelve.
-          2, 3: rewrite UG0, Heqnew_lbl', LEXPR_SAME, UREGS; repeat eexists.
-                        
-          unfold RWO. 
-          rewrite W_EXT', R_EXT', R_EXT, W_EXT.
-          all: eauto. 
-          arewrite (rmw (G sti'') ≡ rmw (G sti)).
-          { rewrite UG0, UG. vauto. }
-          subst new_lbl'. subst new_lbl. simpl in *.  
-          rewrite EINDEX_EQ, !set_union_empty_r. 
-          remember (eq (ThreadEvent tid (eindex sti))) as nev.
-          rewrite UINDEX. remember (eq (ThreadEvent tid (eindex sti + 1))) as nev'.
-          rewrite set_unionA. rewrite set_unionA. rewrite set_unionC with (s := nev'). rewrite <- set_unionA with (s := R (G sti)). 
-          rewrite set_inter_union_l. apply set_equiv_union.
-          { rewrite set_inter_minus_r.
-            arewrite (E (G sti) ∩₁ (RW (G sti) ∪₁ nev') ≡₁ E (G sti) ∩₁ RW (G sti)).
-            { rewrite set_inter_union_r. 
-              arewrite (E (G sti) ∩₁ nev' ≡₁ ∅); [| basic_solver ].
-              split; [| basic_solver].
-              rewrite E_bounded; eauto. vauto.
-              red. ins. red in H. desc. rewrite <- H0 in H. simpl in H. omega. }
-            red in MM_SIM1. desc.
-            replace (G sti) with (bG bsti) by vauto.
-            rewrite <- set_inter_minus_r. auto. }
-          split.
-          2: { rewrite set_inter_union_l. apply set_subset_union_l.
-               split; [| basic_solver].
-               rewrite set_inter_minus_r. rewrite set_inter_union_r.
-               arewrite (nev ∩₁ nev' ≡₁ ∅).
-               { subst. red. split; [| basic_solver].
-                 red. ins. red in H. desc. rewrite <- H in H0.
-                 inversion H0. omega. }
-               arewrite (nev ∩₁ RW (G sti) ≡₁ ∅).
-               2: basic_solver.
-               red. split; [| basic_solver]. 
-               red. ins. red in H. desc. rewrite Heqnev in H.
-               red in H0. destruct H0.
-               + forward eapply (@nonnop_bounded n_steps (@is_r actid) r_matcher sti tid) as R_BOUNDED; eauto. 
-               { apply r_pl. }
-               { red. vauto. }
-                 do 2 red in R_BOUNDED. specialize (R_BOUNDED x H0).
-                 rewrite <- H in R_BOUNDED. simpl in R_BOUNDED. omega.
-               + forward eapply (@nonnop_bounded n_steps (@is_w actid) w_matcher sti tid) as W_BOUNDED; eauto. 
-               { apply w_pl. }
-               { red. vauto. }
-                 do 2 red in W_BOUNDED. specialize (W_BOUNDED x H0).
-                 rewrite <- H in W_BOUNDED. simpl in W_BOUNDED. omega. }
-               
-          apply set_subset_inter_r. split; [basic_solver| ].
-          apply inclusion_minus. split; [basic_solver| ]. 
-          subst nev. red. ins. red in H. desc. red. 
-          forward eapply rmw_bibounded; eauto.
-          ins. red in H1. desc.
-          red in H0. desc. specialize (H1 x y).
-
-          assert (rmw (G sti') x y) as RMW'xy. 
-          { assert (rmw (G sti') ≡ rmw (G sti)). 
-            { rewrite UG. vauto. }
-            apply (same_relation_exp H2). auto. }
-          
-          pose proof (H1 RMW'xy). desc. 
-          rewrite Heqnev' in H. rewrite <- H in H2. simpl in H2. omega. }
+          forward eapply (@E_ADD (G sti') (G sti'')) as E_SPLITS'; eauto.
+          { repeat eexists. eauto. }
+          forward eapply (@RWO_ADD sti' sti'') as RWO_SPLITS'; eauto.
+          forward eapply (@E_ADD (G sti) (G sti')) as E_SPLITS; eauto.
+          { repeat eexists. eauto. }
+          forward eapply (@RWO_ADD sti sti') as RWO_SPLITS; eauto.
+          simpl in RWO_SPLITS', RWO_SPLITS. 
+          rewrite E_SPLITS', RWO_SPLITS', E_SPLITS, RWO_SPLITS. 
+          rewrite !set_inter_union_l, !set_inter_union_r.
+          rewrite UINDEX.
+          rewrite E_bound_inter; [| eauto | omega]. 
+          rewrite set_interC with (s := eq (ThreadEvent tid (eindex sti))).
+          rewrite set_interC with (s := eq (ThreadEvent tid (eindex sti + 1))).
+          repeat (rewrite RWO_bound_inter; [| eauto | omega]).
+          rewrite diff_events_empty; [| omega]. 
+          remove_emptiness. 
+          rewrite set_interK. 
+          red in MM_SIM1. desc.
+          simpl. rewrite (@E_ADD (G sto)); [| repeat eexists]. 
+          simpl.
+          rewrite RESTR_EVENTS. rewrite MM_SIM5.
+          replace (G sti) with (bG bsti) by vauto.
+          basic_solver 100. }
         
         replace (bG bsti'') with (G sti''); [| vauto ]. 
         forward eapply (@sim_lab_extension 1 tid sto sti); eauto.
@@ -1093,24 +962,6 @@ Section PairStep.
       inversion H. subst new_expr. subst xmod. subst ordr.
       subst ordw. subst reg. subst loc_expr. clear H.
       
-      (* assert (RegFile.eval_lexpr (regf sto) loc = RegFile.eval_lexpr (regf sti) loc) as LEXPR_SAME. *)
-      (* { apply eval_lexpr_same; [subst sti; simpl; auto| ]. *)
-      (*   forward eapply exchange_reg_dedicated as ERD.  *)
-      (*   { exists (instrs sto). red. eexists. eauto. } *)
-      (*   { Unshelve. 2: exact exc. eapply nth_error_In. *)
-      (*     replace (flatten (binstrs bsti)) with (instrs sti); eauto. *)
-      (*     subst sti. vauto. } *)
-      (*   simpl in ERD. apply not_iff_compat in ERD. *)
-      (*   apply NN_IFF in ERD. apply ERD. auto. } *)
-      (* assert (RegFile.eval_expr (regf sto) val = RegFile.eval_expr (regf sti) val) as VAL_SAME. *)
-      (* { apply eval_expr_same; [subst sti; simpl; auto| ]. *)
-      (*   forward eapply exchange_reg_dedicated as ERD.  *)
-      (*   { exists (instrs sto). red. eexists. eauto. } *)
-      (*   { Unshelve. 2: exact exc. eapply nth_error_In. *)
-      (*     replace (flatten (binstrs bsti)) with (instrs sti); eauto. *)
-      (*     subst sti. vauto. } *)
-      (*   simpl in ERD. apply not_iff_compat in ERD. *)
-      (*   apply NN_IFF in ERD. apply ERD. auto. } *)
       assert (RegFile.eval_lexpr (regf sto) loc = RegFile.eval_lexpr (regf sti) loc) as LEXPR_SAME.
       { eapply INSTR_LEXPR_HELPER; eauto. vauto. }
       assert (DepsFile.lexpr_deps (depf sto) loc = DepsFile.lexpr_deps (depf sti) loc) as LEXPR_DEPS_SAME.
@@ -1168,124 +1019,32 @@ Section PairStep.
           red. exists lbls. red. splits; auto.
           eexists. eauto. }
         splits.
-        { replace (bG bsti'') with (G sti'') by vauto.
-          rewrite (@E_ADD).
-          2: { repeat eexists. }
-          (* move UG0 at bottom.  *)
-          (* unfold add_rmw in UG0. simpl in UG0.   *)
-          
-          rewrite (@E_ADD_RMW (G sti') (G sti'') tid (eindex sti + 1)).
-          2: { repeat eexists. rewrite <- UINDEX. eapply UG0. }
-          rewrite (@E_ADD (G sti) (G sti') tid (eindex sti)).
-          2: { repeat eexists. eapply UG. }
-          
-          desc.
-          remember (Afence ord) as new_lbl.
-          forward eapply (@label_set_step (@is_r actid) r_matcher sti sti' tid new_lbl _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH)) as R_EXT; eauto.
-          forward eapply (@label_set_step (@is_w actid) w_matcher sti sti' tid new_lbl _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH)) as W_EXT; eauto.
-          Unshelve. all: try eauto. 
-
-          desc.
-          remember (Aload true Osc loc0 old_value) as new_lbl'.
-          remember (Astore Xpln Osc loc0 new_value) as new_lbl''.
-          forward eapply (@label_set_rmw_step (@is_r actid) r_matcher sti' sti'' tid new_lbl' new_lbl'' _ r_pl (@nonnop_bounded _ (@is_r actid) r_matcher _ _ r_pl (eq_refl false) REACH')) as R_EXT'; eauto.
-          forward eapply (@label_set_rmw_step (@is_w actid) w_matcher sti' sti'' tid new_lbl' new_lbl'' _ w_pl (@nonnop_bounded _ (@is_w actid) w_matcher _ _ w_pl (eq_refl false) REACH')) as W_EXT'; eauto.
-
-          Unshelve.
-          2, 3:  rewrite UG0, Heqnew_lbl'; repeat eexists. 
-
-          unfold RWO. 
-          rewrite W_EXT', R_EXT', R_EXT, W_EXT. rewrite UINDEX in *.
-          remember (ThreadEvent tid (eindex sti + 1)) as evr. 
-          remember (ThreadEvent tid (eindex sti + 1 + 1)) as evw. 
-          arewrite (rmw (G sti'') ≡ rmw (G sti) ∪ singl_rel evr evw).
-          { rewrite UG0, UG. unfold add_rmw. simpl.
-            rewrite <- Heqevr, <- Heqevw. basic_solver. }
-          subst new_lbl''. subst new_lbl'. subst new_lbl. simpl in *.
-          rewrite EINDEX_EQ, !set_union_empty_r.
-          remember (eq (ThreadEvent tid (eindex sti))) as nev.
-          replace (ThreadEvent tid (eindex sti + 2)) with evw.
-          2: { rewrite Heqevw. f_equal. omega. }
-          remember (eq evr) as nevr. remember (eq evw) as nevw.
-          do 2 rewrite set_unionA.
-          rewrite set_unionA with (s := R (G sti)). 
-          rewrite set_unionC with (s' := W (G sti) ∪₁ nevw).
-          do 2 rewrite <- set_unionA with (s := R (G sti)).
-          rewrite set_unionA. 
-          rewrite set_inter_union_l. apply set_equiv_union.
-          { rewrite set_inter_minus_r.
-            arewrite (E (G sti) ∩₁ (RW (G sti) ∪₁ (nevw ∪₁ nevr)) ≡₁ E (G sti) ∩₁ RW (G sti)).
-            { rewrite set_inter_union_r.
-              arewrite (E (G sti) ∩₁ (nevw ∪₁ nevr)  ≡₁ ∅); [| basic_solver ].
-              split; [| basic_solver].              
-              arewrite (nevw ∪₁ nevr ⊆₁ fun e => index e >= eindex sti).
-              { red. ins. red in H. destruct H.
-                all: subst; subst; simpl; omega. }
-              rewrite E_bounded; eauto.
-              red. ins. red in H. omega. }
-            rewrite dom_union.
-            rewrite set_minus_union_r.
-            rewrite empty_inter_minus_same with (Y := dom_rel (singl_rel evr evw)).
-            { rewrite set_inter_minus_l. rewrite set_interK.
-              red in MM_SIM1. desc.
-              replace (G sti) with (bG bsti) by vauto.
-              rewrite <- set_inter_minus_r. auto. }
-            red. split; [| basic_solver].
-            arewrite (dom_rel (singl_rel evr evw) ⊆₁ fun e => index e >= eindex sti).
-            { red. ins. red in H. desc. red in H. desc.
-              subst. rewrite Heqevr. simpl. omega. }
-            rewrite E_bounded; eauto. red. ins. do 2 (red in H; desc). omega. } 
-          split.
-          2: { rewrite set_inter_union_l.
-               apply set_subset_union_l.
-               split.
-               2: { rewrite set_inter_union_l. apply set_subset_union_l.
-                    split.
-                    { rewrite set_inter_minus_r.
-                      arewrite (nevr ∩₁ (RW (G sti) ∪₁ (nevw ∪₁ nevr)) ≡₁ nevr) by basic_solver.
-                      rewrite dom_union, set_minus_union_r.
-                      arewrite (nevr \₁ dom_rel (singl_rel evr evw) ⊆₁ ∅) by basic_solver.
-                      basic_solver. }
-                    rewrite set_inter_minus_r.
-                    arewrite (nevw ∩₁ (RW (G sti) ∪₁ (nevw ∪₁ nevr)) ⊆₁ nevw) by basic_solver.
-                    rewrite dom_union, set_minus_union_r.
-                    arewrite (nevw \₁ dom_rel (singl_rel evr evw) ⊆₁ nevw) by basic_solver.
-                    arewrite (nevw \₁ dom_rel (rmw (G sti)) ⊆₁ nevw); [| basic_solver].
-                    rewrite empty_inter_minus_same; [basic_solver |].
-                    red. split; [| basic_solver].
-                    rewrite (rmw_bibounded _ _ _ REACH).
-                    rewrite Heqnevw. red. ins. red in H. desc. subst.
-                    red in H0. desc. subst. simpl in H0. omega. }
-               rewrite set_inter_minus_r.
-               arewrite (nev ∩₁ (RW (G sti) ∪₁ (nevw ∪₁ nevr)) ⊆₁ ∅); [| basic_solver].
-               rewrite set_inter_union_r.
-               apply set_subset_union_l.
-               split.
-               2: { subst. rewrite Heqevw. rewrite Heqevr.
-                    red. ins. red in H. desc. red in H0.
-                    destruct H0; subst; inversion H0; omega. }
-               arewrite (RW (G sti) ⊆₁ (fun e => index e < eindex sti)).
-               2: { rewrite Heqnev. red. ins. red in H. desc.
-                    subst. simpl in H0. omega. }
-               apply set_subset_union_l. split.
-               { forward eapply (@nonnop_bounded n_steps (@is_r actid) r_matcher sti tid) as R_BOUNDED; eauto.
-               { apply r_pl. }
-               red. vauto. }
-               forward eapply (@nonnop_bounded n_steps (@is_w actid) w_matcher sti tid) as W_BOUNDED; eauto.
-               { apply w_pl. }
-               red. vauto. }
-          apply set_subset_inter_r. split; [basic_solver |].
-          apply inclusion_minus. split; [basic_solver| ].
-          rewrite dom_union. rewrite set_inter_union_r.
-          assert (forall {A: Type} (x y: A -> Prop), dom_rel (singl_rel x y) ≡₁ eq x) as DOM_SINGLE. 
-          { ins. basic_solver. }
-          apply set_subset_union_l. split.
-          2: { red. ins. red in H. desc. subst. rewrite <- H in H0.
-               red in H0. desc. red in H0. desc. subst.
-               inversion H0. omega. }
-          rewrite (rmw_bibounded _ _ _ REACH). subst.
-          rewrite Heqevw. red. ins. red in H. desc. rewrite <- H in H0.
-          red in H0. desc. simpl in H0. omega. }        
+        { replace (bG bsti'') with (G sti'') by vauto.          
+          forward eapply (@E_ADD_RMW (G sti') (G sti'')) as E_SPLITS'; eauto.
+          { repeat eexists. eauto. }
+          forward eapply (@RWO_ADD_rmw sti' sti'') as RWO_SPLITS'; eauto.
+          forward eapply (@E_ADD (G sti) (G sti')) as E_SPLITS; eauto.
+          { repeat eexists. eauto. }
+          forward eapply (@RWO_ADD sti sti') as RWO_SPLITS; eauto.
+          simpl in RWO_SPLITS', RWO_SPLITS. 
+          rewrite E_SPLITS', RWO_SPLITS', E_SPLITS, RWO_SPLITS. 
+          rewrite !set_inter_union_l, !set_inter_union_r.
+          rewrite UINDEX.
+          rewrite E_bound_inter; [| eauto | omega]. 
+          rewrite set_interC with (s := eq (ThreadEvent tid (eindex sti))).
+          rewrite set_interC with (s := eq (ThreadEvent tid (eindex sti + 1))).
+          repeat (rewrite RWO_bound_inter; [| eauto | omega]).
+          repeat (rewrite diff_events_empty; [| omega]). 
+          remove_emptiness. 
+          rewrite set_interK. 
+          red in MM_SIM1. desc.
+          simpl. rewrite (@E_ADD (G sto)); [| repeat eexists]. 
+          simpl.
+          rewrite RESTR_EVENTS. rewrite MM_SIM5.
+          replace (G sti) with (bG bsti) by vauto.
+          replace (eindex sti + 1 + 1) with (eindex sti + 2) by omega. 
+          basic_solver 100. }
+                
         replace (bG bsti'') with (G sti''); [| vauto ].
         ins. rewrite UG0, UG, UINDEX, EINDEX_EQ. simpl.
         unfold add, acts_set in EGOx. simpl in EGOx. destruct EGOx.

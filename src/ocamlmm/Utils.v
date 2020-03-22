@@ -32,3 +32,23 @@ Proof.
   red. ins. apply H. basic_solver. 
 Qed.
 
+Lemma same_relation_exp_iff {A: Type} (r r': relation A):
+  r ≡ r' <-> (forall x y, r x y <-> r' x y).
+Proof.
+  red. split.
+  { apply same_relation_exp. }
+  ins. red. split.
+  all: red; ins; apply H; auto.
+Qed.  
+
+Lemma set_equiv_exp_iff {A : Type} (s s' : A -> Prop):
+  s ≡₁ s' <-> forall x : A, s x <-> s' x.
+Proof.
+  red. split; [apply set_equiv_exp| ].
+  ins. red. split.
+  all: red; ins; apply H; auto.
+Qed. 
+
+Ltac remove_emptiness :=
+  repeat (rewrite set_inter_empty_r || rewrite set_inter_empty_l ||
+          rewrite set_union_empty_r || rewrite set_union_empty_l). 
