@@ -177,15 +177,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     rewrite SL in FULL. simpl in FULL. omega. 
   Qed.
 
-  Lemma same_relation_exp_iff {A: Type} (r r': relation A):
-    r ≡ r' <-> (forall x y, r x y <-> r' x y).
-  Proof.
-    red. split.
-    { apply same_relation_exp. }
-    ins. red. split.
-    all: red; ins; apply H; auto.
-  Qed.  
-     
   Lemma init_mm_same: forall PO BPI (COMP: is_thread_block_compiled PO BPI),
       mm_similar_states (init PO) (binit BPI).
   Proof.
@@ -1294,15 +1285,6 @@ Section OCamlMM_TO_IMM_S_PROG.
   (*   (* Qed.  *) *)
   (* Admitted.  *)
 
-  Lemma set_equiv_exp_iff {A : Type} (s s' : A -> Prop):
-    s ≡₁ s' <-> forall x : A, s x <-> s' x.
-  Proof.
-    red. split; [apply set_equiv_exp| ].
-    ins. red. split.
-    all: red; ins; apply H; auto.
-  Qed. 
-
-    
   Lemma seq_compl_helper {A: Type} (r: relation A) (S: A -> Prop):
     r ⨾ ⦗set_compl S⦘ ≡ r \ set_full × S.
   Proof.
@@ -1616,6 +1598,66 @@ Section CompCorrHelpers.
   Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
   Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
 
+  Fixpoint find_max_event default events :=
+    match events with
+    | [] => default
+    | ev :: events' => find_max_event (if Nat.leb (index default) (index ev) then ev else default) events'
+    end. 
+
+  Lemma step_label_ext_helper st1 st2 tid new_label index
+        (IND: index >= eindex st1)
+        (ADD: exists foo bar baz bazz,
+            G st2 = add (G st1) tid index new_label foo bar baz bazz)
+        n (REACH: (step tid) ^^ n (init (instrs st1)) st1):
+    let lbl_ext (S: (actid -> label) -> actid -> bool)
+                (matcher : label -> bool) :=
+        S (lab (G st2)) ≡₁ S (lab (G st1)) ∪₁ (if matcher new_label then eq (ThreadEvent tid index) else ∅) in
+    ⟪E_EXT: E (G st2) ≡₁ E (G st1) ∪₁ eq (ThreadEvent tid index) ⟫ /\
+    ⟪RMW_EXT: rmw (G st2) ≡ rmw (G st1) ⟫ /\
+    ⟪SB_EXT: E (G st1) ≡₁ ∅ \/ exists max_event,
+         immediate (sb (G st2)) ≡ immediate (sb (G st1)) ∪ singl_rel  max_event (ThreadEvent tid index) ⟫ /\
+    ⟪R_EXT: lbl_ext (@is_r actid) r_matcher ⟫ /\
+    ⟪W_EXT: lbl_ext (@is_w actid) w_matcher ⟫ /\
+    ⟪F_EXT: lbl_ext (@is_nonnop_f actid) nonnop_f_matcher ⟫ /\
+    ⟪ACQ_EXT: lbl_ext (@is_acq actid) acq_matcher ⟫ /\
+    ⟪SC_EXT: lbl_ext (@is_sc actid) sc_matcher⟫ .
+  Proof. 
+    pose proof label_set_step as LBL_STEP. 
+    specialize LBL_STEP with (st1 := st1) (st2 := st2) (tid := tid) (index := index).
+    Hint Resolve r_pl w_pl nonnop_f_pl acq_pl sc_pl : label_ext. 
+    simpl. splits.
+    { desc. rewrite ADD. unfold acts_set. basic_solver. }
+    { desc. rewrite ADD. basic_solver. }
+    { destruct (acts (G st1)) eqn:events.
+      { left. unfold acts_set. rewrite events. basic_solver. }
+      right. exists (find_max_event a l). 
+      desc. rewrite ADD. simpl. admit. } 
+    all: apply LBL_STEP; eauto with label_ext.
+    all: eapply nonnop_bounded; eauto with label_ext; vauto.
+  Admitted. 
+
+  (* Lemma single_event_helper st1 st2 tid index *)
+  (*       (IND: index >= eindex st1) *)
+  (*       (ADD: exists new_label foo bar baz bazz, *)
+  (*           G st2 = add (G st1) tid index new_label foo bar baz bazz) *)
+  (*       n (REACH: (step tid) ^^ n (init (instrs st1)) st1) *)
+  (*       (EMPTY1: E (G st1) ≡₁ ∅) *)
+  (*       (OMM1: omm_premises_hold (G st1)): *)
+  (*   omm_premises_hold (G st2). *)
+  (* Proof. *)
+  (*   desc.  *)
+  (*   assert (E (G st2) ≡₁ eq (ThreadEvent tid index)) as E2. *)
+  (*   { unfold acts_set in EMPTY1. *)
+  (*     destruct (acts (G st1)) eqn:acts1.  *)
+  (*     2: { exfalso. generalize EMPTY1. basic_solver. } *)
+  (*     rewrite ADD. unfold add, acts_set. rewrite acts1. simpl. *)
+  (*     basic_solver. } *)
+  (*   red. splits. *)
+  (*   2: { red. splits; [| basic_solver].  *)
+  (*        arewrite (rmw (G st2) ≡ rmw (G st1)) by (rewrite ADD; vauto). *)
+  (*        suffices: Sc (G st2) ≡₁ Sc (G st1) *)
+         
+    
   Lemma GI_1thread_omm_premises_block bst tid PO BPI
         (COMP: is_thread_block_compiled PO BPI) 
         (BLOCK_STEPS: (omm_block_step tid)＊ (binit BPI) bst):
@@ -1626,8 +1668,109 @@ Section CompCorrHelpers.
     { ins. red in BLOCK_STEPS. desc. subst. simpl.
       red. simpl. splits; basic_solver. }
     ins. red in BLOCK_STEPS. destruct BLOCK_STEPS as [bst_prev [STEPS_PREV STEP_NEXT]].
-    specialize (IHn_steps bst_prev STEPS_PREV). clear STEPS_PREV.
-    red in STEP_NEXT. desc. red in BLOCK_STEP. desc.
+    specialize (IHn_steps bst_prev STEPS_PREV). 
+    red in STEP_NEXT. desc.
+    assert (PO0 = PO) by admit. subst PO0. 
+    red in BLOCK_STEP. desc.
+    assert (binstrs bst_prev = BPI) as BINSTRS by admit. 
+    remember (bpc bst_prev) as b. remember (bst2st bst_prev) as st_prev.
+    rewrite BINSTRS in *.
+    assert (exists oinstr, is_instruction_compiled oinstr block) as [oinstr COMP_BLOCK].
+    { eapply resulting_block_compiled; eauto. eapply COMPILED_NONEMPTY. eauto. }
+    assert (forall i block_i, Some block_i = nth_error block i -> Some block_i = nth_error (instrs st_prev) (pc st_prev + i)) as BLOCK_CONTENTS. 
+    { ins. forward eapply (@near_pc block_i block i H bst_prev); eauto.
+      { congruence. }
+      apply nth_error_Some, OPT_VAL. exists block. congruence. }
+    assert (forall i instr (BLOCK_I: Some instr = nth_error block i) instr' (OTHER: Some instr' = nth_error (instrs st_prev) (pc st_prev + i)) (NEQ: instr <> instr'), False).
+    { admit. }
+    assert (exists k, (step tid) ^^ k (init (instrs st_prev)) st_prev) as [k REACH] by admit.
+    inv COMP_BLOCK; simpl in *.
+    { remember (bst2st bst_prev) as st_prev.
+      apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP0.
+      do 2 (red in BLOCK_STEP0; desc).
+      forward eapply (BLOCK_CONTENTS 0 ld) as INSTR; eauto.
+      inversion ISTEP0.
+      all: try (forward eapply (@H 0 ld eq_refl instr); vauto; rewrite Nat.add_0_r; vauto).
+      assert (instr = ld). 
+      { cut (Some instr = Some ld); [ins; vauto| ].
+        rewrite ISTEP, INSTR. rewrite Nat.add_0_r.
+        vauto. }
+      subst instr. inversion H0. subst ord. subst reg. subst lexpr. 
+      remember (Aload false Orlx (RegFile.eval_lexpr (regf st_prev) loc) val) as lbl. 
+      remember (bst2st bst) as st.
+      replace (init (flatten (binstrs bst_prev))) with (init (instrs st_prev)) in * by vauto. 
+      red.
+      replace (bG bst) with (G st) by vauto.
+      forward eapply step_label_ext_helper as LBL_EXT; eauto. 
+      simpl in LBL_EXT. desc. 
+      (* forward eapply (@label_set_step (@is_rlx actid) orlx_matcher st_prev st tid lbl (eindex st_prev) _ _ orlx_pl (@nonnop_bounded _ (@is_rlx actid) orlx_matcher _ _ orlx_pl (eq_refl false) REACH)) as ORLX_EXT; eauto. *)
+      assert (forall max_event index (IND: index >= eindex st_prev),
+                 singl_rel max_event (ThreadEvent tid (eindex st_prev)) ⨾ rmw (G st_prev) ≡ ∅₂) as SB_RMW_HELPER. 
+      { split; [| basic_solver].
+        rewrite rmw_bibounded; vauto. 
+        red. ins. red in H1. desc. red in H1. desc. subst.
+        simpl in H2. omega. }
+      subst lbl. simpl in *.
+      des.
+      {
+        (* splits.  *)
+        (* 2: { rewrite RMW_EXT, SC_EXT. remove_emptiness.  *)
+        (*      red in IHn_steps. desc. vauto. } *)
+        (* all: unfold Execution.sb; rewrite E_EXT; rewrite SB_EXT; remove_emptiness.  *)
+        admit. }
+      splits.
+      { rewrite E_EXT, W_EXT, SC_EXT, F_EXT, ACQ_EXT, RMW_EXT, SB_EXT. 
+        rewrite seq_union_l.
+        remove_emptiness. 
+        rewrite set_inter_union_l.
+        arewrite (eq (ThreadEvent tid (eindex st_prev)) ∩₁ W (G st_prev) ≡₁ ∅).
+        { rewrite set_interC. 
+          forward eapply (@label_set_bound_inter st_prev tid _ _ _ (@is_w actid) w_matcher w_pl); eauto.
+          vauto. }
+        rewrite SB_RMW_HELPER; eauto. remove_emptiness. 
+        red in IHn_steps. desc. vauto. }
+      { rewrite RMW_EXT, SC_EXT. remove_emptiness. 
+        red in IHn_steps. desc. vauto. }
+      { rewrite E_EXT. admit. }
+      { rewrite E_EXT, R_EXT, SC_EXT, F_EXT, ACQ_EXT, SB_EXT_WRONG.
+        remove_emptiness. 
+        rewrite seq_union_r, codom_union.
+        apply set_subset_union_r. left.
+        rewrite set_interA. 
+        rewrite set_inter_union_l.
+        arewrite (eq (ThreadEvent tid (eindex st_prev))
+                     ∩₁ ((R (G st_prev) ∪₁ eq (ThreadEvent tid (eindex st_prev)))
+                           ∩₁ Sc (G st_prev)) ≡₁
+                     (R (G st_prev) ∪₁ eq (ThreadEvent tid (eindex st_prev))) ∩₁
+                     (eq (ThreadEvent tid (eindex st_prev)) ∩₁ Sc (G st_prev))) by basic_solver. 
+        rewrite set_inter_union_l.
+        arewrite (eq (ThreadEvent tid (eindex st_prev)) ∩₁ Sc (G st_prev) ≡₁ ∅).
+        { rewrite set_interC.
+          forward eapply (@label_set_bound_inter st_prev tid _ _ _ (@is_sc actid) sc_matcher sc_pl); eauto.
+          vauto. }
+        remove_emptiness. rewrite <- set_interA. 
+        red in IHn_steps. desc. vauto. } }
+    
+                     
+        rewrite <- set_interA with (s := eq (ThreadEvent tid (eindex st_prev))). 
+        (* assert (exists oinstr, Some oinstr = nth_error PO b) as [oinstr OINSTR].  *)
+    (* { apply OPT_VAL. apply nth_error_Some. *)
+    (*   replace (length PO) with (length BPI). *)
+    (*   { apply nth_error_Some, OPT_VAL. eauto. } *)
+    (*   symmetry. apply compilation_same_length. red. eauto. }     *)
+    (* red in BLOCK_STEP. desc. rename BLOCK_STEP0 into BLOCK_STEP. *)
+    (* assert (exists block0, Some block0 = nth_error BPI0 (bpc bsti)) as [block0 BLOCK0]. *)
+    (* { apply OPT_VAL. apply nth_error_Some. *)
+    (*   replace (length BPI0) with (length (binstrs bsti)). *)
+    (*   { apply nth_error_Some, OPT_VAL. eauto. } *)
+    (*   symmetry. eapply Forall2_length. eauto. } *)
+    (* assert (is_instruction_compiled oinstr block0) as COMP_BLOCK. *)
+    (* { eapply Forall2_index; eauto. }  *)
+    (* assert (block_corrected BPI0 block0 block) as CORR_BLOCK. *)
+    (* { eapply Forall2_index; eauto. }  *)
+        
+    red. splits.
+    
     foobar. 
   Admitted. 
 
