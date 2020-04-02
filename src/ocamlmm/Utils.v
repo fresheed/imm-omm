@@ -51,4 +51,7 @@ Qed.
 
 Ltac remove_emptiness :=
   repeat (rewrite set_inter_empty_r || rewrite set_inter_empty_l ||
-          rewrite set_union_empty_r || rewrite set_union_empty_l). 
+          rewrite set_union_empty_r || rewrite set_union_empty_l ||
+          rewrite union_false_r || rewrite union_false_l ||
+          rewrite inter_false_r || rewrite inter_false_l ||
+          rewrite seq_false_r || rewrite seq_false_l). 
