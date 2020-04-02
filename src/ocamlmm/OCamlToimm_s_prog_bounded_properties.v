@@ -376,6 +376,22 @@ Section BoundedProperties.
     eapply nonnop_bounded; eauto. 
   Qed.
 
+  Lemma label_set_bound_inter st tid
+        (STEPS: exists n, (step tid) ^^ n (init (instrs st)) st)
+        index (IND: index >= eindex st)
+        (S : (actid -> label) -> actid -> bool) (matcher : label -> bool)
+        (MATCH: processes_lab S matcher)
+        (NONNOP: non_nop matcher):
+    S (lab (G st)) ∩₁ eq (ThreadEvent tid index) ≡₁ ∅. 
+  Proof.
+    desc.
+    red. split; [| basic_solver].
+    pose proof (@nonnop_bounded _ S matcher _ _ MATCH NONNOP STEPS).
+    red in H. 
+    rewrite H.
+    red. ins. do 2 (red in H0; desc). subst. simpl in H0. omega.
+  Qed.
+  
   Definition splits_to {A: Type} (S S' S'': A -> Prop) := (S ≡₁ S' ∪₁ S'') /\ (S' ∩₁ S'' ≡₁ ∅). 
   
   (* Lemma E_ADD G G' tid index (ADD: exists lbl foo bar baz bazz, *)
@@ -458,7 +474,7 @@ end.
     unfold set_inter. red. ins. desc.
     subst. red in H0. desc. simpl in H0. omega.
   Qed. 
-
+  
   Lemma RWO_bound_inter st tid
         (STEPS: exists n, (step tid) ^^ n (init (instrs st)) st)
         index (IND: index >= eindex st):
@@ -471,12 +487,37 @@ end.
     pose proof (@nonnop_bounded _ (@is_rw actid) rw_matcher _ _ rw_pl (eq_refl false) STEPS). red in H. 
     rewrite <- rw_alt. rewrite H.
     red. ins. do 2 (red in H0; desc). subst. simpl in H0. omega.
-  Qed. 
-
+  Qed.
+  
+  (* Lemma LABEL_ADD st st' tid index lbl *)
+  (*       (ADD: exists foo bar baz bazz, *)
+  (*           G st' = add (G st) tid index lbl foo bar baz bazz) *)
+  (*       (STEPS: exists n, (step tid) ^^ n (init (instrs st)) st) *)
+  (*       (IND: index >= eindex st) *)
+  (*       S matcher (MATCH: processes_lab S matcher): *)
+  (*   S (G st') ≡₁ S (G st) *)
+  (*       ∪₁  (if matcher lbl then eq (ThreadEvent tid index) else ∅).  *)
+  (* Proof. *)
+  (*   desc. *)
+  (*   forward eapply (@label_set_step (@is_rw actid) rw_matcher st st' tid lbl _ IND _ rw_pl (@nonnop_bounded _ (@is_rw actid) rw_matcher _ _ rw_pl (eq_refl false) STEPS)) as RW_EXT; eauto. *)
+  (*   Unshelve. 2: { repeat eexists. eauto. } *)
+  (*   unfold RWO. do 2 rewrite rw_alt in RW_EXT.  *)
+  (*   rewrite RW_EXT.  *)
+  (*   replace (rmw (G st')) with (rmw (G st)). *)
+  (*   2: { rewrite ADD. auto. } *)
+  (*   rewrite set_minus_union_l. *)
+  (*   apply set_equiv_union; [basic_solver| ]. *)
+  (*   destruct (rw_matcher lbl); [| basic_solver].       *)
+  (*   split; [basic_solver| ].  *)
+  (*   apply inclusion_minus. split; [basic_solver| ]. *)
+  (*   rewrite rmw_bibounded; eauto. *)
+  (*   unfold set_inter. red. ins. desc. *)
+  (*   subst. red in H0. desc. simpl in H0. omega. *)
+  (* Qed.  *)
      
-   Lemma diff_events_empty tid index index' (NEQ: index <> index'):
+  Lemma diff_events_empty tid index index' (NEQ: index <> index'):
      eq (ThreadEvent tid index) ∩₁ eq (ThreadEvent tid index') ≡₁ ∅.
-   Proof. basic_solver. Qed.      
+  Proof. basic_solver. Qed.      
 
   Lemma RWO_ADD_rmw st st' tid index lbl1 lbl2
         (ADD: exists foo bar baz bazz,
