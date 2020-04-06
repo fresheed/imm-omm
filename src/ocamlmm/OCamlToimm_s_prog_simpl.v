@@ -1604,6 +1604,22 @@ Section CompCorrHelpers.
     | ev :: events' => find_max_event (if Nat.leb (index default) (index ev) then ev else default) events'
     end. 
 
+  Definition orlx_w_matcher :=
+    fun lbl => match lbl with
+            | Astore _ Orlx _ _ => true
+            | _ => false
+            end.
+  Definition is_orlx_w := fun {A: Type} (labfun: A -> label) ev =>
+                           is_w labfun ev && is_only_rlx labfun ev. 
+             
+  Lemma orlx_w_pl: processes_lab (@is_orlx_w actid) orlx_w_matcher. 
+  Proof.
+    red. intros. unfold is_orlx_w, is_only_rlx, is_w, orlx_w_matcher, Events.mod.
+    type_solver. 
+  Qed. 
+    
+  Hint Resolve r_pl w_pl nonnop_f_pl acq_pl acqrel_pl sc_pl orlx_w_pl : label_ext.
+  
   Lemma step_label_ext_helper st1 st2 tid new_label index
         (IND: index >= eindex st1)
         (ADD: exists foo bar baz bazz,
@@ -1618,23 +1634,85 @@ Section CompCorrHelpers.
          immediate (sb (G st2)) ≡ immediate (sb (G st1)) ∪ singl_rel  max_event (ThreadEvent tid index) ⟫ /\
     ⟪R_EXT: lbl_ext (@is_r actid) r_matcher ⟫ /\
     ⟪W_EXT: lbl_ext (@is_w actid) w_matcher ⟫ /\
+    ⟪W_ORLX_EXT: lbl_ext (@is_orlx_w actid) orlx_w_matcher ⟫ /\
     ⟪F_EXT: lbl_ext (@is_nonnop_f actid) nonnop_f_matcher ⟫ /\
     ⟪ACQ_EXT: lbl_ext (@is_acq actid) acq_matcher ⟫ /\
+    ⟪ACQREL_EXT: lbl_ext (@is_acqrel actid) acqrel_matcher ⟫ /\
     ⟪SC_EXT: lbl_ext (@is_sc actid) sc_matcher⟫ .
   Proof. 
-    pose proof label_set_step as LBL_STEP. 
+    pose proof label_set_step as LBL_STEP.
     specialize LBL_STEP with (st1 := st1) (st2 := st2) (tid := tid) (index := index).
-    Hint Resolve r_pl w_pl nonnop_f_pl acq_pl sc_pl : label_ext. 
-    simpl. splits.
-    { desc. rewrite ADD. unfold acts_set. basic_solver. }
+    assert (E (G st2) ≡₁ E (G st1) ∪₁ eq (ThreadEvent tid index)) as E_EXT. 
+    { desc. rewrite ADD. unfold acts_set. basic_solver. }              
+    simpl. splits; auto. 
     { desc. rewrite ADD. basic_solver. }
-    { destruct (acts (G st1)) eqn:events.
-      { left. unfold acts_set. rewrite events. basic_solver. }
-      right. exists (find_max_event a l). 
-      desc. rewrite ADD. simpl. admit. } 
+    { assert (wf_thread_state tid st1) as WFT.
+      { eapply wf_thread_state_steps with (s := init (instrs st1)); [apply wf_thread_state_init| ].
+        apply crt_num_steps. eauto. }
+      destruct (gt_0_eq (eindex st1)).
+      2: { left. split; [| basic_solver]. red. ins. red in H0.
+           destruct WFT. specialize (acts_rep x H0). desc. omega. }
+      right. exists (ThreadEvent tid (eindex st1 - 1)).
+      assert (forall e, E (G st1) e -> E (G st2) e) as E1_E2.
+      { ins. rewrite (set_equiv_exp E_EXT). basic_solver. }
+      assert (E (G st2) (ThreadEvent tid (eindex st1 - 1))) as LAST_EVENT.
+      { rewrite (set_equiv_exp E_EXT). red. left. 
+        destruct WFT. apply acts_clos. omega. } 
+      assert (E (G st2) (ThreadEvent tid index)) as NEW_EVENT. 
+      { rewrite (set_equiv_exp E_EXT). basic_solver. }
+      assert (forall e, E (G st1) e -> exists n, e = ThreadEvent tid n /\ n < eindex st1) as LIM_INDEX. 
+      { ins. destruct WFT. specialize (acts_rep _ H0). desc.
+        inversion REP. eexists. split; [eauto | omega]. }
+      split.
+      { unfold sb at 1. rewrite seq_eqv_lr. red. ins. red in H0. desc.
+        rewrite (set_equiv_exp E_EXT) in H0. red in H0. des.
+        2: { subst x. unfold ext_sb in H2. destruct y; vauto. desc. subst.
+             cut (index0 <= index); [ins; omega| ].
+             rewrite (set_equiv_exp E_EXT) in H3. red in H3. des.
+             2: { inversion H3. omega. }
+             specialize (LIM_INDEX _ H3). desc. inversion LIM_INDEX. omega. }
+        rewrite (set_equiv_exp E_EXT) in H3. red in H3. des.
+        { red. left. unfold sb.
+          rewrite (same_relation_exp (immediate_more (@seq_eqv_lr _ _ _ _))). 
+          red. splits; auto.
+          ins. desc. apply H1 with (c := c); splits; auto. }
+        red. right. red. split; auto.
+        destruct x.
+        { subst. exfalso. apply H1 with (c := ThreadEvent tid (eindex st1 - 1)).
+          all: splits; auto.
+          red. splits; [auto | omega]. }
+        subst. red in H2. desc. subst. f_equal.
+        destruct (Nat.lt_trichotomy index0 (eindex st1 - 1)) as [LT | [EQ | GT]]; auto.  
+        { exfalso. apply H1 with (c := (ThreadEvent tid (eindex st1 - 1))).
+          all: splits; auto.
+          all: red; vauto. split; [auto | omega]. }
+        specialize (LIM_INDEX _ H0). desc. inversion LIM_INDEX. omega. }
+      apply inclusion_union_l.
+      { unfold sb. rewrite !seq_eqv_lr.
+        red. ins. red in H0. desc. red. splits; auto. 
+        ins. desc.
+        assert (E (G st1) c) as E1c.
+        { destruct c.
+          { red in R4. destruct x; vauto. }
+          red in R0. destruct y; vauto. desc. subst.
+          destruct WFT. specialize (acts_rep _ H3). desc. inversion REP. subst.
+          forward eapply (acts_clos index0); [omega| basic_solver]. }
+        apply H1 with (c := c). all: splits; auto. }
+      red. ins. red in H0. desc. subst.
+      red. split.
+      { unfold sb. rewrite (same_relation_exp (@seq_eqv_lr _ _ _ _)).
+        splits; auto. red. splits; [auto | omega]. }
+      ins.
+      red in R1. rewrite (same_relation_exp (@seq_eqv_lr _ _ _ _)) in R1.
+      red in R2. rewrite (same_relation_exp (@seq_eqv_lr _ _ _ _)) in R2.
+      desc. destruct c; vauto.
+      unfold ext_sb in *. desc. subst. 
+      rewrite (set_equiv_exp E_EXT) in R2. red in R2. des.
+      { specialize (LIM_INDEX _ R2). desc. inversion LIM_INDEX. omega. }
+      inversion R2. omega. }
     all: apply LBL_STEP; eauto with label_ext.
     all: eapply nonnop_bounded; eauto with label_ext; vauto.
-  Admitted. 
+  Qed. 
 
   (* Lemma single_event_helper st1 st2 tid index *)
   (*       (IND: index >= eindex st1) *)
@@ -1684,9 +1762,18 @@ Section CompCorrHelpers.
     assert (forall i instr (BLOCK_I: Some instr = nth_error block i) instr' (OTHER: Some instr' = nth_error (instrs st_prev) (pc st_prev + i)) (NEQ: instr <> instr'), False).
     { admit. }
     assert (exists k, (step tid) ^^ k (init (instrs st_prev)) st_prev) as [k REACH] by admit.
+    assert (forall st', (step tid) st_prev st' -> (step tid) ^^ (k + 1) (init (instrs st')) st') as REACH'. 
+    { ins. replace (instrs st') with (instrs st_prev).
+      2: { apply steps_same_instrs. eexists. apply rt_step. basic_solver. }
+      rewrite Nat.add_1_r. apply step_prev. eexists. splits; eauto. }   
+    assert (wf_thread_state tid st_prev) as WFT.
+    { apply wf_thread_state_steps with (s := init (instrs st_prev)); [apply wf_thread_state_init| ]. 
+      apply crt_num_steps. eauto. }
+    assert (forall G, W G ∩₁ ORlx G ≡₁ fun x : actid => is_orlx_w (lab G) x) as ORLX_W_ALT. 
+    { unfold set_inter, is_orlx_w. basic_solver. }
     inv COMP_BLOCK; simpl in *.
-    { remember (bst2st bst_prev) as st_prev.
-      apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP0.
+    all: remember (bst2st bst_prev) as st_prev.
+    { apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP0.
       do 2 (red in BLOCK_STEP0; desc).
       forward eapply (BLOCK_CONTENTS 0 ld) as INSTR; eauto.
       inversion ISTEP0.
@@ -1703,7 +1790,6 @@ Section CompCorrHelpers.
       replace (bG bst) with (G st) by vauto.
       forward eapply step_label_ext_helper as LBL_EXT; eauto. 
       simpl in LBL_EXT. desc. 
-      (* forward eapply (@label_set_step (@is_rlx actid) orlx_matcher st_prev st tid lbl (eindex st_prev) _ _ orlx_pl (@nonnop_bounded _ (@is_rlx actid) orlx_matcher _ _ orlx_pl (eq_refl false) REACH)) as ORLX_EXT; eauto. *)
       assert (forall max_event index (IND: index >= eindex st_prev),
                  singl_rel max_event (ThreadEvent tid (eindex st_prev)) ⨾ rmw (G st_prev) ≡ ∅₂) as SB_RMW_HELPER. 
       { split; [| basic_solver].
@@ -1712,12 +1798,32 @@ Section CompCorrHelpers.
         simpl in H2. omega. }
       subst lbl. simpl in *.
       des.
-      {
-        (* splits.  *)
-        (* 2: { rewrite RMW_EXT, SC_EXT. remove_emptiness.  *)
-        (*      red in IHn_steps. desc. vauto. } *)
-        (* all: unfold Execution.sb; rewrite E_EXT; rewrite SB_EXT; remove_emptiness.  *)
-        admit. }
+      { assert (sb (G st) ≡ ∅₂) as NO_SB.
+        { split; [| basic_solver]. unfold Execution.sb.
+          rewrite E_EXT, SB_EXT. remove_emptiness.
+          rewrite seq_eqv_lr. red. ins. desc.
+          subst. unfold ext_sb in H2. desc. omega. }
+        assert (immediate (sb (G st)) ≡ ∅₂) as NO_ISB.
+        { generalize NO_SB. basic_solver. }
+        (* Ltac subst_prev := try rewrite  *)
+        splits.
+        2: { rewrite RMW_EXT. rewrite wft_rmwE; eauto.
+             fold (acts_set (G st_prev)). rewrite SB_EXT. basic_solver. } 
+        all: try (rewrite NO_ISB; remove_emptiness; rewrite codom_empty).
+        all: rewrite E_EXT, SB_EXT; remove_emptiness.
+        { rewrite W_EXT. remove_emptiness. 
+          rewrite set_interC with (s' := W (G st_prev)). 
+          rewrite label_set_bound_inter; eauto with label_ext; [basic_solver | vauto]. }
+        (* TODO: it's the same as above *)
+        { rewrite W_EXT. remove_emptiness. 
+          rewrite set_interC with (s' := W (G st_prev)). 
+          rewrite label_set_bound_inter; eauto with label_ext; [basic_solver | vauto]. }
+        (* TODO: it's ALMOST the same as above *)
+        { rewrite set_interA. rewrite set_interC with (s' := Sc (G st)). rewrite <- set_interA. 
+          rewrite SC_EXT. remove_emptiness. 
+          rewrite set_interC with (s' := Sc (G st_prev)). 
+          rewrite label_set_bound_inter; eauto with label_ext; [basic_solver | vauto]. }
+      }
       splits.
       { rewrite E_EXT, W_EXT, SC_EXT, F_EXT, ACQ_EXT, RMW_EXT, SB_EXT. 
         rewrite seq_union_l.
@@ -1731,9 +1837,20 @@ Section CompCorrHelpers.
         red in IHn_steps. desc. vauto. }
       { rewrite RMW_EXT, SC_EXT. remove_emptiness. 
         red in IHn_steps. desc. vauto. }
-      { rewrite E_EXT. admit. }
-      { rewrite E_EXT, R_EXT, SC_EXT, F_EXT, ACQ_EXT, SB_EXT_WRONG.
-        remove_emptiness. 
+      { rewrite set_interA, ORLX_W_ALT. 
+        rewrite E_EXT, SB_EXT, F_EXT, ACQREL_EXT, W_ORLX_EXT. remove_emptiness.
+        rewrite <- ORLX_W_ALT. 
+        rewrite set_inter_union_l, <- !set_interA.
+        rewrite seq_union_r, codom_union.
+        apply set_subset_union.
+        { red in IHn_steps. desc. vauto. }
+        (* TODO: same as above *)
+        arewrite (eq (ThreadEvent tid (eindex st_prev)) ∩₁ W (G st_prev) ≡₁ ∅).
+        { rewrite set_interC. 
+          forward eapply (@label_set_bound_inter st_prev tid _ _ _ (@is_w actid) w_matcher w_pl); eauto.
+          vauto. }
+        basic_solver. }
+      { rewrite E_EXT, R_EXT, SC_EXT, F_EXT, ACQ_EXT, SB_EXT. remove_emptiness. 
         rewrite seq_union_r, codom_union.
         apply set_subset_union_r. left.
         rewrite set_interA. 
@@ -1746,12 +1863,98 @@ Section CompCorrHelpers.
         rewrite set_inter_union_l.
         arewrite (eq (ThreadEvent tid (eindex st_prev)) ∩₁ Sc (G st_prev) ≡₁ ∅).
         { rewrite set_interC.
-          forward eapply (@label_set_bound_inter st_prev tid _ _ _ (@is_sc actid) sc_matcher sc_pl); eauto.
+          forward eapply (@label_set_bound_inter st_prev tid  _ _ _ (@is_sc actid) sc_matcher sc_pl); eauto.
           vauto. }
         remove_emptiness. rewrite <- set_interA. 
         red in IHn_steps. desc. vauto. } }
+    { apply (same_relation_exp (@seqA _ _ _ _)) in BLOCK_STEP0.
+      apply (same_relation_exp (seq_id_l (step tid ⨾ step tid))) in BLOCK_STEP0.
+      red in BLOCK_STEP0. destruct BLOCK_STEP0 as [st_prev' [STEP1 STEP2]]. 
+      do 2 (red in STEP1; desc). do 2 (red in STEP2; desc).
+      forward eapply (BLOCK_CONTENTS 0 f) as INSTR; eauto.
+      inversion ISTEP0.
+      all: try (forward eapply (@H 0 f eq_refl instr); vauto; rewrite Nat.add_0_r; vauto).
+      assert (instr = f). 
+      { cut (Some instr = Some f); [ins; vauto| ].
+        rewrite ISTEP, INSTR. rewrite Nat.add_0_r.
+        vauto. }
+      rewrite <- INSTRS, UPC in *.      
+      subst instr. inversion H0. subst ord. (* subst reg. subst lexpr.  *)
+      forward eapply (BLOCK_CONTENTS 1 st) as INSTR'; eauto.
+      inversion ISTEP2.
+      all: try (forward eapply (@H 1 st eq_refl instr0); by vauto).
+      assert (instr0 = st). 
+      { cut (Some instr0 = Some st); [ins; vauto| ].
+        rewrite ISTEP1. vauto. }
+      subst instr0. inversion H1. subst ord. subst lexpr. subst expr.
+      subst x. subst l. subst v.  
+      
+      remember (Afence Oacqrel) as lbl. 
+      remember (Astore Xpln Orlx (RegFile.eval_lexpr (regf st_prev') loc)) as lbl'.
+      rename st into st_.
+      remember (bst2st bst) as st.
+      replace (init (flatten (binstrs bst_prev))) with (init (instrs st_prev)) in * by vauto. 
+      red.
+      replace (bG bst) with (G st) by vauto.
+      forward eapply step_label_ext_helper as LBL_EXT; eauto.
+      { eapply REACH'. red; eexists. red. splits; auto. eexists. split; eauto. }  
+      simpl in LBL_EXT. desc. 
+      assert (forall max_event index (IND: index >= eindex st_prev),
+                 singl_rel max_event (ThreadEvent tid (eindex st_prev)) ⨾ rmw (G st_prev) ≡ ∅₂) as SB_RMW_HELPER. 
+      { ins. split; [| basic_solver].
+        rewrite rmw_bibounded; vauto. 
+        red. ins. red in H2. desc. red in H2. desc. subst.
+        simpl in H3. omega. }
+      subst lbl. subst lbl'. simpl in *.
+      des.
+      { exfalso. generalize SB_EXT.  
+        rewrite UG. unfold add, acts_set. simpl. basic_solver. }
+
+      splits.
+      { rewrite E_EXT, W_EXT, SC_EXT, F_EXT, ACQ_EXT, RMW_EXT, SB_EXT. 
+        rewrite seq_union_l.
+        remove_emptiness. 
+        rewrite set_inter_union_l.
+        arewrite (eq (ThreadEvent tid (eindex st_prev)) ∩₁ W (G st_prev) ≡₁ ∅).
+        { rewrite set_interC. 
+          forward eapply (@label_set_bound_inter st_prev tid _ _ _ (@is_w actid) w_matcher w_pl); eauto.
+          vauto. }
+        rewrite SB_RMW_HELPER; eauto. remove_emptiness. 
+        red in IHn_steps. desc. vauto. }
+      { rewrite RMW_EXT, SC_EXT. remove_emptiness. 
+        red in IHn_steps. desc. vauto. }
+      { rewrite set_interA, ORLX_W_ALT. 
+        rewrite E_EXT, SB_EXT, F_EXT, ACQREL_EXT, W_ORLX_EXT. remove_emptiness.
+        rewrite <- ORLX_W_ALT. 
+        rewrite set_inter_union_l, <- !set_interA.
+        rewrite seq_union_r, codom_union.
+        apply set_subset_union.
+        { red in IHn_steps. desc. vauto. }
+        (* TODO: same as above *)
+        arewrite (eq (ThreadEvent tid (eindex st_prev)) ∩₁ W (G st_prev) ≡₁ ∅).
+        { rewrite set_interC. 
+          forward eapply (@label_set_bound_inter st_prev tid _ _ _ (@is_w actid) w_matcher w_pl); eauto.
+          vauto. }
+        basic_solver. }
+      { rewrite E_EXT, R_EXT, SC_EXT, F_EXT, ACQ_EXT, SB_EXT. remove_emptiness. 
+        rewrite seq_union_r, codom_union.
+        apply set_subset_union_r. left.
+        rewrite set_interA. 
+        rewrite set_inter_union_l.
+        arewrite (eq (ThreadEvent tid (eindex st_prev))
+                     ∩₁ ((R (G st_prev) ∪₁ eq (ThreadEvent tid (eindex st_prev)))
+                           ∩₁ Sc (G st_prev)) ≡₁
+                     (R (G st_prev) ∪₁ eq (ThreadEvent tid (eindex st_prev))) ∩₁
+                     (eq (ThreadEvent tid (eindex st_prev)) ∩₁ Sc (G st_prev))) by basic_solver. 
+        rewrite set_inter_union_l.
+        arewrite (eq (ThreadEvent tid (eindex st_prev)) ∩₁ Sc (G st_prev) ≡₁ ∅).
+        { rewrite set_interC.
+          forward eapply (@label_set_bound_inter st_prev tid  _ _ _ (@is_sc actid) sc_matcher sc_pl); eauto.
+          vauto. }
+        remove_emptiness. rewrite <- set_interA. 
+        red in IHn_steps. desc. vauto. } }    
     
-                     
+    
         rewrite <- set_interA with (s := eq (ThreadEvent tid (eindex st_prev))). 
         (* assert (exists oinstr, Some oinstr = nth_error PO b) as [oinstr OINSTR].  *)
     (* { apply OPT_VAL. apply nth_error_Some. *)
