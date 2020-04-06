@@ -1620,18 +1620,59 @@ Section CompCorrHelpers.
     
   Hint Resolve r_pl w_pl nonnop_f_pl acq_pl acqrel_pl sc_pl orlx_w_pl : label_ext.
   
-  Lemma step_label_ext_helper st1 st2 tid new_label index
-        (IND: index >= eindex st1)
-        (ADD: exists foo bar baz bazz,
-            G st2 = add (G st1) tid index new_label foo bar baz bazz)
+  Definition step0 st1 st2 tid :=
+    ⟪STEP: step tid st1 st2 ⟫ /\
+    ⟪ADD0: G st2 = G st1⟫. 
+        
+  Definition step1 st1 st2 tid index label :=
+    ⟪STEP: step tid st1 st2 ⟫ /\
+    ⟪ADD1: exists foo bar baz bazz, G st2 = add (G st1) tid index label foo bar baz bazz⟫.
+
+  Lemma step1_index_exact st1 st2 tid index label (STEP1: step1 st1 st2 tid index label):
+    index = eindex st1 /\ eindex st2 = eindex st1 + 1. 
+  Proof.
+    red in STEP1. desc.
+    assert (forall G a b c d e f g, G <> add G a b c d e f g) as ADD_NEQ.
+    { ins. red. ins. unfold add in H.
+      apply (@f_equal _ _ acts) in H. simpl in H.
+      apply (@f_equal _ _ (@length _)) in H. simpl in H. omega. }
+    assert (forall G a b c d e f g a' b' c' d' e' f' g' h',
+               add_rmw G a' b' c' d' e' f' g' h' <> add G a b c d e f g) as ADD_RMW_NEQ.
+    { ins. red. ins. unfold add, add_rmw in H.
+      apply (@f_equal _ _ acts) in H. simpl in H.
+      apply (@f_equal _ _ (@length _)) in H. simpl in H. omega. }
+    do 2 (red in STEP; desc).
+    inversion ISTEP0.
+    all: try (rewrite UG in ADD1; apply ADD_NEQ in ADD1; by vauto).
+    all: try (rewrite UG in ADD1; apply ADD_RMW_NEQ in ADD1; by vauto).
+    all: split; auto. 
+    all: rewrite ADD1 in UG; apply (@f_equal _ _ acts) in UG; simpl in UG.
+    all: inversion UG; auto.
+  Qed. 
+        
+  (* Lemma step2_index_increase st1 st2 tid index label1 label2 (STEP2: step2 st1 st2 tid index label1 label2): *)
+  (*   eindex st1 < eindex st2. *)
+  (* Proof. *)
+  (*   red in STEP2. desc. *)
+  (*   assert (forall G a b c d e f g h, G <> add_rmw G a b c d e f g h) as ADD_RMW_NEQ.  *)
+  (*   { ins. red. ins. unfold add_rmw in H. *)
+  (*     apply (@f_equal _ _ acts) in H. simpl in H. *)
+  (*     apply (@f_equal _ _ (@length _)) in H. simpl in H. omega. }  *)
+  (*   do 2 (red in STEP; desc). *)
+  (*   inversion ISTEP0. *)
+  (*   all: try (rewrite UG in ADD1; apply ADD_RMW_NEQ in ADD1; by vauto). *)
+  (*   all: omega. *)
+  (* Qed.  *)
+        
+  Lemma step_label_ext_helper st1 st2 tid new_label index        
+        (STEP1: step1 st1 st2 tid index new_label)
         n (REACH: (step tid) ^^ n (init (instrs st1)) st1):
     let lbl_ext (S: (actid -> label) -> actid -> bool)
                 (matcher : label -> bool) :=
         S (lab (G st2)) ≡₁ S (lab (G st1)) ∪₁ (if matcher new_label then eq (ThreadEvent tid index) else ∅) in
     ⟪E_EXT: E (G st2) ≡₁ E (G st1) ∪₁ eq (ThreadEvent tid index) ⟫ /\
     ⟪RMW_EXT: rmw (G st2) ≡ rmw (G st1) ⟫ /\
-    ⟪SB_EXT: E (G st1) ≡₁ ∅ \/ exists max_event,
-         immediate (sb (G st2)) ≡ immediate (sb (G st1)) ∪ singl_rel  max_event (ThreadEvent tid index) ⟫ /\
+    ⟪SB_EXT: E (G st1) ≡₁ ∅ \/ immediate (sb (G st2)) ≡ immediate (sb (G st1)) ∪ singl_rel (ThreadEvent tid (index - 1)) (ThreadEvent tid index) ⟫ /\
     ⟪R_EXT: lbl_ext (@is_r actid) r_matcher ⟫ /\
     ⟪W_EXT: lbl_ext (@is_w actid) w_matcher ⟫ /\
     ⟪W_ORLX_EXT: lbl_ext (@is_orlx_w actid) orlx_w_matcher ⟫ /\
@@ -1639,26 +1680,28 @@ Section CompCorrHelpers.
     ⟪ACQ_EXT: lbl_ext (@is_acq actid) acq_matcher ⟫ /\
     ⟪ACQREL_EXT: lbl_ext (@is_acqrel actid) acqrel_matcher ⟫ /\
     ⟪SC_EXT: lbl_ext (@is_sc actid) sc_matcher⟫ .
-  Proof. 
+  Proof.
+    forward eapply step1_index_exact; eauto. ins. destruct H as [H EINDEX2].  subst. 
+    red in STEP1. desc. 
     pose proof label_set_step as LBL_STEP.
-    specialize LBL_STEP with (st1 := st1) (st2 := st2) (tid := tid) (index := index).
-    assert (E (G st2) ≡₁ E (G st1) ∪₁ eq (ThreadEvent tid index)) as E_EXT. 
-    { desc. rewrite ADD. unfold acts_set. basic_solver. }              
+    specialize LBL_STEP with (st1 := st1) (st2 := st2) (tid := tid).
+    assert (E (G st2) ≡₁ E (G st1) ∪₁ eq (ThreadEvent tid (eindex st1))) as E_EXT. 
+    { desc. rewrite ADD1. unfold acts_set. basic_solver. }
     simpl. splits; auto. 
-    { desc. rewrite ADD. basic_solver. }
+    { desc. rewrite ADD1. basic_solver. }
     { assert (wf_thread_state tid st1) as WFT.
       { eapply wf_thread_state_steps with (s := init (instrs st1)); [apply wf_thread_state_init| ].
         apply crt_num_steps. eauto. }
       destruct (gt_0_eq (eindex st1)).
       2: { left. split; [| basic_solver]. red. ins. red in H0.
            destruct WFT. specialize (acts_rep x H0). desc. omega. }
-      right. exists (ThreadEvent tid (eindex st1 - 1)).
+      right. 
       assert (forall e, E (G st1) e -> E (G st2) e) as E1_E2.
       { ins. rewrite (set_equiv_exp E_EXT). basic_solver. }
       assert (E (G st2) (ThreadEvent tid (eindex st1 - 1))) as LAST_EVENT.
       { rewrite (set_equiv_exp E_EXT). red. left. 
         destruct WFT. apply acts_clos. omega. } 
-      assert (E (G st2) (ThreadEvent tid index)) as NEW_EVENT. 
+      assert (E (G st2) (ThreadEvent tid (eindex st1))) as NEW_EVENT. 
       { rewrite (set_equiv_exp E_EXT). basic_solver. }
       assert (forall e, E (G st1) e -> exists n, e = ThreadEvent tid n /\ n < eindex st1) as LIM_INDEX. 
       { ins. destruct WFT. specialize (acts_rep _ H0). desc.
@@ -1667,7 +1710,6 @@ Section CompCorrHelpers.
       { unfold sb at 1. rewrite seq_eqv_lr. red. ins. red in H0. desc.
         rewrite (set_equiv_exp E_EXT) in H0. red in H0. des.
         2: { subst x. unfold ext_sb in H2. destruct y; vauto. desc. subst.
-             cut (index0 <= index); [ins; omega| ].
              rewrite (set_equiv_exp E_EXT) in H3. red in H3. des.
              2: { inversion H3. omega. }
              specialize (LIM_INDEX _ H3). desc. inversion LIM_INDEX. omega. }
@@ -1682,7 +1724,7 @@ Section CompCorrHelpers.
           all: splits; auto.
           red. splits; [auto | omega]. }
         subst. red in H2. desc. subst. f_equal.
-        destruct (Nat.lt_trichotomy index0 (eindex st1 - 1)) as [LT | [EQ | GT]]; auto.  
+        destruct (Nat.lt_trichotomy index (eindex st1 - 1)) as [LT | [EQ | GT]]; auto.  
         { exfalso. apply H1 with (c := (ThreadEvent tid (eindex st1 - 1))).
           all: splits; auto.
           all: red; vauto. split; [auto | omega]. }
@@ -1696,7 +1738,7 @@ Section CompCorrHelpers.
           { red in R4. destruct x; vauto. }
           red in R0. destruct y; vauto. desc. subst.
           destruct WFT. specialize (acts_rep _ H3). desc. inversion REP. subst.
-          forward eapply (acts_clos index0); [omega| basic_solver]. }
+          forward eapply (acts_clos index); [omega| basic_solver]. }
         apply H1 with (c := c). all: splits; auto. }
       red. ins. red in H0. desc. subst.
       red. split.
@@ -1710,31 +1752,83 @@ Section CompCorrHelpers.
       rewrite (set_equiv_exp E_EXT) in R2. red in R2. des.
       { specialize (LIM_INDEX _ R2). desc. inversion LIM_INDEX. omega. }
       inversion R2. omega. }
+    (* { apply LBL_STEP.  *)
     all: apply LBL_STEP; eauto with label_ext.
     all: eapply nonnop_bounded; eauto with label_ext; vauto.
   Qed. 
 
-  (* Lemma single_event_helper st1 st2 tid index *)
-  (*       (IND: index >= eindex st1) *)
-  (*       (ADD: exists new_label foo bar baz bazz, *)
-  (*           G st2 = add (G st1) tid index new_label foo bar baz bazz) *)
-  (*       n (REACH: (step tid) ^^ n (init (instrs st1)) st1) *)
-  (*       (EMPTY1: E (G st1) ≡₁ ∅) *)
-  (*       (OMM1: omm_premises_hold (G st1)): *)
-  (*   omm_premises_hold (G st2). *)
-  (* Proof. *)
-  (*   desc.  *)
-  (*   assert (E (G st2) ≡₁ eq (ThreadEvent tid index)) as E2. *)
-  (*   { unfold acts_set in EMPTY1. *)
-  (*     destruct (acts (G st1)) eqn:acts1.  *)
-  (*     2: { exfalso. generalize EMPTY1. basic_solver. } *)
-  (*     rewrite ADD. unfold add, acts_set. rewrite acts1. simpl. *)
-  (*     basic_solver. } *)
-  (*   red. splits. *)
-  (*   2: { red. splits; [| basic_solver].  *)
-  (*        arewrite (rmw (G st2) ≡ rmw (G st1)) by (rewrite ADD; vauto). *)
-  (*        suffices: Sc (G st2) ≡₁ Sc (G st1) *)
-         
+  Lemma unique_restr x y (r: relation actid) (Rxy: r x y):
+    ⦗eq x⦘ ⨾ r ⨾ ⦗eq y⦘ ≡ singl_rel x y.
+  Proof.
+    ins. rewrite seq_eqv_lr. split.
+    { red. ins. desc. red. splits; auto. }
+    red. ins. red in H. desc. splits; vauto.
+  Qed. 
+    
+  Lemma step2_label_ext_helper st1 st2 st3 tid new_label1 new_label2 index1 index2
+        (IND1: index1 >= eindex st1) (IND2: index2 >= eindex st2)
+        (STEP11: step1 st1 st2 tid index1 new_label1)
+        (STEP12: step1 st2 st3 tid index2 new_label2)
+        n (REACH: (step tid) ^^ n (init (instrs st1)) st1):
+    let ev1 := (ThreadEvent tid index1) in
+    let ev2 := (ThreadEvent tid index2) in
+    let lbl_ext2 (S: (actid -> label) -> actid -> bool)
+                (matcher : label -> bool) :=
+        S (lab (G st3)) ≡₁ S (lab (G st1)) ∪₁ (if matcher new_label1 then eq ev1 else ∅) ∪₁ (if matcher new_label2 then eq ev2 else ∅) in
+    ⟪E_EXT: E (G st3) ≡₁ E (G st1) ∪₁ eq ev1 ∪₁ eq ev2 ⟫ /\
+    ⟪RMW_EXT: rmw (G st3) ≡ rmw (G st1) ⟫ /\
+    ⟪SB_EXT: sb (G st3) ≡ singl_rel ev1 ev2 \/
+             immediate (sb (G st3)) ≡ immediate (sb (G st1)) ∪ singl_rel (ThreadEvent tid (index1 - 1)) ev1 ∪ singl_rel ev1 ev2 ⟫ /\
+    ⟪R_EXT: lbl_ext2 (@is_r actid) r_matcher ⟫ /\
+    ⟪W_EXT: lbl_ext2 (@is_w actid) w_matcher ⟫ /\
+    ⟪W_ORLX_EXT: lbl_ext2 (@is_orlx_w actid) orlx_w_matcher ⟫ /\
+    ⟪F_EXT: lbl_ext2 (@is_nonnop_f actid) nonnop_f_matcher ⟫ /\
+    ⟪ACQ_EXT: lbl_ext2 (@is_acq actid) acq_matcher ⟫ /\
+    ⟪ACQREL_EXT: lbl_ext2 (@is_acqrel actid) acqrel_matcher ⟫ /\
+    ⟪SC_EXT: lbl_ext2 (@is_sc actid) sc_matcher⟫ .
+  Proof.
+    forward eapply (@step1_index_exact st1 st2) as [H EINDEX2]; eauto.
+    forward eapply (@step1_index_exact st2 st3) as [H' EINDEX3]; eauto.
+    ins. subst. 
+    forward eapply (@step_label_ext_helper st1 st2 tid) as STEP1; eauto.
+    red in STEP11. desc.
+    forward eapply (@step_label_ext_helper st2 st3 tid new_label2 (eindex st2)) as STEP2; eauto.
+    { Unshelve. 2: exact (S n). replace (instrs st2) with (instrs st1).      
+      2: { apply steps_same_instrs. exists tid. apply rt_step. auto. }
+      apply step_prev. exists st1. split; auto. }
+    simpl in *. desc. simpl. splits.
+    4: { rewrite R_EXT, R_EXT0. auto. }
+    4: { rewrite W_EXT, W_EXT0. auto. }
+    4: { rewrite W_ORLX_EXT, W_ORLX_EXT0. auto. }
+    4: { rewrite F_EXT, F_EXT0. auto. }
+    4: { rewrite ACQ_EXT, ACQ_EXT0. auto. }
+    4: { rewrite ACQREL_EXT, ACQREL_EXT0. auto. }
+    4: { rewrite SC_EXT, SC_EXT0. auto. }
+    { rewrite E_EXT, E_EXT0. auto. }
+    { rewrite RMW_EXT, RMW_EXT0. auto. }
+    { clear W_EXT. clear W_EXT0. clear W_ORLX_EXT. clear W_ORLX_EXT0. clear F_EXT. clear F_EXT0. clear ACQ_EXT. clear ACQ_EXT0. clear ACQREL_EXT. clear ACQREL_EXT0. clear SC_EXT. clear SC_EXT0. clear R_EXT. clear R_EXT0. clear RMW_EXT. clear RMW_EXT0.
+      destruct SB_EXT as [NO_E2 | E2_ADD].
+      { exfalso. generalize E_EXT0. rewrite NO_E2. basic_solver. }
+      desc.
+      destruct SB_EXT0 as [NO_E1 | E1_ADD].
+      { left. unfold sb. rewrite E_EXT, E_EXT0, NO_E1. remove_emptiness.
+        assert (forall e, ⦗eq e⦘ ⨾ ext_sb ⨾ ⦗eq e⦘ ≡ ∅₂) as EXTSB_IRR.
+        { split; [| basic_solver]. rewrite seq_eqv_lr. red. ins.
+          desc. subst. red in H0. destruct y; vauto. desc. omega. }
+        assert (forall e1 e2, index e1 > index e2 -> ⦗eq e1⦘ ⨾ ext_sb ⨾ ⦗eq e2⦘ ≡ ∅₂) as EXTSB_MON.
+        { split; [| basic_solver]. rewrite seq_eqv_lr. red. ins.
+          desc. subst. red in H. destruct x.
+          { simpl in H. omega. }
+          destruct y; vauto. simpl in H. simpl in H1. desc. omega. }
+        rewrite id_union. rewrite seq_union_l, !seq_union_r.
+        repeat rewrite EXTSB_IRR.
+        rewrite EXTSB_MON with (e1 := (ThreadEvent tid (eindex st2))). 
+        2: { simpl. omega. }
+        remove_emptiness.
+        apply unique_restr. red. split; [auto| omega]. }
+      right. rewrite E2_ADD, E1_ADD.
+      replace (eindex st2 - 1) with (eindex st1); auto. omega. }
+    Qed.          
     
   Lemma GI_1thread_omm_premises_block bst tid PO BPI
         (COMP: is_thread_block_compiled PO BPI) 
