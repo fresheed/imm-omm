@@ -2032,6 +2032,120 @@ Section CompCorrHelpers.
         repeat rewrite codom_union. 
         repeat (apply set_subset_union_r; left).
         by_IH IHn_steps. } }
+    { apply (same_relation_exp (@seqA _ _ _ _)) in BLOCK_STEP0.
+      apply (same_relation_exp (seq_id_l (step tid ⨾ step tid))) in BLOCK_STEP0.
+      red in BLOCK_STEP0. destruct BLOCK_STEP0 as [st_prev' [STEP1 STEP2]]. 
+      do 2 (red in STEP1; desc). do 2 (red in STEP2; desc).
+      forward eapply (BLOCK_CONTENTS 0 f) as INSTR; eauto.
+      inversion ISTEP0.
+      all: try (forward eapply (@H 0 f eq_refl instr); vauto; rewrite Nat.add_0_r; vauto).
+      assert (instr = f). 
+      { cut (Some instr = Some f); [ins; vauto| ].
+        rewrite ISTEP, INSTR. rewrite Nat.add_0_r.
+        vauto. }
+      rewrite <- INSTRS, UPC in *.      
+      subst instr. inversion H0. subst ord. (* subst reg. subst lexpr.  *)
+      forward eapply (BLOCK_CONTENTS 1 ld) as INSTR'; eauto.
+      inversion ISTEP2.
+      all: try (forward eapply (@H 1 ld eq_refl instr0); by vauto).
+      assert (instr0 = ld). 
+      { cut (Some instr0 = Some ld); [ins; vauto| ].
+        rewrite ISTEP1. vauto. }
+      subst instr0. inversion H1. subst ord. subst lexpr. subst reg.
+      (* subst x. *)
+      subst l.
+      (* subst val.   *)
+      
+      remember (Afence Oacq) as lbl. 
+      remember (Aload false Osc (RegFile.eval_lexpr (regf st_prev') loc) val) as lbl'.
+      remember (bst2st bst) as st.
+      replace (init (flatten (binstrs bst_prev))) with (init (instrs st_prev)) in * by vauto. 
+      red.
+      replace (bG bst) with (G st) by vauto.
+      forward eapply (@step2_label_ext_helper st_prev st_prev' st) as LBL_EXT; eauto.
+      { red. splits; eauto. do 2 (red; eexists); eauto. } 
+      { red. splits; eauto. red. eexists. red. splits.
+        { congruence. }
+        exists ld. splits; eauto. rewrite INSTR'. f_equal; vauto. } 
+
+      rewrite Heqlbl, Heqlbl' in LBL_EXT. simpl in LBL_EXT. desc. 
+      remember (ThreadEvent tid (eindex st_prev)) as ev.
+      remember (ThreadEvent tid (eindex st_prev')) as ev'. 
+      destruct SB_EXT as [[NO_E SB_TRIVIAL] | SB_EXT]. 
+      { assert (immediate (sb (G st)) ≡ singl_rel ev ev') as IMM_SB. 
+        { rewrite SB_TRIVIAL. split; [basic_solver| ].
+          red. ins. red. split; auto.
+          ins. red in H2, R1, R2. desc. subst.
+          inversion R2. rewrite UINDEX in H3. simpl in H3. omega. }
+        rewrite NO_E in *. (* clear NO_E. *)
+        subst ev ev'. rewrite UINDEX in *. 
+        splits. all: try rewrite IMM_SB.
+        { rewrite E_EXT, RMW_EXT. 
+          rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)). rewrite NO_E.
+          unfold_clear_updated st; expand_rels; simplify_updated_sets.          
+          basic_solver 10. }
+        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+          rewrite wft_rmwE at 2; eauto. fold (acts_set (G st_prev)).
+          rewrite !seqA. repeat seq_rewrite <- id_inter.
+          unfold_clear_updated st; expand_rels; simplify_updated_sets.
+          repeat rewrite id_inter. rewrite !seqA.
+          unfold acts_set. seq_rewrite <- wft_rmwE; eauto. 
+          by_IH IHn_steps. }
+        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+          basic_solver 10. }
+        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+          basic_solver 10. }
+      } 
+      
+      splits.
+      { subst ev ev'. rewrite UINDEX in *. 
+        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        assert (forall {A: Type} (x y: A), singl_rel x y ≡ ⦗eq x⦘ ⨾ singl_rel x y ⨾ ⦗eq y⦘) as singl_rel_restr. 
+        { ins. basic_solver. }          
+        assert (forall x d, singl_rel x (ThreadEvent tid (eindex st_prev + d)) ⨾ rmw (G st_prev) ≡ ∅₂).
+        { ins. rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)).
+          rewrite singl_rel_restr. rewrite !seqA. rewrite <- seqA with (r2 := ⦗E (G st_prev)⦘).
+          rewrite <- id_inter. simplify_updated_sets. basic_solver. }
+        rewrite set_interA with (s'' := eq (ThreadEvent tid (eindex st_prev + 1))). simplify_updated_sets. 
+        rewrite singl_rel_restr. rewrite singl_rel_restr with (y := (ThreadEvent tid (eindex st_prev + 1))). 
+        rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)).
+        rewrite !seqA. repeat seq_rewrite <- id_inter.
+        simplify_updated_sets.
+        repeat rewrite eqv_empty. remove_emptiness.
+        rewrite id_union, seq_union_l.
+        (* TODO: refactor with previous case; also maybe add tactic especially for rmw; add id_inter folding into simplification *)
+        assert (forall {A: Type} (D: A -> Prop) r, immediate (restr_rel D r) ≡ restr_rel D (immediate (restr_rel D r))).
+        { ins. basic_solver. }
+        arewrite (⦗eq (ThreadEvent tid (eindex st_prev))⦘
+                    ⨾ immediate (sb (G st_prev)) ≡ ∅₂).
+        { unfold sb. rewrite <- restr_relE, H3, restr_relE.
+          seq_rewrite <- id_inter. simplify_updated_sets. basic_solver. }
+        remove_emptiness. unfold acts_set. rewrite <- wft_rmwE; eauto.
+        by_IH IHn_steps. }
+      { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        rewrite wft_rmwE at 2; eauto. fold (acts_set (G st_prev)).
+        rewrite !seqA. repeat seq_rewrite <- id_inter.
+        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        subst ev ev'. simplify_updated_sets. repeat rewrite id_inter.
+        rewrite !seqA.
+        unfold acts_set. seq_rewrite <- wft_rmwE; eauto. 
+        by_IH IHn_steps. }
+      { subst ev ev'. rewrite UINDEX in *. 
+        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        rewrite unionA, codom_union. apply set_subset_union_r. left.
+        by_IH IHn_steps. }
+      { subst ev ev'. rewrite UINDEX in *. 
+        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        rewrite set_interA with (s'' := eq (ThreadEvent tid (eindex st_prev + 1))). simplify_updated_sets. 
+        rewrite id_union. apply set_subset_union_l. split.
+        { expand_rels.
+          repeat rewrite codom_union. 
+          repeat (apply set_subset_union_r; left).
+          by_IH IHn_steps. }
+        repeat rewrite codom_union. 
+        repeat (apply set_subset_union_r; right).
+        basic_solver 10. }
+      } 
   Admitted. 
 
   Lemma GI_1thread_omm_premises tid PO PI (COMP: is_thread_compiled PO PI) Gi
