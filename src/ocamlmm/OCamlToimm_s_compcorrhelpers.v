@@ -13,6 +13,7 @@ Require Import OCamlToimm_s_prog.
 Require Import OCamlToimm_s_prog_compilation.
 Require Import OCamlToimm_s_prog_pair_step. 
 Require Import OCamlToimm_s_prog_bounded_properties. 
+Require Import OCamlToimm_s_steps.
 Require Import Utils.
 Require Import ClosuresProperties. 
 Require Import Prog.
@@ -503,8 +504,8 @@ Section CompCorrHelpers.
     assert (binstrs bst = binstrs bst_prev) as BINSTRS_SAME.
     { red in STEP_NEXT. desc. auto. }
     specialize (IHn_steps bst_prev).
-    destruct IHn_steps; [congruence| congruence |]. 
-    red in STEP_NEXT. desc. red in H. rename H into WSCFACQRMW. 
+    specialize_full IHn_steps; [congruence| congruence |]. 
+    red in STEP_NEXT. desc. 
     assert (PO0 = PO); [| subst PO0]. 
     { eapply compilation_injective; eauto. congruence. }
     red in BLOCK_STEP. desc.
@@ -516,8 +517,10 @@ Section CompCorrHelpers.
       { congruence. }
       apply nth_error_Some, OPT_VAL. exists block. congruence. }
     assert (forall i instr (BLOCK_I: Some instr = nth_error block i) instr' (OTHER: Some instr' = nth_error (instrs st_prev) (pc st_prev + i)) (NEQ: instr <> instr'), False).
-    { foobar. admit. }
-    assert (exists k, (step tid) ^^ k (init (instrs st_prev)) st_prev) as [k REACH] by admit.
+    { ins. specialize (BLOCK_CONTENTS _ _ BLOCK_I). congruence. }
+    assert (exists k, (step tid) ^^ k (init (instrs st_prev)) st_prev) as [k REACH].
+    { apply crt_num_steps. subst st_prev. apply ommblocks_imply_steps.
+      apply crt_num_steps. eexists. rewrite BINSTRS_SAME0. eauto. }
     assert (forall st', (step tid) st_prev st' -> (step tid) ^^ (k + 1) (init (instrs st')) st') as REACH'. 
     { ins. replace (instrs st') with (instrs st_prev).
       2: { apply steps_same_instrs. eexists. apply rt_step. basic_solver. }
@@ -568,7 +571,7 @@ Section CompCorrHelpers.
         rewrite SB_EXT in *. clear SB_EXT. 
         splits.
         all: unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        2: by_IH IHn_steps.
+        2: by_IH IHn_steps. 
         all: basic_solver. }
       splits.
       { unfold_clear_updated st. expand_rels. simplify_updated_sets.
@@ -811,11 +814,16 @@ Section CompCorrHelpers.
       rewrite Heqlbl, Heqlbl', Heqlbl'' in LBL_EXT. simpl in LBL_EXT. desc. 
       remember (ThreadEvent tid (eindex st_prev)) as ev.
       remember (ThreadEvent tid (eindex st_prev')) as ev'. 
-      remember (ThreadEvent tid (eindex st_prev' + 1)) as ev''. 
+      remember (ThreadEvent tid (eindex st_prev' + 1)) as ev''.
+      assert (wf_thread_state tid st_prev') as WFT'.
+      { eapply wf_thread_state_step; eauto. red. eexists. red. splits; eauto. }
+      assert (wf_thread_state tid st) as WFT''.
+      { eapply wf_thread_state_step; eauto. red. eexists. red.
+        splits; [congruence| ]. exists exc. splits; eauto. congruence. }
+      
       destruct SB_EXT as [[NO_E SB_TRIVIAL] | SB_EXT]. 
       { assert (immediate (sb (G st)) ≡ singl_rel ev ev' ∪ singl_rel ev' ev'') as IMM_SB. 
-        { assert (wf_thread_state tid st) as WFT' by admit. 
-          rewrite immediate_sb_repr; eauto.
+        { rewrite immediate_sb_repr; eauto.
           rewrite UINDEX0, UINDEX. 
           assert (eindex st_prev = 0) as EINDEX0.
           { destruct (gt_0_eq (eindex st_prev)); auto.
@@ -867,11 +875,11 @@ Section CompCorrHelpers.
       assert (forall st_, immediate (sb (G st_)) ≡ ⦗E (G st_)⦘ ⨾ immediate (sb (G st_)) ⨾ ⦗E (G st_)⦘) as SB_IMM_E.
       { ins. unfold sb. rewrite <- restr_relE. rewrite RESTR_IMM.
         rewrite restr_relE. basic_solver 10. }
-      assert (wf_thread_state tid st_prev') as WFT'.
-      { eapply wf_thread_state_step; eauto. red. eexists. red. splits; eauto. }
-      assert (wf_thread_state tid st) as WFT''.
-      { eapply wf_thread_state_step; eauto. red. eexists. red.
-        splits; [congruence| ]. exists exc. splits; eauto. congruence. }
+      (* assert (wf_thread_state tid st_prev') as WFT'. *)
+      (* { eapply wf_thread_state_step; eauto. red. eexists. red. splits; eauto. } *)
+      (* assert (wf_thread_state tid st) as WFT''. *)
+      (* { eapply wf_thread_state_step; eauto. red. eexists. red. *)
+      (*   splits; [congruence| ]. exists exc. splits; eauto. congruence. } *)
       splits.
       { subst ev ev' ev''. rewrite UINDEX in *.
         rewrite E_EXT, W_EXT, SC_EXT at 1. 
@@ -930,7 +938,7 @@ Section CompCorrHelpers.
       inversion ISTEP0.
       all: try (forward eapply (@H 0 igt eq_refl instr); vauto; rewrite Nat.add_0_r; vauto).
       subst st_prev. simpl in *. congruence. }
-  Admitted. 
+  Qed. 
 
   Lemma GI_1thread_omm_premises tid PO PI (COMP: is_thread_compiled PO PI) Gi
         (EXEC: thread_execution tid PI Gi):
