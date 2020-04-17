@@ -417,6 +417,32 @@ Section OCaml_IMM_Correspondence.
        ectrl := bectrl bst;      
     |}.
 
+  Lemma state_record_equality st:
+    st = {|
+      instrs := instrs st;
+      pc := pc st;
+      G := G st;
+      eindex := eindex st;
+      regf := regf st;
+      depf := depf st;
+      ectrl := ectrl st
+    |}.
+  Proof. 
+  Admitted. 
+    
+  Lemma blockstate_record_equality bst:
+    bst = {|
+      binstrs := binstrs bst;
+      bpc := bpc bst;
+      bG := bG bst;
+      beindex := beindex bst;
+      bregf := bregf bst;
+      bdepf := bdepf bst;
+      bectrl := bectrl bst
+    |}.
+  Proof. 
+  Admitted.    
+
   (* TODO: understand https://stackoverflow.com/questions/27322979/why-coq-doesnt-allow-inversion-destruct-etc-when-the-goal-is-a-type*)
   Definition block_step_helper block (tid : thread_id) bst1 bst2 :=
     ⟪ AT_BLOCK: Some block = nth_error (binstrs bst1) (bpc bst1) ⟫ /\
@@ -511,5 +537,46 @@ Section OCaml_IMM_Correspondence.
     rewrite H1. auto. 
   Qed.
       
+
+  Lemma resulting_block_compiled_weak PO BPI b block
+        (COMP : itbc_weak PO BPI)
+        (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
+        (BLOCK: Some block = nth_error BPI b):
+    exists oinstr : Instr.t, is_instruction_compiled oinstr block.
+  Proof. 
+    red in COMP. desc.
+    assert (exists block0, Some block0 = nth_error BPI0 b) as [block0 BLOCK0].
+    { apply OPT_VAL, nth_error_Some.
+      replace (length BPI0) with (length BPI).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. eapply Forall2_length. eauto. }
+    assert (exists oinstr, Some oinstr = nth_error PO b) as [oinstr OINSTR]. 
+    { apply OPT_VAL. apply nth_error_Some.
+      replace (length PO) with (length BPI).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. apply compilation_same_length_weak. red. eauto. }
+    assert (is_instruction_compiled oinstr block0) as COMP_.
+    { eapply Forall2_index; eauto. }
+    assert (block_corrected BPI0' block0 block) as CORR.
+    { eapply Forall2_index; eauto. }
+    assert (exists oinstr0 : Instr.t, is_instruction_compiled oinstr0 block) as COMP'.
+    { inversion COMP_. 
+      6: { subst. inversion CORR. subst. inversion H3. subst.
+           inversion H1; vauto. }
+      all: (exists oinstr; subst).
+      all: (inversion CORR; subst; inversion H3; subst;
+            inversion H1; vauto).
+      all: (inversion H5; subst; inversion H2; subst; vauto). }
+    splits; auto.
+  Qed. 
+
+  Lemma resulting_block_compiled PO BPI b block
+        (COMP : is_thread_block_compiled PO BPI)
+        (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
+        (BLOCK: Some block = nth_error BPI b):
+    exists oinstr : Instr.t, is_instruction_compiled oinstr block.
+  Proof.
+    eapply resulting_block_compiled_weak; eauto. eapply itbc_implies_itbcw. eauto. 
+  Qed. 
 
 End OCaml_IMM_Correspondence. 

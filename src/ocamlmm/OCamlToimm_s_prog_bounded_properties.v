@@ -111,6 +111,20 @@ Section BoundedProperties.
     red. intros. unfold is_only_rlx, orlx_matcher, Events.mod. auto. 
   Qed. 
     
+  Definition orlx_w_matcher :=
+    fun lbl => match lbl with
+            | Astore _ Orlx _ _ => true
+            | _ => false
+            end.
+  Definition is_orlx_w := fun {A: Type} (labfun: A -> label) ev =>
+                           is_w labfun ev && is_only_rlx labfun ev. 
+             
+  Lemma orlx_w_pl: processes_lab (@is_orlx_w actid) orlx_w_matcher. 
+  Proof.
+    red. intros. unfold is_orlx_w, is_only_rlx, is_w, orlx_w_matcher, Events.mod.
+    type_solver. 
+  Qed. 
+    
   Definition index_bounded ev_set st :=
     ev_set (lab (G st)) ⊆₁ (fun e => index e < eindex st).
 
