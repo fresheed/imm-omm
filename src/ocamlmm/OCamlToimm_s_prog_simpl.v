@@ -1005,7 +1005,7 @@ Section CompilationCorrectness.
       E GI ∩₁ Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ ORlx GI \/
       E GI ∩₁ Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ Sc GI.
   Proof.
-    pose proof (instr_of_event ExecI) as LOC_MAP.
+    pose proof instr_of_event as LOC_MAP.
     simpl. ins.
     destruct (classic (E GI ∩₁ (fun e : actid => loc (lab GI) e = Some l) \₁
                          (fun a : actid => is_init a) ⊆₁ ORlx GI \/
