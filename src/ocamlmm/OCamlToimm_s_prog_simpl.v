@@ -16,6 +16,8 @@ Require Import OCamlToimm_s_prog.
 Require Import OCamlToimm_s_prog_compilation. 
 Require Import OCamlToimm_s_prog_pair_step. 
 Require Import OCamlToimm_s_prog_bounded_properties. 
+Require Import OCamlToimm_s_compcorrhelpers. 
+Require Import OCamlToimm_s_steps. 
 Require Import Utils.
 Require Import ClosuresProperties. 
 Require Import Prog.
@@ -29,32 +31,6 @@ Set Implicit Arguments.
 
 Definition same_keys {A B: Type} (map1: IdentMap.t A) (map2: IdentMap.t B)
   := forall key, IdentMap.In key map1 <-> IdentMap.In key map2.
-
-  Lemma state_record_equality st:
-    st = {|
-      instrs := instrs st;
-      pc := pc st;
-      G := G st;
-      eindex := eindex st;
-      regf := regf st;
-      depf := depf st;
-      ectrl := ectrl st
-    |}.
-  Proof. 
-  Admitted. 
-    
-  Lemma blockstate_record_equality bst:
-    bst = {|
-      binstrs := binstrs bst;
-      bpc := bpc bst;
-      bG := bG bst;
-      beindex := beindex bst;
-      bregf := bregf bst;
-      bdepf := bdepf bst;
-      bectrl := bectrl bst
-    |}.
-  Proof. 
-  Admitted.    
 
   (* Definition restrict (G: execution) (tid: thread_id): execution. *)
   (*   set (thread_local := fun x y => Events.tid x = tid /\ Events.tid y = tid).  *)
@@ -89,1059 +65,16 @@ Definition same_keys {A B: Type} (map1: IdentMap.t A) (map2: IdentMap.t B)
   (* Defined. *)
  
 Section OCamlMM_TO_IMM_S_PROG.
-
-  Definition orlx_w_matcher :=
-    fun lbl => match lbl with
-            | Astore _ Orlx _ _ => true
-            | _ => false
-            end.
-  Definition is_orlx_w := fun {A: Type} (labfun: A -> label) ev =>
-                           is_w labfun ev && is_only_rlx labfun ev. 
-             
-  Lemma orlx_w_pl: processes_lab (@is_orlx_w actid) orlx_w_matcher. 
-  Proof.
-    red. intros. unfold is_orlx_w, is_only_rlx, is_w, orlx_w_matcher, Events.mod.
-    type_solver. 
-  Qed. 
-    
   Notation "'E' G" := G.(acts_set) (at level 1).
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
   Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
   Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
-  Notation "'F' G" := (fun a => is_true (is_nonnop_f G.(lab) a)) (at level 1).
+  Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1).
   Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
-  Notation "'ORlxW' G" := (fun a => is_true (is_orlx_w G.(lab) a)) (at level 1).
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
   Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
   Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1). 
-  Notation "'R_ex' G" := (fun a => is_true (R_ex G.(lab) a)) (at level 1).
-  Notation "'hbo'" := (OCaml.hb). 
-  Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
-  Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
-    
-  Definition omm_premises_hold G :=
-    (* separated *)
-    (* let Loc_ := fun l x => loc G.(lab) x = Some l in *)
-    (* ⟪ LSM : forall l, (Loc_ l \₁ is_init ⊆₁ (ORlx G)  \/  Loc_ l \₁ is_init ⊆₁ (Sc G)) ⟫ /\ *)
-    ⟪ WSCFACQRMW : E G ∩₁ W G ∩₁ Sc G ≡₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G) ⨾ rmw G) ⟫ /\
-    ⟪ RMWSC  : rmw G ≡ ⦗Sc G⦘ ⨾ rmw G⨾ ⦗Sc G⦘ ⟫ /\
-    ⟪ WRLXF : E G ∩₁ ORlxW G ⊆₁ codom_rel (⦗F G ∩₁ Acqrel G⦘ ⨾ immediate (sb G)) ⟫ /\
-    ⟪ RSCF  : E G ∩₁ R G ∩₁ Sc G ⊆₁ codom_rel (⦗F G ∩₁ Acq G⦘ ⨾ immediate (sb G)) ⟫.
 
-  Record Wf_local (G: execution) :=
-    {  wf_index' : forall a b, 
-        (E G) a /\ (E G) b /\ a <> b /\ tid a = tid b /\ ~ is_init a -> index a <> index b;
-       wf_dataD' : G.(data) ≡ ⦗R G⦘ ⨾ G.(data) ⨾ ⦗W G⦘ ;
-       ctrl_sb' : G.(ctrl) ⨾ G.(sb) ⊆ G.(ctrl) ;
-       wf_addrD' : G.(addr) ≡ ⦗R G⦘ ⨾ G.(addr) ⨾ ⦗RW G⦘ ;
-       wf_ctrlD' : G.(ctrl) ≡ ⦗R G⦘ ⨾ G.(ctrl) ;
-       wf_rmwD' : G.(rmw) ≡ ⦗R_ex G⦘ ⨾ G.(rmw) ⨾ ⦗W G⦘ ;
-       wf_rmwl' : G.(rmw) ⊆ same_loc G ;
-       wf_rmwi' : G.(rmw) ⊆ immediate G.(sb) ;
-       wf_rmw_depD' : G.(rmw_dep) ≡ ⦗R G⦘ ⨾ G.(rmw_dep) ⨾ ⦗R_ex G⦘ ;
-      data_in_sb' : G.(data) ⊆ G.(sb) ;
-      addr_in_sb' : G.(addr) ⊆ G.(sb) ;
-      ctrl_in_sb' : G.(ctrl) ⊆ G.(sb) ;
-      rmw_dep_in_sb' : G.(rmw_dep) ⊆ G.(sb) ;
-    }. 
-  
-  Record Wf_global (G: execution) :=
-    {
-      wf_rfE' : G.(rf) ≡ ⦗E G⦘ ⨾ G.(rf) ⨾ ⦗E G⦘ ;
-      wf_rfD' : G.(rf) ≡ ⦗W G⦘ ⨾ G.(rf) ⨾ ⦗R G⦘ ;
-      wf_rfl' : G.(rf) ⊆ same_loc G;
-      wf_rfv' : funeq (val G.(lab)) G.(rf) ;
-      wf_rff' : functional G.(rf)⁻¹ ;
-      wf_coE' : G.(co) ≡ ⦗E G⦘ ⨾ G.(co) ⨾ ⦗E G⦘ ;
-      wf_coD' : G.(co) ≡ ⦗W G⦘ ⨾ G.(co) ⨾ ⦗W G⦘ ;
-      wf_col' : G.(co) ⊆ same_loc G;
-      co_trans' : transitive G.(co) ;
-      wf_co_total' : forall ol, is_total (E G ∩₁ W G ∩₁ (fun x => loc G.(lab) x = ol)) G.(co) ;
-      co_irr' : irreflexive G.(co) ;
-      wf_init' : forall l, (exists b, E G b /\ loc G.(lab) b = Some l) -> E G (InitEvent l) ;
-      wf_init_lab' : forall l, G.(lab) (InitEvent l) = Astore Xpln Opln l 0 ;       
-    }.
-
-  (* TODO: update Coq version? *)
-  (* this lemma is mentioned on https://coq.inria.fr/library/Coq.Lists.List.html *)
-  Lemma skipn_all2 {A: Type} (l: list A) n: length l <= n -> skipn n l = [].
-  Proof. Admitted. 
-
-  Lemma sublist_items {A: Type} (whole: list A) start size result (SL: result = sublist whole start size) (FULL: length result = size):
-    forall i (INDEX: i < size), nth_error result i = nth_error whole (start + i). 
-  Proof.
-    (* TODO: simplify? *)
-    intros.
-    unfold sublist in SL.
-    assert (forall {A: Type} (pref res suf: list A) i (INDEX: i < length res), nth_error res i = nth_error (pref ++ res ++ suf) (length pref + i)).
-    { intros. induction pref.
-      - simpl. symmetry. apply nth_error_app1. auto.
-      - simpl. apply IHpref. }
-    forward eapply (@H _ (firstn start whole) result (skipn size (skipn start whole))) as H'. 
-    { rewrite FULL. eauto. }
-    assert (STRUCT: whole = firstn start whole ++ result ++ skipn size (skipn start whole)).
-    { rewrite <- (firstn_skipn start whole) at 1.
-      cut (result ++ skipn size (skipn start whole) = skipn start whole).
-      { intros. congruence. }
-      rewrite SL. apply firstn_skipn. }
-    rewrite H'. rewrite STRUCT at 4.
-    cut (length (firstn start whole) = start); auto.
-    apply firstn_length_le.
-    destruct (le_lt_dec start (length whole)); auto.
-    rewrite skipn_all2 in SL; [| omega]. rewrite firstn_nil in SL.
-    rewrite SL in FULL. simpl in FULL. omega. 
-  Qed.
-
-  Lemma init_mm_same: forall PO BPI (COMP: is_thread_block_compiled PO BPI),
-      mm_similar_states (init PO) (binit BPI).
-  Proof.
-    ins. red. simpl. splits; auto.
-    unfold init_execution. red. simpl. basic_solver. 
-  Qed.
-      
-  Lemma omm_steps_same_instrs sto sto' (STEPS: exists tid, (Ostep tid)＊ sto sto'):
-    instrs sto = instrs sto'.
-  Proof.
-    (* TODO: join with previous*)
-    destruct STEPS as [tid STEPS]. apply crt_num_steps in STEPS.
-    destruct STEPS as [n STEPS].
-    generalize dependent sto'.
-    induction n.
-    - intros sto' STEPS. simpl in STEPS. generalize STEPS. basic_solver 10.
-    - intros sto' STEPS.
-      rewrite step_prev in STEPS. destruct STEPS as [sto'' STEPS'']. desc.
-      replace (instrs sto) with (instrs sto'').
-      { red in STEPS''0. desf. red in STEPS''0. desf. }
-      symmetry. eapply IHn. eauto.
-  Qed.
-
-  Definition on_block st block :=
-    ⟪ PROG_BLOCK: block = sublist (instrs st) (pc st) (length block) ⟫ /\
-    ⟪ COMP_BLOCK: (exists oinstr, is_instruction_compiled oinstr block) ⟫.
-  
-  Definition at_compilation_block st :=
-    (exists block, on_block st block) \/ is_terminal st.
-
-  Definition oseq_step (tid : thread_id) sti1 sti2 :=
-    exists block, on_block sti1 block /\
-             (step tid) ^^ (length block) sti1 sti2. 
-
-  Lemma is_terminal_new st: pc st >= length (instrs st) <-> is_terminal st.
-  Proof. Admitted.
-
-  Lemma is_terminal_pc_bounded st: is_terminal st <-> pc st = length (instrs st).
-  Proof. Admitted. 
-
-  Definition bst_from_st st BPI b :=
-    {|
-      binstrs := BPI;
-      bpc := b;
-      bG := G st; 
-      beindex := eindex st;
-      bregf := regf st;
-      bdepf := depf st;
-      bectrl := ectrl st |}. 
-
-  Definition min_prop {A: Type} (P: list A -> Prop)
-    := forall l (Pl: P l), (forall l1 l2 (LT: l2 <> []) (SPLIT: l = l1 ++ l2), ~ P l1). 
-
-  Lemma firstn_length_leq {A: Type} (l: list A) i:
-    length (firstn i l) <= length l.
-  Proof.
-    generalize dependent l. induction i.
-    { ins. omega. }
-    ins. destruct l; vauto.
-    simpl. apply le_n_S. auto.
-  Qed. 
-    
-  (* Lemma start_block_deterministic {A: Type} P (MINPROP: min_prop P) *)
-  (*       ll *)
-  (*       (block' : list A) *)
-  (*       (* l *) *)
-  (*       (* (FLT : l = flatten (block' :: ll))         *) *)
-  (*       (NE_LL : Forall (fun l : list A => l <> []) (block' :: ll)) *)
-  (*       (P_LL : Forall P (block' :: ll)) *)
-  (*       (block : list A) *)
-  (*       (NE_B : block <> []) *)
-  (*       (BLOCK_P : P block) *)
-  (*       (BLOCK : block = firstn (length block) (flatten (block' :: ll))) *)
-  (*       (BLOCK' : block' = firstn (length block') (block' ++ flatten ll)): *)
-  (*   block = block'. *)
-  (* Proof.  *)
-  (*   assert (length block <= length (block' :: ll)) as LEN_B. *)
-  (*   { (* rewrite <- FLT in BLOCK. *) *)
-  (*     apply (@f_equal _ _ (@length _)) in BLOCK. *)
-  (*     pose proof (firstn_length_leq (block' :: ll)(length block)). *)
-  (*     simpl in *. omega. } *)
-  (*   assert (length block' <= length l) as LEN_BLOCK'.  *)
-  (*   { subst l. simpl. rewrite app_length. omega. } *)
-  (*   destruct (lt_eq_lt_dec (length block) (length block')) as [[LT | EQ] | GT]. *)
-  (*   2: { forward eapply (@firstn_ge_incl _ (block' :: ll)(length block) (length block')) as PREF; [omega| ]. *)
-  (*        rewrite EQ in PREF at 2. rewrite skipn_firstn_nil in PREF. *)
-  (*        rewrite app_nil_r in PREF. simpl in BLOCK. congruence. } *)
-  (*   { forward eapply (@firstn_ge_incl _ (block' :: ll)(length block) (length block')) as PREF; [omega| ]. *)
-  (*     exfalso. *)
-  (*     subst l. simpl in *. rewrite <- BLOCK, <- BLOCK' in PREF. *)
-  (*     inversion  P_LL. subst.  *)
-  (*     red in MINPROP. specialize (MINPROP block' H1 block (skipn (length block) block')). *)
-  (*     apply MINPROP; vauto. *)
-  (*     apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF. *)
-  (*     red. ins. apply NE_B. apply length_zero_iff_nil. *)
-  (*     apply length_zero_iff_nil in H. omega. } *)
-  (*   forward eapply (@firstn_ge_incl _ (block' :: ll)(length block') (length block)) as PREF; [omega| ]. *)
-  (*   exfalso.  *)
-  (*   subst l. simpl in *. rewrite <- BLOCK, <- BLOCK' in PREF. *)
-  (*   inversion  P_LL. subst.  *)
-  (*   red in MINPROP. specialize (MINPROP block BLOCK_P block' (skipn (length block') block)). *)
-  (*   apply MINPROP; vauto. *)
-  (*   apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF. *)
-  (*   red. ins. inversion NE_LL. subst. apply H4. *)
-  (*   apply length_zero_iff_nil.  apply length_zero_iff_nil in H. omega. *)
-  (* Qed.  *)
-
-  Lemma start_block_deterministic
-        (A : Type)
-        (P : list A -> Prop)
-        (block : list A)
-        (block' : list A)
-        (ll : list (list A))
-        (MINPROP : min_prop P)
-        (NEblock: block <> [])
-        (Pblock: P block)
-        (NE_B : block' <> [])
-        (BLOCK'_P : P block')
-        (BLOCK' : block' = firstn (length block') (flatten (block :: ll))):
-    block' = block.
-  Proof.
-    assert (block = firstn (length block) (block ++ flatten ll)) as L0. 
-    { rewrite <- Nat.add_0_r with (n := length block).
-      rewrite firstn_app_2. simpl. symmetry. apply app_nil_r. }
-    assert (length block' <= length (flatten (block :: ll))) as LEN_B.
-    { apply (@f_equal _ _ (@length _)) in BLOCK'.
-      pose proof (firstn_length_leq (flatten (block :: ll)) (length block')). omega. }
-    assert (length block <= length (flatten (block :: ll))) as LEN_L0. 
-    { simpl. rewrite app_length. omega. }
-    destruct (lt_eq_lt_dec (length block') (length block)) as [[LT | EQ] | GT].
-    2: { forward eapply (@firstn_ge_incl _ (flatten (block :: ll)) (length block') (length block)) as PREF; [omega| ].
-         rewrite EQ in PREF at 2. rewrite skipn_firstn_nil in PREF.
-         rewrite app_nil_r in PREF. simpl in BLOCK'. congruence. }
-    { forward eapply (@firstn_ge_incl _ (flatten (block :: ll)) (length block') (length block)) as PREF; [omega| ].
-      exfalso.
-      simpl in *. rewrite <- BLOCK', <- L0 in PREF.
-      red in MINPROP. specialize (MINPROP block Pblock block' (skipn (length block') block)).
-      apply MINPROP; vauto.
-      apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF.
-      red. ins. apply NE_B. apply length_zero_iff_nil.
-      apply length_zero_iff_nil in H. omega. }
-    forward eapply (@firstn_ge_incl _ (flatten (block :: ll)) (length block) (length block')) as PREF; [omega| ].
-    exfalso. 
-    simpl in *. rewrite <- BLOCK', <- L0 in PREF.
-    red in MINPROP. specialize (MINPROP block' BLOCK'_P block (skipn (length block) block')).
-    apply MINPROP; vauto.
-    apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF.
-    red. ins. apply NEblock.
-    apply length_zero_iff_nil.  apply length_zero_iff_nil in H. omega. 
-  Qed. 
-        
-  Lemma ll_l_corr {A: Type} ll (l: list A) (FLT: l = flatten ll) block b
-        (NE_LL: Forall (fun l => l <> []) ll)
-        P (MINPROP: min_prop P)
-        (P_LL: Forall P ll)
-        (NE_B: block <> [])
-        (BLOCK_P: P block):
-    block = sublist l (length (flatten (firstn b ll))) (length block)
-    <-> Some block = nth_error ll b.
-  Proof.
-    generalize dependent block. generalize dependent ll. generalize dependent l. 
-    induction b.
-    { intros. unfold sublist. rewrite FLT. simpl.
-      split.
-      { intros BLOCK. destruct ll.
-        { simpl in BLOCK. rewrite firstn_nil in BLOCK. vauto. }
-        f_equal.
-        eapply start_block_deterministic; eauto; [inv NE_LL| inv P_LL]. }
-      intros BLOCK. destruct ll; vauto. simpl.
-      rewrite <- Nat.add_0_r with (n := length l0). rewrite firstn_app_2.
-      simpl. symmetry. apply app_nil_r. } 
-    ins. destruct ll; vauto.
-    { simpl. unfold sublist. simpl. rewrite firstn_nil. vauto. }
-    simpl. rewrite app_length. unfold sublist.
-    rewrite skipn_app.
-    replace (skipn (length l0 + length (flatten (firstn b ll))) l0) with (@nil A).
-    2: { clear NE_LL. clear P_LL. induction l0.
-         { simpl. destruct (length (flatten (firstn b ll))); vauto. }
-         simpl. auto. }
-    rewrite app_nil_l.
-    replace (length l0 + length (flatten (firstn b ll)) - length l0) with (length (flatten (firstn b ll))) by omega.    
-    apply IHb; vauto.
-    { inversion NE_LL. vauto. }
-    inversion P_LL. vauto.
-  Qed. 
-
-  Lemma instr_compiled_min_prop:
-    min_prop (fun blk : list Instr.t =>
-                exists oinstr : Instr.t, is_instruction_compiled oinstr blk).
-  Proof.
-    red. intros block [oinstr COMP] block' block'' NE'' BLOCK_STRUCT.
-    red. intros [oinstr' COMP'].
-    inversion COMP; subst.
-    all: (inversion COMP'; subst; inversion H0; subst; auto).
-  Qed. 
-
-  Lemma Forall_index {A: Type} (l: list A) P:
-    Forall P l <-> forall x i (XI: Some x = nth_error l i), P x.
-  Proof.
-    split.
-    { intros FORALL x i XI.
-      forward eapply (@Forall2_index _ _ l l (fun x _ => P x)); eauto. 
-      clear XI. generalize dependent l. intros l. induction l.
-      { ins. }
-      ins. inversion FORALL. subst. apply Forall2_cons; auto. }
-    ins. induction l; auto.    
-    apply Forall_cons. split.
-    { apply H with (i := 0). auto. }
-    apply IHl. ins.
-    apply H with (i := S i). simpl. auto. 
-  Qed.
-
-  Lemma resulting_block_compiled_weak PO BPI b block
-        (COMP : itbc_weak PO BPI)
-        (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
-        (BLOCK: Some block = nth_error BPI b):
-    exists oinstr : Instr.t, is_instruction_compiled oinstr block.
-  Proof. 
-    red in COMP. desc.
-    assert (exists block0, Some block0 = nth_error BPI0 b) as [block0 BLOCK0].
-    { apply OPT_VAL, nth_error_Some.
-      replace (length BPI0) with (length BPI).
-      { apply nth_error_Some, OPT_VAL. eauto. }
-      symmetry. eapply Forall2_length. eauto. }
-    assert (exists oinstr, Some oinstr = nth_error PO b) as [oinstr OINSTR]. 
-    { apply OPT_VAL. apply nth_error_Some.
-      replace (length PO) with (length BPI).
-      { apply nth_error_Some, OPT_VAL. eauto. }
-      symmetry. apply compilation_same_length_weak. red. eauto. }
-    assert (is_instruction_compiled oinstr block0) as COMP_.
-    { eapply Forall2_index; eauto. }
-    assert (block_corrected BPI0' block0 block) as CORR.
-    { eapply Forall2_index; eauto. }
-    assert (exists oinstr0 : Instr.t, is_instruction_compiled oinstr0 block) as COMP'.
-    { inversion COMP_. 
-      6: { subst. inversion CORR. subst. inversion H3. subst.
-           inversion H1; vauto. }
-      all: (exists oinstr; subst).
-      all: (inversion CORR; subst; inversion H3; subst;
-            inversion H1; vauto).
-      all: (inversion H5; subst; inversion H2; subst; vauto). }
-    splits; auto.
-  Qed. 
-
-  Lemma resulting_block_compiled PO BPI b block
-        (COMP : is_thread_block_compiled PO BPI)
-        (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
-        (BLOCK: Some block = nth_error BPI b):
-    exists oinstr : Instr.t, is_instruction_compiled oinstr block.
-  Proof.
-    eapply resulting_block_compiled_weak; eauto. eapply itbc_implies_itbcw. eauto. 
-  Qed. 
-
-    Lemma ll_l_corr_helper BPI PI (FLT: PI = flatten BPI) block b
-        (COMP: exists PO, is_thread_block_compiled PO BPI)
-        (COMP_BLOCK: exists oinstr, is_instruction_compiled oinstr block)
-    :
-    block = sublist PI (length (flatten (firstn b BPI))) (length block)
-    <-> Some block = nth_error BPI b.
-  Proof.
-    eapply ll_l_corr with (P := fun blk => exists oinstr, is_instruction_compiled oinstr blk); vauto.
-    { desc. eapply COMPILED_NONEMPTY; eauto. }
-    { apply instr_compiled_min_prop. }
-    { clear COMP_BLOCK. eapply Forall_index. ins.
-      desc. eapply resulting_block_compiled; eauto.
-      eapply COMPILED_NONEMPTY; eauto. } 
-    desc. inversion COMP_BLOCK; vauto.
-  Qed. 
-        
-  Lemma st_bst_prog_blocks bst block (COMP: exists PO, is_thread_block_compiled PO (binstrs bst)):
-    on_block (bst2st bst) block <-> Some block = nth_error (binstrs bst) (bpc bst).
-  Proof.
-    desc.
-    assert (Forall (fun l : list Instr.t => l <> []) (binstrs bst)) as BPI_NE. 
-    { eapply COMPILED_NONEMPTY; eauto. }
-    split.
-    { intros ON_BLOCK. red in ON_BLOCK. desc.
-      unfold bst2st in PROG_BLOCK. simpl in PROG_BLOCK.
-      eapply ll_l_corr_helper in PROG_BLOCK; eauto. }
-    intros BLOCK. red.
-    forward eapply resulting_block_compiled as COMP'; eauto. 
-    splits; auto. 
-    eapply ll_l_corr_helper; vauto.
-  Qed. 
-
-  Definition on_block_pc pc PI block := 
-    ⟪BLOCK: block = sublist PI pc (length block)⟫ /\
-    ⟪COMP_BLOCK: exists oinstr : Instr.t, is_instruction_compiled oinstr block⟫. 
-  
-  (* TODO: remove it since exact instruction is known when block_start is called? *)
-  Lemma block_start pc PI block instr (BLOCK: on_block_pc pc PI block)
-        (AT_PC: Some instr = nth_error PI pc):
-    (exists mode, instr = Prog.Instr.fence mode) \/
-    (exists loc expr, instr = Prog.Instr.load Orlx loc expr) \/
-    (exists cond loc, instr = Prog.Instr.ifgoto cond loc) \/
-    (exists reg expr, instr = Prog.Instr.assign reg expr).
-  Proof.
-    red in BLOCK. desc.
-    inversion COMP_BLOCK.
-    all: subst; simpl in *.
-    (* TODO: refactor *)
-    - assert (AT_PC1: Some ld = nth_error PI pc).
-      { apply eq_trans with (y := nth_error [ld] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r pc).
-        eapply sublist_items; eauto. }
-      rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
-      right. left. subst ld. eauto.
-    - assert (AT_PC1: Some f = nth_error PI pc).
-      { apply eq_trans with (y := nth_error [f; st] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r pc).
-        eapply sublist_items; eauto. }
-      rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
-      left. subst f. eauto.
-    - assert (AT_PC1: Some f = nth_error PI pc).
-      { apply eq_trans with (y := nth_error [f; ld] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r pc).
-        eapply sublist_items; eauto. }
-      rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
-      left. subst f. eauto.
-    - assert (AT_PC1: Some f = nth_error PI pc).
-      { apply eq_trans with (y := nth_error [f; exc] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r pc).
-        eapply sublist_items; eauto. }
-      rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
-      left. subst f. eauto.
-    - assert (AT_PC1: Some asn = nth_error PI pc).
-      { apply eq_trans with (y := nth_error [asn] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r pc).
-        eapply sublist_items; eauto. }
-      rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
-      do 3 right. subst asn. eauto.
-    - assert (AT_PC1: Some igt = nth_error PI pc).
-      { apply eq_trans with (y := nth_error [igt] 0); auto.
-        rewrite <- (NPeano.Nat.add_0_r pc).
-        eapply sublist_items; eauto. }
-      rewrite <- AT_PC in AT_PC1. inversion AT_PC1.
-      do 2 right. left. subst igt. eauto.
-  Qed.
-
-  (* Lemma block_start_st st block instr (BLOCK: on_block st block) *)
-  (*       (AT_PC: Some instr = nth_error (instrs st) (pc st)): *)
-  (*   (exists mode, instr = Prog.Instr.fence mode) \/ *)
-  (*   (exists loc expr, instr = Prog.Instr.load Orlx loc expr) \/ *)
-  (*   (exists cond loc, instr = Prog.Instr.ifgoto cond loc) \/ *)
-  (*   (exists reg expr, instr = Prog.Instr.assign reg expr). *)
-  (* Proof. *)
-  (*   red in BLOCK. desc. *)
-  (*   inversion COMP_BLOCK. *)
-  (*   all: subst; simpl in *. *)
-  (*   (* TODO: refactor *) *)
-  (*   - assert (AT_PC1: Some ld = nth_error (instrs st) (pc st)). *)
-  (*     { apply eq_trans with (y := nth_error [ld] 0); auto. *)
-  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-  (*       eapply sublist_items; eauto. } *)
-  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-  (*     right. left. subst ld. eauto. *)
-  (*   - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)). *)
-  (*     { apply eq_trans with (y := nth_error [f; st0] 0); auto. *)
-  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-  (*       eapply sublist_items; eauto. } *)
-  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-  (*     left. subst f. eauto. *)
-  (*   - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)). *)
-  (*     { apply eq_trans with (y := nth_error [f; ld] 0); auto. *)
-  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-  (*       eapply sublist_items; eauto. } *)
-  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-  (*     left. subst f. eauto. *)
-  (*   - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)). *)
-  (*     { apply eq_trans with (y := nth_error [f; exc] 0); auto. *)
-  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-  (*       eapply sublist_items; eauto. } *)
-  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-  (*     left. subst f. eauto. *)
-  (*   - assert (AT_PC1: Some asn = nth_error (instrs st) (pc st)). *)
-  (*     { apply eq_trans with (y := nth_error [asn] 0); auto. *)
-  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-  (*       eapply sublist_items; eauto. } *)
-  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-  (*     do 3 right. subst asn. eauto. *)
-  (*   - assert (AT_PC1: Some igt = nth_error (instrs st) (pc st)). *)
-  (*     { apply eq_trans with (y := nth_error [igt] 0); auto. *)
-  (*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-  (*       eapply sublist_items; eauto. } *)
-  (*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-  (*     do 2 right. left. subst igt. eauto. *)
-  (* Qed. *)
-
-  Lemma block_mid pc PI block instr (BLOCK: on_block_pc pc PI block)
-        (BLOCK_LEN: length block >= 2)
-        (AT_PC1: Some instr = nth_error PI (pc + 1)):
-    (exists loc expr, instr = Prog.Instr.store Orlx loc expr) \/
-    (exists loc expr, instr = Prog.Instr.load Osc loc expr) \/
-    (exists expr loc, instr = Prog.Instr.update (Prog.Instr.exchange expr) Xpln Osc Osc exchange_reg loc).
-  Proof.
-    red in BLOCK. desc.
-    inversion COMP_BLOCK.
-    all: (rename H into OINSTR; rename H0 into BLOCK_CONTENTS).
-    all: subst block; simpl in *.
-    (* trivial cases for single instruction blocks *)
-    all: try omega.
-    (* now only 2-blocks remain*)
-    (* TODO: refactor *)
-    { assert (AT_PC1': Some st = nth_error PI (pc + 1)).
-      { apply eq_trans with (y := nth_error [f; st] 1); auto.
-        eapply sublist_items; eauto. }
-      replace instr with st; [| congruence].
-      subst st. eauto. }
-    { assert (AT_PC1': Some ld = nth_error PI (pc + 1)).
-      { apply eq_trans with (y := nth_error [f; ld] 1); auto.
-        eapply sublist_items; eauto. }
-      replace instr with ld; [| congruence].
-      subst ld. eauto. }
-    { assert (AT_PC1': Some exc = nth_error PI (pc + 1)).
-      { apply eq_trans with (y := nth_error [f; exc] 1); auto.
-        eapply sublist_items; eauto. }
-      replace instr with exc; [| congruence].
-      subst exc. eauto. }
-  Qed.
-
-  (* Lemma block_mid_st st block instr (BLOCK: on_block st block) *)
-  (*       (BLOCK_LEN: length block >= 2) *)
-  (*       (AT_PC1: Some instr = nth_error (instrs st) (pc st + 1)): *)
-  (*   (exists loc expr, instr = Prog.Instr.store Orlx loc expr) \/ *)
-  (*   (exists loc expr, instr = Prog.Instr.load Osc loc expr) \/ *)
-  (*   (exists expr loc, instr = Prog.Instr.update (Prog.Instr.exchange expr) Xpln Osc Osc exchange_reg loc). *)
-  (* Proof. *)
-  (*   red in BLOCK. desc. *)
-  (*   inversion COMP_BLOCK. *)
-  (*   all: (rename H into OINSTR; rename H0 into BLOCK_CONTENTS). *)
-  (*   all: subst block; simpl in *. *)
-  (*   (* trivial cases for single instruction blocks *) *)
-  (*   all: try omega. *)
-  (*   (* now only 2-blocks remain*) *)
-  (*   (* TODO: refactor *) *)
-  (*   { assert (AT_PC1': Some st0 = nth_error (instrs st) (pc st + 1)). *)
-  (*     { apply eq_trans with (y := nth_error [f; st0] 1); auto. *)
-  (*       eapply sublist_items; eauto. } *)
-  (*     replace instr with st0; [| congruence]. *)
-  (*     subst st0. eauto. } *)
-  (*   { assert (AT_PC1': Some ld = nth_error (instrs st) (pc st + 1)). *)
-  (*     { apply eq_trans with (y := nth_error [f; ld] 1); auto. *)
-  (*       eapply sublist_items; eauto. } *)
-  (*     replace instr with ld; [| congruence]. *)
-  (*     subst ld. eauto. } *)
-  (*   { assert (AT_PC1': Some exc = nth_error (instrs st) (pc st + 1)). *)
-  (*     { apply eq_trans with (y := nth_error [f; exc] 1); auto. *)
-  (*       eapply sublist_items; eauto. } *)
-  (*     replace instr with exc; [| congruence]. *)
-  (*     subst exc. eauto. } *)
-  (* Qed. *)
-
-  Lemma no_acb_between_pc pc1 pc2 n (PC2: pc2 = pc1 + n)
-        block (* (BLOCK: on_block st1 block) *)
-        PI (BLOCK: on_block_pc pc1 PI block)
-        (LT: n < length block) (NZ: n <> 0):
-    not ((exists block', on_block_pc pc2 PI block') \/ pc2 >= length PI).
-  Proof.
-    pose proof BLOCK as BLOCK1.
-    red in BLOCK. desc.
-    inversion COMP_BLOCK.
-    all: rename H into OINSTR.
-    all: rename H0 into BLOCK_CONTENTS.
-    all: subst block; simpl in *.
-    (* trivial cases for single instruction blocks *)
-    all: try (replace (n) with (0) in *; [vauto | omega]).
-    (* now only 2-blocks remain*)
-    all: replace n with 1 in *; [| omega].
-    (* TODO: refactor *)
-    { assert (AT_PC1: Some st = nth_error PI (pc1 + 1)).
-      { apply eq_trans with (y := nth_error [f; st] 1); auto.
-        eapply sublist_items; eauto. }
-      assert (AT_PC: Some f = nth_error PI pc1).
-      { apply eq_trans with (y := nth_error [f; st] 0); auto.
-        replace pc1 with (pc1 + 0) by omega.
-        eapply sublist_items; eauto. }
-      (* assert (NEXT_PC: pc st2 = pc st1 + 1). *)
-      (* { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
-      (*   red in STEPS. desc. red in STEPS. desc. *)
-      (*   inversion ISTEP0; auto. *)
-      (*   rewrite II, <- AT_PC in ISTEP. discriminate. } *)
-      
-      red. intros ACB2. (* red in ACB2. *)
-      destruct ACB2 as [[block2 BLOCK2]| TERM2].
-      2: { subst pc2.           
-           red in TERM2. (* rewrite NEXT_PC, SAME_INSTRS in TERM2. *)
-           pose proof (nth_error_None PI (pc1 + 1)) as CONTRA.
-           apply not_iff_compat in CONTRA. destruct CONTRA as [CONTRA _].
-           forward eapply CONTRA; [apply OPT_VAL; eauto| ].
-           ins. } 
-      forward eapply (block_start) as PC1_INSTR; eauto.
-      { rewrite PC2. eauto. }
-      forward eapply (block_mid BLOCK1) as PC1_INSTR'; eauto.
-      des.
-      all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). }
-    { assert (AT_PC1: Some ld = nth_error PI (pc1 + 1)).
-      { apply eq_trans with (y := nth_error [f; ld] 1); auto.
-        eapply sublist_items; eauto. }
-      assert (AT_PC: Some f = nth_error PI pc1).
-      { apply eq_trans with (y := nth_error [f; ld] 0); auto.
-        replace pc1 with (pc1 + 0) by omega.
-        eapply sublist_items; eauto. }
-      (* assert (NEXT_PC: pc st2 = pc st1 + 1). *)
-      (* { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
-      (*   red in STEPS. desc. red in STEPS. desc. *)
-      (*   inversion ISTEP0; auto. *)
-      (*   rewrite II, <- AT_PC in ISTEP. discriminate. } *)
-      
-      red. intros ACB2. 
-      destruct ACB2 as [[block2 BLOCK2]| TERM2].
-      2: { red in TERM2. (* rewrite NEXT_PC, SAME_INSTRS in TERM2. *)
-           pose proof (nth_error_None PI (pc1 + 1)) as CONTRA.
-           destruct CONTRA. forward eapply H0; try omega.
-           intros. rewrite H1 in AT_PC1. discriminate. }
-      forward eapply (block_start) as PC1_INSTR; eauto.
-      { rewrite PC2. eauto. }
-      forward eapply (block_mid BLOCK1) as PC1_INSTR'; eauto.
-      des.
-      all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). }
-    { assert (AT_PC1: Some exc = nth_error PI (pc1 + 1)).
-      { apply eq_trans with (y := nth_error [f; exc] 1); auto.
-        eapply sublist_items; eauto. }
-      assert (AT_PC: Some f = nth_error PI pc1).
-      { apply eq_trans with (y := nth_error [f; exc] 0); auto.
-        replace pc1 with (pc1 + 0) by omega.
-        eapply sublist_items; eauto. }      
-      red. intros ACB2. 
-      destruct ACB2 as [[block2 BLOCK2]| TERM2].
-      2: { red in TERM2. rewrite PC2 in TERM2.
-           pose proof (nth_error_None PI (pc1 + 1)) as CONTRA.
-           destruct CONTRA. forward eapply H0; try omega.
-           intros. rewrite H1 in AT_PC1. discriminate. }
-      forward eapply (block_start) as PC1_INSTR; eauto.
-      { rewrite PC2. eauto. }
-      forward eapply (block_mid BLOCK1) as PC1_INSTR'; eauto.
-      des.
-      all: (rewrite PC1_INSTR in PC1_INSTR'; discriminate). }
-  Qed. 
-    
-  Lemma no_acb_between st1 st2 tid block n (STEPS: (step tid) ^^ n st1 st2)
-        (BLOCK: on_block st1 block) (LT: n < length block) (NZ: n <> 0):
-    not (at_compilation_block st2).
-  Proof.
-    assert (SAME_INSTRS: instrs st2 = instrs st1).
-    { symmetry. apply steps_same_instrs. eexists. eapply crt_num_steps. eauto. }
-    pose proof BLOCK as BLOCK1.
-    red in BLOCK. desc.
-
-    cut (not ((exists block', on_block_pc (pc st2) (instrs st1) block') \/ (pc st2 >= length (instrs st1)))).
-    { ins. red. ins. apply H. red in H0. des.
-      { left. exists block0. red in H0.
-        rewrite SAME_INSTRS in H0. 
-        desc. red. splits; eauto. }
-      right. apply is_terminal_new in H0. congruence. }
-
-    eapply no_acb_between_pc; eauto.
-    assert (length block = 2 -> exists md, Some (Instr.fence md) = nth_error (instrs st1) (pc st1)).
-    { ins. inversion COMP_BLOCK; vauto.
-      all: subst f.
-      { exists Oacqrel.
-        apply eq_trans with (y := nth_error [Instr.fence Oacqrel; st] 0); auto.
-        replace (pc st1) with (pc st1 + 0) by omega.
-        eapply sublist_items; vauto. }
-      { exists Oacq.
-        apply eq_trans with (y := nth_error [Instr.fence Oacq; ld] 0); auto.
-        replace (pc st1) with (pc st1 + 0) by omega.
-        eapply sublist_items; vauto. }
-      exists Oacq.
-      apply eq_trans with (y := nth_error [Instr.fence Oacq; exc] 0); auto.
-      replace (pc st1) with (pc st1 + 0) by omega.
-      eapply sublist_items; vauto. }
-    inversion COMP_BLOCK; subst; simpl in *; try omega.
-    all: replace n with 1 in * by omega.
-    all: apply (same_relation_exp (pow_unit (step tid))) in STEPS.
-    all: red in STEPS; desc; red in STEPS; desc.
-    all: inversion ISTEP0; vauto.
-    all: destruct H as [md FENCE]; auto.
-    all: rewrite <- FENCE in ISTEP.
-    all: inversion ISTEP.
-  Qed.         
-
-  Lemma skipn_0 {A: Type} (l: list A): skipn 0 l = l.
-  Proof. destruct l; vauto. Qed. 
-  
-  Lemma on_block_iff_bindex BPI
-        block pc (SL: block = sublist (flatten BPI) pc (length block))
-        (COMP: exists PO, is_thread_block_compiled PO BPI):
-    (exists oinstr, is_instruction_compiled oinstr block) <->
-    exists b, Some block = nth_error BPI b /\ pc = length (flatten (firstn b BPI)). 
-  Proof.
-    split.
-    2: { ins. desc. eapply resulting_block_compiled; eauto.
-         eapply COMPILED_NONEMPTY; eauto. }
-    intros COMP_BLOCK.
-    assert (COMP': exists PO, itbc_weak PO BPI).
-    { desc. exists PO. red. red in COMP. desc. eauto. }
-    clear COMP. 
-    generalize dependent BPI.
-    set (P := fun pc =>   forall BPI : list (list Instr.t),
-  block = sublist (flatten BPI) pc (length block) ->
-  (exists PO : list Instr.t, itbc_weak PO BPI) ->
-  exists b : nat, Some block = nth_error BPI b /\ pc = length (flatten (firstn b BPI))).
-    generalize dependent pc. apply (strong_induction P).
-    intros pc IH. red. intros BPI BLOCK COMP.
-    destruct BPI as [| blk0 BPI']. 
-    { exfalso. unfold sublist in BLOCK.
-      desc. 
-      destruct pc; simpl in BLOCK; rewrite firstn_nil in BLOCK; inversion COMP_BLOCK; vauto. }
-    destruct (ge_dec pc (length blk0)) as [GE | LT].
-    { assert (block = sublist (flatten BPI') (pc - length blk0) (length block)).
-      { rewrite BLOCK at 1.
-        simpl. unfold sublist at 1.
-        rewrite skipn_app. unfold sublist.
-        rewrite firstn_app.
-        rewrite skipn_all2; [| omega]. rewrite firstn_nil. simpl.
-        rewrite Nat.sub_0_r. auto. }
-      forward eapply (IH (pc - length blk0)) as IHprev. 
-      { desc. forward eapply COMPILED_NONEMPTY_weak as NE; eauto.
-        inversion NE. subst. destruct blk0; vauto. simpl in *. omega. }
-      red in IHprev. forward eapply (IHprev BPI' H) as [b' BLOCK']. 
-      { desc. destruct PO as [| oinstr_ PO']. 
-        { red in COMP. desc. inversion COMP. subst. inversion COMP0. }
-        exists PO'. red. red in COMP. destruct COMP as [BPI0 [BPI0' [COMP CORR]]].
-        inversion CORR. subst. inversion COMP. subst. eauto. }
-      exists (S b'). desc. split; auto. 
-      simpl. rewrite app_length. omega. }
-    apply not_ge in LT.
-    assert (blk0 = firstn (length blk0) (blk0 ++ flatten BPI')) as BLK0.
-    { rewrite <- Nat.add_0_r with (n := length blk0). rewrite firstn_app_2.
-      rewrite firstn_O. symmetry. apply app_nil_r. }
-    destruct (gt_0_eq pc).
-    2: { subst. exists 0. simpl in *. split; auto. f_equal.
-         unfold sublist in BLOCK. rewrite skipn_0 in BLOCK.
-         eapply (start_block_deterministic (P := fun blk => exists oinstr, is_instruction_compiled oinstr blk)); eauto.
-         { apply instr_compiled_min_prop. }
-         { desc. pose proof (COMPILED_NONEMPTY_weak COMP).
-           inv H. }
-         { desc.
-           eapply resulting_block_compiled_weak; eauto.
-           { eapply COMPILED_NONEMPTY_weak; eauto. }
-           Unshelve. 2: exact 0. vauto. }
-         desc. inversion COMP_BLOCK; vauto. }
-    exfalso.
-    forward eapply (@no_acb_between_pc 0 pc pc) as NOACB; eauto. 
-    { Unshelve. 2: exact (blk0 ++ flatten BPI'). 
-      red. splits; vauto.
-      desc. eapply resulting_block_compiled_weak; eauto.
-      { eapply COMPILED_NONEMPTY_weak; eauto. }
-      Unshelve. 2: exact 0. auto. }
-    { omega. }
-    apply not_or in NOACB. desc.
-    apply NOACB. exists block. red. splits; eauto.
-  Qed. 
-      
-  Lemma acb_iff_bst st BPI
-        (COMP: exists PO, is_thread_compiled_with PO (instrs st) BPI):
-    at_compilation_block st <-> exists bst, ⟪ST: st = bst2st bst⟫ /\
-                                     ⟪BINSTRS: binstrs bst = BPI⟫ /\
-                                     ⟪BPC: bpc bst <= length BPI⟫. 
-  Proof.
-    split.
-    { intros ACB. desc. red in COMP. desc.
-      red in ACB. des.
-      2: { exists (bst_from_st st BPI (length BPI)). splits; auto. 
-           unfold bst2st. simpl. rewrite firstn_all. rewrite <- COMP0.
-           apply is_terminal_pc_bounded in ACB. rewrite <- ACB.
-           apply state_record_equality. }
-      red in ACB. desc. 
-      forward eapply (@on_block_iff_bindex BPI block (pc st)) as [BLOCK_INDEX _]; vauto. 
-      { congruence. }
-      forward eapply BLOCK_INDEX as [b [BLOCK PC]]; eauto.
-      exists (bst_from_st st BPI b). splits; auto.
-      2: { apply Nat.lt_le_incl. apply nth_error_Some, OPT_VAL. eauto. } 
-      unfold bst2st, bst_from_st. simpl.
-      rewrite <- PC, <- COMP0. apply state_record_equality. }
-    intros. desc. red. red in COMP. desc.
-    subst. 
-    destruct (ge_dec (bpc bst) (length (binstrs bst))) as [TERM | NONTERM].
-    { right. apply is_terminal_pc_bounded. 
-      simpl.
-      rewrite <- firstn_skipn with (n := bpc bst) (l := binstrs bst) at 2.
-      rewrite skipn_all2; [| auto]. 
-      rewrite app_nil_r. auto. }
-    apply not_ge in NONTERM. left.
-    apply nth_error_Some, OPT_VAL in NONTERM. destruct NONTERM as [block BLOCK].
-    exists block. apply st_bst_prog_blocks; eauto. 
-  Qed. 
-
-  Lemma ll_index_shift' {A: Type} (ll: list (list A)) i j
-         block (ITH: Some block = nth_error ll i) (NE: Forall (fun l => l <> []) ll)
-         (J_BOUND: j <= length ll)
-         (JI: j = i + 1):
-    length (flatten (firstn j ll)) = length (flatten (firstn i ll)) + length block.
-  Proof.
-    subst. erewrite first_end; eauto.
-    rewrite flatten_app, length_app. simpl. rewrite app_nil_r. auto.
-  Qed.       
-
-  Definition non_igt instr :=
-    ~ match instr with | Instr.ifgoto _ _ => True | _ => False end. 
-
-  Lemma regular_pc_change st1 st2 tid (STEP: step tid st1 st2)
-        instr (AT_PC: Some instr = nth_error (instrs st1) (pc st1))
-        (NOT_IGT: non_igt instr):
-    pc st2 = pc st1 + 1.
-  Proof.
-    do 2 (red in STEP; desc). red in NOT_IGT. 
-    inversion ISTEP0; auto.
-    assert (instr = instr0) by congruence. subst. vauto.
-  Qed. 
-                                                    
-  Lemma steps_pc_change st1 st2 tid block (ON_BLOCK: on_block st1 block)
-        (STEPS: (step tid) ^^ (length block) st1 st2):
-  pc st2 = pc st1 + length block \/
-  (exists (cond : Instr.expr) (addr : nat),
-      block = [Instr.ifgoto cond addr] /\ pc st2 = addr).
-  Proof.
-    red in ON_BLOCK. desc.
-    destruct block as [| instr block'].
-    { inversion COMP_BLOCK. }
-    assert ([instr] = sublist (instrs st1) (pc st1) 1).
-    { unfold sublist in *. simpl in PROG_BLOCK.
-      simpl. destruct (skipn (pc st1) (instrs st1)); vauto. }
-    assert (AT_PC: Some instr = nth_error (instrs st1) (pc st1)).
-    { apply eq_trans with (y := nth_error [instr] 0); auto.
-      rewrite <- (NPeano.Nat.add_0_r (pc st1)).
-      eapply sublist_items; eauto. }
-    destruct block' as [| instr' block''].
-    { 
-      inversion COMP_BLOCK.
-      3: { subst. simpl in *.
-           apply (same_relation_exp (seq_id_l (step tid))) in STEPS.
-           do 2 (red in STEPS; desc).
-           (* actually most cases here are nonsense, but they still fit into lemma statement *)
-           inversion ISTEP0; auto.
-           subst instr.
-           destruct (Const.eq_dec (RegFile.eval_expr (regf st1) expr) 0); auto.
-           right. exists e. exists n. split; eauto. 
-           assert (igt = Instr.ifgoto expr shift) by congruence.
-           inversion H0. auto. }    
-      all: left; subst; simpl in *.
-      all: try apply (same_relation_exp (seq_id_l (step tid))) in STEPS.
-      all: eapply regular_pc_change; vauto. }
-    left. 
-    assert ([instr;  instr'] = sublist (instrs st1) (pc st1) 2).
-    { unfold sublist in *. simpl in PROG_BLOCK.
-      simpl. destruct (skipn (pc st1) (instrs st1)); vauto.
-      destruct l; vauto. }
-    assert (AT_PC': Some instr' = nth_error (instrs st1) (pc st1 + 1)).
-    { apply eq_trans with (y := nth_error [instr; instr'] 1); auto.
-      eapply sublist_items; eauto. }
-    simpl. 
-    simpl in STEPS. red in STEPS. desc. red in STEPS. desc.
-    assert (forall st' (STEP1: step tid st1 st') (STEP2: step tid st' st2)
-              (NOT_IGT1: non_igt instr) (NOT_IGT2: non_igt instr'),
-               pc st2 = pc st1 + 2) as STEPS2_HELPER. 
-    { ins.
-      assert (pc st' = pc st1 + 1) by (eapply regular_pc_change; eauto). 
-      replace (pc st2) with (pc st' + 1); [omega| ]. 
-      symmetry. eapply regular_pc_change; eauto.
-      replace (instrs st') with (instrs st1); [congruence |].
-      do 2 (red in STEP1; desc). auto. }
-    
-    inversion COMP_BLOCK; subst; simpl in *; red in STEPS; subst; desc.
-    all: forward eapply STEPS2_HELPER; vauto.
-  Qed.
-    
-  Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
-        (COMP: exists PO, is_thread_compiled PO (instrs st1)):
-    at_compilation_block st2.
-  Proof.
-    red in OSEQ. desc.
-    red in COMP. desc. 
-    assert (exists bst1, st1 = bst2st bst1 /\ binstrs bst1 = BPI /\ bpc bst1 <= length BPI) as [bst1 [BST1 [BINSTRS1 BPC1]]].
-    { apply acb_iff_bst; eauto. red. eauto. }
-    assert (Some block = nth_error (binstrs bst1) (bpc bst1)) as BLOCK. 
-    { apply st_bst_prog_blocks; vauto.
-      exists PO. red in COMP. desc. auto. }
-    forward eapply steps_pc_change as PC2; eauto.
-    assert (forall blc (STEPS: (step tid) ^^ (length blc) st1 st2)
-              (BLC: Some blc = nth_error (binstrs bst1) (bpc bst1))
-              (PC_PLUS: pc st2 = pc st1 + length blc),
-               at_compilation_block st2) as NEXT_BLOCK. 
-    { ins. forward eapply acb_iff_bst as [_ ACB_IF_BST].  
-      { exists PO. rewrite <- (@steps_same_instrs st1 st2); eauto.
-        exists tid. apply crt_num_steps. eauto. }
-      apply ACB_IF_BST. 
-      exists (bst_from_st st2 (binstrs bst1) (bpc bst1 + 1)).
-      splits; auto.
-      2: { simpl. apply le_lt_or_eq in BPC1. destruct BPC1; [omega |]. 
-           subst.
-           pose proof (proj2 (nth_error_None (binstrs bst1) (bpc bst1))).
-           forward eapply H0; [omega| ]. ins. congruence. }      
-      unfold bst2st. simpl.
-      replace (flatten (binstrs bst1)) with (instrs st2).
-      2: { rewrite <- (@steps_same_instrs st1 st2); [subst; eauto| ].
-           exists tid. apply crt_num_steps. eauto. }
-      red in OSEQ. desc.
-      clear dependent oinstr. (* to avoid confusion with actual initial oinstr *)
-      erewrite ll_index_shift'; eauto.
-      3: { cut (bpc bst1 < length (binstrs bst1)); [ins; omega|].
-           apply nth_error_Some, OPT_VAL. vauto. }
-      2: { eapply COMPILED_NONEMPTY. Unshelve. 2: exact PO.
-           red in COMP. desc. vauto. }
-      subst st1. unfold bst2st in PC_PLUS. simpl in PC_PLUS. 
-      rewrite <- PC_PLUS. 
-      apply state_record_equality. }
-    
-    destruct PC2 as [PC2 | PC2]. 
-    - eapply NEXT_BLOCK; eauto. 
-    - desc. subst addr. (* subst block. *) simpl in *. 
-      red in COMP. desc.
-      subst BPI. 
-      red in COMP. desc. 
-      assert (exists oinstr, Some oinstr = nth_error PO (bpc bst1)) as [oinstr OINSTR]. 
-      { apply OPT_VAL. apply nth_error_Some.
-        replace (length PO) with (length (binstrs bst1)).
-        { apply nth_error_Some, OPT_VAL. eauto. }
-        symmetry. apply compilation_same_length. red; vauto. }    
-      assert (exists block0, Some block0 = nth_error BPI0 (bpc bst1)) as [block0 BLOCK0].
-      { apply OPT_VAL. apply nth_error_Some.
-        replace (length BPI0) with (length (binstrs bst1)).
-        { apply nth_error_Some, OPT_VAL. eauto. }
-        symmetry. eapply Forall2_length. eauto. }
-      assert (is_instruction_compiled oinstr block0) as COMP_BLOCK.
-      { eapply Forall2_index; eauto. } 
-      assert (block_corrected BPI0 block0 block) as CORR_BLOCK.
-      { eapply Forall2_index; eauto. } 
-      subst block.
-      inversion CORR_BLOCK. inversion H3. subst. 
-      inversion H2; vauto. subst addr.
-      inversion COMP_BLOCK. subst. 
-      simpl in OSEQ0. apply (same_relation_exp (seq_id_l (step tid))) in OSEQ0.
-      do 2 (red in OSEQ0; desc).
-      assert (instr = Instr.ifgoto cond (pc st2)).
-      { forward eapply (@near_pc (Instr.ifgoto cond (pc st2)) _ 0) as AT_PC; eauto.
-        { vauto. }
-        { apply nth_error_Some, OPT_VAL. eauto. }
-        rewrite Nat.add_0_r in AT_PC. congruence. }
-      subst instr. 
-      inversion ISTEP0. 
-      all: try discriminate.
-      destruct (Const.eq_dec (RegFile.eval_expr (regf (bst2st bst1)) expr) 0). 
-      + eapply NEXT_BLOCK; eauto. simpl.
-        apply (same_relation_exp (seq_id_l (step tid))).
-        red. eexists. red. eauto.
-      + subst.
-        inversion CORR_BLOCK. subst. inversion H4; vauto.
-        forward eapply acb_iff_bst as [_ ACB_IF_BST]. 
-        { rewrite <- INSTRS. exists PO. simpl. red. splits; eauto. 
-          vauto. }
-        apply ACB_IF_BST. 
-        exists (bst_from_st st2 (binstrs bst1) addr0). splits; auto.
-        2: { simpl.
-             replace (length (binstrs bst1)) with (length PO).
-             2: { apply compilation_same_length. vauto. }
-             eapply compilation_addresses_restricted; vauto. }
-        unfold bst2st. simpl.
-        replace (flatten (binstrs bst1)) with (instrs st2).
-        replace (length (flatten (firstn addr0 (binstrs bst1)))) with (length (flatten (firstn addr0 BPI0))).
-        2: { apply SAME_STRUCT_PREF. eapply correction_same_struct; eauto. } 
-        rewrite H5. apply state_record_equality.
-  Qed.   
-  
-  (* had to define it separately since otherwise Coq doesn't understand what P is *)
-  Definition StepProp n := forall st1 st2 tid (STEPS: (step tid) ^^ n st1 st2)
-                             bst1 (BST1: st1 = bst2st bst1)
-                             bst2 (BST2: st2 = bst2st bst2)
-                             (BOUND1: bpc bst1 <= length (binstrs bst1))
-                             (BOUND2: bpc bst2 <= length (binstrs bst2))
-                             (COMP: exists PO, is_thread_block_compiled PO (binstrs bst1))
-                             (SAME_BINSTRS: binstrs bst1 = binstrs bst2),
-      (omm_block_step tid)＊ bst1 bst2.
-
-  Lemma oseq_between_acb: forall n, StepProp n.
-  Proof.
-    apply strong_induction. 
-    unfold StepProp. intros n IH. ins. desc.
-    assert (at_compilation_block st1) as ACB1.
-    { eapply acb_iff_bst; eauto.
-      unfold is_thread_compiled_with. exists PO.
-      split; [congruence| ]. rewrite BST1. simpl. congruence. }
-    assert (at_compilation_block st2) as ACB2.
-    { forward eapply (@acb_iff_bst st2) as [_ ACB_IF_BST]; eauto.
-      { exists PO. red. split; eauto. rewrite SAME_BINSTRS. vauto. }
-      apply ACB_IF_BST. exists bst2. splits; vauto. congruence. }
-    assert (bst2st bst1 = bst2st bst2 -> (omm_block_step tid)＊ bst1 bst2) as WHEN_SAME_BST. 
-    { intros SAME_BST2ST. 
-      replace bst2 with bst1; [apply rt_refl| ].
-      rewrite blockstate_record_equality.
-      rewrite blockstate_record_equality with (bst := bst1).
-      f_equal; vauto. 
-      rewrite <- SAME_BINSTRS in BOUND2. 
-      eapply (@NONEMPTY_PREF _ (binstrs bst1)); eauto.
-      2: congruence.
-      eapply COMPILED_NONEMPTY; eauto. }
-      
-    unfold at_compilation_block in ACB1. desf. 
-    2: { destruct n.
-         { apply WHEN_SAME_BST. apply steps0 in STEPS. auto. }
-         forward eapply (@steps_sub _ (step tid) (S n) _ _ 1) as [st' STEP];
-           [omega | eauto |].
-         apply (same_relation_exp (pow_unit (step tid))) in STEP.
-         do 2 (red in STEP; desc). 
-         cut (None = nth_error (instrs (bst2st bst1)) (pc (bst2st bst1))); [congruence| ].
-         symmetry. apply nth_error_None. red in ACB1. omega. }
-    pose proof (le_lt_dec (length block) n) as LEN. destruct LEN.
-    { forward eapply (steps_split (step tid) (length block) (n - length block)) as SPLIT.
-      { symmetry. apply le_plus_minus. auto. }
-      apply SPLIT in STEPS. destruct STEPS as  [st' [PREV_STEPS NEXT_STEPS]]. clear SPLIT.
-      assert (oseq_step tid (bst2st bst1) st') as OSEQ. 
-      { red. eexists. eauto. }
-      forward eapply (oseq_continuos OSEQ) as ACB'; vauto.
-      assert (exists PO', is_thread_compiled PO' (instrs st')) as COMP'.
-      { replace (instrs st') with (instrs (bst2st bst1)); vauto.
-        apply steps_same_instrs. exists tid.
-        (* remove duplicated proof *)
-        red in OSEQ. desc. rewrite crt_num_steps. eexists. eauto. }
-      assert (LEN': n - length block < n).
-      { red in ACB1. desc. inversion COMP_BLOCK; subst; simpl in *; omega. }
-      forward eapply (@acb_iff_bst st' (binstrs bst1)) as [BST_IF_ACB _].
-      { exists PO. red. split; auto.
-        replace (instrs st') with (instrs (bst2st bst1)); auto.
-        apply steps_same_instrs; eauto. exists tid. apply crt_num_steps. eauto. }
-      specialize (BST_IF_ACB ACB'). destruct BST_IF_ACB as [bst' [BST' [SAME_BINSTRS' BPC']]]. 
-      forward eapply IH as IH_; eauto.
-      { rewrite SAME_BINSTRS'. auto. }
-      { exists PO. congruence. }
-      { congruence. }
-      apply clos_trans_in_rt. apply t_step_rt. exists bst'. split; auto. 
-      red. splits; vauto. 
-      exists block. red. splits; auto.
-      apply st_bst_prog_blocks; eauto. rewrite <- BST'. auto. }
-    destruct (NPeano.Nat.eq_0_gt_0_cases n).
-    { subst. apply steps0 in STEPS. apply WHEN_SAME_BST. auto. }
-    forward eapply no_acb_between; eauto; [omega | vauto]. 
-  Qed. 
-    
-  Definition is_block_terminal bst := bpc bst >= length (binstrs bst). 
-
-  Lemma steps_imply_ommblocks bfin (BPC_LIM: bpc bfin <= length (binstrs bfin)) tid (* (TERM: is_block_terminal bfin) *)
-        (COMP: exists PO, is_thread_block_compiled PO (binstrs bfin)):
-    let fin := (bst2st bfin) in 
-    (step tid)＊ (init (instrs fin)) fin -> (omm_block_step tid)＊ (binit (binstrs bfin)) bfin.
-  Proof.
-    intros fin STEPS. apply crt_num_steps in STEPS as [n STEPS].
-    eapply oseq_between_acb; eauto.
-    simpl. omega.
-  Qed. 
-    
   Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
         SGI (ExI: thread_execution tid PI SGI) (* (WFL: Wf_local SGI) *):
     exists SGO, Othread_execution tid PO SGO /\
@@ -1350,7 +283,9 @@ Section OCamlMM_TO_IMM_S_PROG.
     ⟪SB_SIM: sb GO ≡ restr_rel (RWO GI) (sb GI) ⟫ /\
     ⟪NO_RMW: rmw GO ≡ ∅₂ ⟫ /\
     ⟪NO_RMWDEP: rmw_dep GO ≡ ∅₂ ⟫.
-  Proof. Admitted.     
+  Proof.
+    
+  Admitted.     
 
   Lemma SUPSET_RESTR {A: Type} (r1 r2: relation A) S (INCL: r1 ⊆ r2) (RESTR: r2 ≡ ⦗S⦘ ⨾ r2 ⨾ ⦗S⦘):
     r1 ≡ ⦗S⦘ ⨾ r1 ⨾ ⦗S⦘. 
@@ -1590,724 +525,13 @@ Section OCamlMM_TO_IMM_S_PROG.
       exists b. split.
       { apply RESTR_EVENTS. auto. }
       rewrite <- H0. unfold loc. rewrite SAME_LAB; auto. }
-    intros. rewrite SAME_INIT_LAB. 
-    apply wf_init_lab. 
+    intros. rewrite SAME_INIT_LAB. apply wf_init_lab.     
   Qed.
 
   
 End OCamlMM_TO_IMM_S_PROG.
 
-Section CompCorrHelpers.
 
-  Notation "'E' G" := G.(acts_set) (at level 1).
-  Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
-  Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
-  Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
-  Notation "'F' G" := (fun a => is_true (is_nonnop_f G.(lab) a)) (at level 1).
-  Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
-  Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
-  Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
-  Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1). 
-  Notation "'R_ex' G" := (fun a => is_true (R_ex G.(lab) a)) (at level 1).
-  Notation "'hbo'" := (OCaml.hb). 
-  Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
-  Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
-
-  Fixpoint find_max_event default events :=
-    match events with
-    | [] => default
-    | ev :: events' => find_max_event (if Nat.leb (index default) (index ev) then ev else default) events'
-    end. 
-
-  Hint Resolve r_pl w_pl nonnop_f_pl acq_pl acqrel_pl sc_pl orlx_w_pl : label_ext.
-  
-  Definition step0 st1 st2 tid :=
-    ⟪STEP: step tid st1 st2 ⟫ /\
-    ⟪ADD0: G st2 = G st1⟫. 
-        
-  Definition step1 st1 st2 tid index label :=
-    ⟪STEP: step tid st1 st2 ⟫ /\
-    ⟪ADD1: exists foo bar baz bazz, G st2 = add (G st1) tid index label foo bar baz bazz⟫.
-
-  Definition step2 st1 st2 tid index label1 label2 :=
-    ⟪STEP: step tid st1 st2 ⟫ /\
-    ⟪ADD1: exists foo bar baz bazz, G st2 = add_rmw (G st1) tid index label1 label2 foo bar baz bazz⟫.
-
-  Lemma step1_index_exact st1 st2 tid index label (STEP1: step1 st1 st2 tid index label):
-    index = eindex st1 /\ eindex st2 = eindex st1 + 1. 
-  Proof.
-    red in STEP1. desc.
-    assert (forall G a b c d e f g, G <> add G a b c d e f g) as ADD_NEQ.
-    { ins. red. ins. unfold add in H.
-      apply (@f_equal _ _ acts) in H. simpl in H.
-      apply (@f_equal _ _ (@length _)) in H. simpl in H. omega. }
-    assert (forall G a b c d e f g a' b' c' d' e' f' g' h',
-               add_rmw G a' b' c' d' e' f' g' h' <> add G a b c d e f g) as ADD_RMW_NEQ.
-    { ins. red. ins. unfold add, add_rmw in H.
-      apply (@f_equal _ _ acts) in H. simpl in H.
-      apply (@f_equal _ _ (@length _)) in H. simpl in H. omega. }
-    do 2 (red in STEP; desc).
-    inversion ISTEP0.
-    all: try (rewrite UG in ADD1; apply ADD_NEQ in ADD1; by vauto).
-    all: try (rewrite UG in ADD1; apply ADD_RMW_NEQ in ADD1; by vauto).
-    all: split; auto. 
-    all: rewrite ADD1 in UG; apply (@f_equal _ _ acts) in UG; simpl in UG.
-    all: inversion UG; auto.
-  Qed. 
-        
-  Lemma step2_index_exact st1 st2 tid index label1 label2 (STEP1: step2 st1 st2 tid index label1 label2):
-    index = eindex st1 /\ eindex st2 = eindex st1 + 2. 
-  Proof.
-    red in STEP1. desc.
-    assert (forall G a b c d e f g h, G <> add_rmw G a b c d e f g h) as ADD_RMW_NEQ.
-    { ins. red. ins. unfold add in H.
-      apply (@f_equal _ _ acts) in H. simpl in H.
-      apply (@f_equal _ _ (@length _)) in H. simpl in H. omega. }
-    assert (forall G a b c d e f g a' b' c' d' e' f' g' h',
-               add G a b c d e f g <> add_rmw G a' b' c' d' e' f' g' h') as ADD_RMW_ADD_NEQ.
-    { ins. red. ins. unfold add, add_rmw in H.
-      apply (@f_equal _ _ acts) in H. simpl in H.
-      apply (@f_equal _ _ (@length _)) in H. simpl in H. omega. }
-    do 2 (red in STEP; desc).
-    inversion ISTEP0.
-    all: try (rewrite UG in ADD1; apply ADD_RMW_NEQ in ADD1; by vauto).
-    all: try (rewrite UG in ADD1; apply ADD_RMW_ADD_NEQ in ADD1; by vauto).
-    all: split; auto. 
-    all: rewrite ADD1 in UG; apply (@f_equal _ _ acts) in UG; simpl in UG.
-    all: inversion UG; auto.
-  Qed. 
-        
-  (* Lemma step2_index_increase st1 st2 tid index label1 label2 (STEP2: step2 st1 st2 tid index label1 label2): *)
-  (*   eindex st1 < eindex st2. *)
-  (* Proof. *)
-  (*   red in STEP2. desc. *)
-  (*   assert (forall G a b c d e f g h, G <> add_rmw G a b c d e f g h) as ADD_RMW_NEQ.  *)
-  (*   { ins. red. ins. unfold add_rmw in H. *)
-  (*     apply (@f_equal _ _ acts) in H. simpl in H. *)
-  (*     apply (@f_equal _ _ (@length _)) in H. simpl in H. omega. }  *)
-  (*   do 2 (red in STEP; desc). *)
-  (*   inversion ISTEP0. *)
-  (*   all: try (rewrite UG in ADD1; apply ADD_RMW_NEQ in ADD1; by vauto). *)
-  (*   all: omega. *)
-  (* Qed.  *)
-        
-
-
-  Lemma immediate_sb_repr st thread (WFT: wf_thread_state thread st):
-    immediate (sb (G st)) ≡ (fun e1 e2 =>
-                               exists ind, e1 = ThreadEvent thread ind /\
-                                      e2 = ThreadEvent thread (ind + 1) /\
-                                      ind + 1 < eindex st). 
-  Proof.
-    split.
-    { red. ins. red in H. desc.
-      unfold sb in H. apply seq_eqv_lr in H. destruct H as [Ex [ESBxy Ey]]. 
-      destruct y.
-      { red in ESBxy. destruct x; vauto. }
-      assert (thread0 = thread); [| subst thread0]. 
-      { destruct WFT. specialize (acts_rep _ Ey). desc. vauto. }
-      destruct x.
-      { destruct WFT. specialize (acts_rep _ Ex). desc. vauto. }
-      red in ESBxy. desc. subst.
-      exists index0. splits; auto.
-      2: { destruct WFT. specialize (acts_rep _ Ey). desc. inversion REP.
-           subst. omega. }
-      f_equal.
-      destruct (NPeano.Nat.eq_decidable index (index0 + 1)); auto.
-      assert (E (G st) (ThreadEvent thread (index0 + 1))) as E'.
-      { destruct WFT. specialize (acts_clos (index0 + 1)).
-        apply acts_clos.
-        specialize (acts_rep _ Ey). desc. inversion REP. omega. }
-      exfalso. apply (H0 (ThreadEvent thread (index0 + 1))).
-      all: red; apply seq_eqv_lr; splits; auto; red; splits; [auto| omega]. }
-    red. ins. desc. subst. 
-    assert (E (G st) (ThreadEvent thread ind)) as Ex. 
-    { destruct WFT. specialize (acts_clos ind).
-      subst. apply acts_clos. omega. }
-    assert (E (G st) (ThreadEvent thread (ind + 1))) as Ey. 
-    { destruct WFT. specialize (acts_clos (ind + 1)).
-      subst. apply acts_clos. omega. }
-    red. split.
-    { apply seq_eqv_lr. splits; auto. red. split; [auto| omega]. }
-    ins. apply seq_eqv_lr in R1. apply seq_eqv_lr in R2. desc. 
-    destruct c; vauto. red in R4. red in R0. desc. subst. omega. 
-  Qed. 
-    
-  Lemma singl_rel_event_repr thread ind:
-    singl_rel (ThreadEvent thread ind) (ThreadEvent thread (ind + 1)) ≡
-              (fun e1 e2 => e1 = ThreadEvent thread ind /\
-                         e2 = ThreadEvent thread (ind + 1)). 
-  Proof. basic_solver. Qed. 
-
-  Lemma step_1_label_ext_helper st1 st2 tid new_label index        
-        (STEP1: step1 st1 st2 tid index new_label)
-        n (REACH: (step tid) ^^ n (init (instrs st1)) st1):
-    let lbl_ext (S: (actid -> label) -> actid -> bool)
-                (matcher : label -> bool) :=
-        S (lab (G st2)) ≡₁ S (lab (G st1)) ∪₁ (if matcher new_label then eq (ThreadEvent tid index) else ∅) in
-    ⟪E_EXT: E (G st2) ≡₁ E (G st1) ∪₁ eq (ThreadEvent tid index) ⟫ /\
-    ⟪RMW_EXT: rmw (G st2) ≡ rmw (G st1) ⟫ /\
-    ⟪SB_EXT: E (G st1) ≡₁ ∅ \/ immediate (sb (G st2)) ≡ immediate (sb (G st1)) ∪ singl_rel (ThreadEvent tid (index - 1)) (ThreadEvent tid index) ⟫ /\
-    ⟪R_EXT: lbl_ext (@is_r actid) r_matcher ⟫ /\
-    ⟪W_EXT: lbl_ext (@is_w actid) w_matcher ⟫ /\
-    ⟪W_ORLX_EXT: lbl_ext (@is_orlx_w actid) orlx_w_matcher ⟫ /\
-    ⟪F_EXT: lbl_ext (@is_nonnop_f actid) nonnop_f_matcher ⟫ /\
-    ⟪ACQ_EXT: lbl_ext (@is_acq actid) acq_matcher ⟫ /\
-    ⟪ACQREL_EXT: lbl_ext (@is_acqrel actid) acqrel_matcher ⟫ /\
-    ⟪SC_EXT: lbl_ext (@is_sc actid) sc_matcher⟫ .
-  Proof.
-    forward eapply step1_index_exact; eauto. ins. destruct H as [H EINDEX2].  subst. 
-    red in STEP1. desc. 
-    pose proof label_set_step as LBL_STEP.
-    specialize LBL_STEP with (st1 := st1) (st2 := st2) (tid := tid).
-    assert (E (G st2) ≡₁ E (G st1) ∪₁ eq (ThreadEvent tid (eindex st1))) as E_EXT. 
-    { desc. rewrite ADD1. unfold acts_set. basic_solver. }
-    simpl. splits; auto. 
-    { desc. rewrite ADD1. basic_solver. }
-    { assert (wf_thread_state tid st1) as WFT.
-      { eapply wf_thread_state_steps with (s := init (instrs st1)); [apply wf_thread_state_init| ].
-        apply crt_num_steps. eauto. }
-      destruct (gt_0_eq (eindex st1)).
-      2: { left. split; [| basic_solver]. red. ins. red in H0.
-           destruct WFT. specialize (acts_rep x H0). desc. omega. }
-      right.
-      assert (wf_thread_state tid st1) as WFT1. 
-      { eapply wf_thread_state_steps with (s := init (instrs st1)); [apply wf_thread_state_init| ].
-        apply crt_num_steps. eauto. }
-      assert (wf_thread_state tid st2) as WFT2.
-      { eapply wf_thread_state_step; eauto. }
-      rewrite (immediate_sb_repr WFT1), (immediate_sb_repr WFT2); eauto.
-      replace (eindex st1) with ((eindex st1 - 1) + 1) at 2 by omega.
-      rewrite EINDEX2. 
-      rewrite singl_rel_event_repr.
-      split.
-      { red. ins. desc. subst. destruct (Nat.lt_decidable (ind + 1) (eindex st1)).
-        { red. left. eexists. splits; eauto. }
-        red. right. splits.
-        all: f_equal; omega. }
-      red. ins. red in H0. des.
-      { subst. eexists. splits; eauto. omega. }
-      subst. eexists. splits; eauto. omega. }
-    all: apply LBL_STEP; eauto with label_ext.
-    all: eapply nonnop_bounded; eauto with label_ext; vauto.
-  Qed. 
-              
-  Lemma step_2_label_ext_helper st1 st2 tid new_label1 new_label2 index        
-        (STEP2: step2 st1 st2 tid index new_label1 new_label2)
-        n (REACH: (step tid) ^^ n (init (instrs st1)) st1):
-    let ev1 := (ThreadEvent tid index) in
-    let ev2 := (ThreadEvent tid (index + 1)) in
-    let lbl_ext2 (S: (actid -> label) -> actid -> bool)
-                (matcher : label -> bool) :=
-        S (lab (G st2)) ≡₁ S (lab (G st1)) ∪₁ (if matcher new_label1 then eq ev1 else ∅) ∪₁ (if matcher new_label2 then eq ev2 else ∅) in
-    ⟪E_EXT: E (G st2) ≡₁ E (G st1) ∪₁ eq ev1 ∪₁ eq ev2 ⟫ /\
-    ⟪RMW_EXT: rmw (G st2) ≡ rmw (G st1) ∪ singl_rel ev1 ev2 ⟫ /\
-    ⟪SB_EXT: E (G st1) ≡₁ ∅ \/ immediate (sb (G st2)) ≡ immediate (sb (G st1)) ∪ singl_rel (ThreadEvent tid (index - 1)) ev1 ∪ singl_rel ev1 ev2 ⟫ /\
-    ⟪R_EXT: lbl_ext2 (@is_r actid) r_matcher ⟫ /\
-    ⟪W_EXT: lbl_ext2 (@is_w actid) w_matcher ⟫ /\
-    ⟪W_ORLX_EXT: lbl_ext2 (@is_orlx_w actid) orlx_w_matcher ⟫ /\
-    ⟪F_EXT: lbl_ext2 (@is_nonnop_f actid) nonnop_f_matcher ⟫ /\
-    ⟪ACQ_EXT: lbl_ext2 (@is_acq actid) acq_matcher ⟫ /\
-    ⟪ACQREL_EXT: lbl_ext2 (@is_acqrel actid) acqrel_matcher ⟫ /\
-    ⟪SC_EXT: lbl_ext2 (@is_sc actid) sc_matcher⟫ .
-  Proof.
-    forward eapply step2_index_exact; eauto. ins. destruct H as [H EINDEX2].  subst. 
-    red in STEP2. desc. 
-    pose proof label_set_rmw_step as LBL_STEP.
-    specialize LBL_STEP with (st1 := st1) (st2 := st2) (tid := tid).
-    assert (E (G st2) ≡₁ E (G st1) ∪₁ eq (ThreadEvent tid (eindex st1)) ∪₁ eq (ThreadEvent tid (eindex st1 + 1))) as E_EXT. 
-    { desc. rewrite ADD1. unfold acts_set. basic_solver. }
-    simpl. splits; auto. 
-    { desc. rewrite ADD1. unfold add_rmw. simpl. basic_solver. }
-    { assert (wf_thread_state tid st1) as WFT1. 
-      { eapply wf_thread_state_steps with (s := init (instrs st1)); [apply wf_thread_state_init| ].
-        apply crt_num_steps. eauto. }
-      assert (wf_thread_state tid st2) as WFT2.
-      { eapply wf_thread_state_step; eauto. }
-      destruct (gt_0_eq (eindex st1)).
-      2: { left. split; [| basic_solver]. red. ins. red in H0.
-           destruct WFT1. specialize (acts_rep x H0). desc. omega. }
-      right.
-      rewrite (immediate_sb_repr WFT1), (immediate_sb_repr WFT2); eauto.
-      replace (eindex st1) with ((eindex st1 - 1) + 1) at 2 by omega. 
-      do 2 rewrite singl_rel_event_repr.
-      rewrite EINDEX2. split.
-      { rewrite unionA. red. ins. desc. subst.
-        destruct (Const.lt_ge_cases (ind + 1) (eindex st1)).
-        { red. left. eexists. splits; eauto. }
-        red. right. destruct (NPeano.Nat.eq_decidable (ind + 1) (eindex st1)).
-        { red. left. splits; vauto; f_equal; omega. }
-        red. right. splits; vauto; f_equal; omega. }
-      red. ins. destruct H0 as [[SB1 | SB'] | SB''].
-      { desc. eexists. splits; eauto. omega. }
-      { desc. subst. eexists. splits; eauto. omega. }
-      desc. subst. eexists. splits; eauto. omega.
-      }
-    (* { apply LBL_STEP.  *)
-    all: apply LBL_STEP; eauto with label_ext.
-    all: eapply nonnop_bounded; eauto with label_ext; vauto.
-  Qed. 
-  
-  Lemma unique_restr x y (r: relation actid) (Rxy: r x y):
-    ⦗eq x⦘ ⨾ r ⨾ ⦗eq y⦘ ≡ singl_rel x y.
-  Proof.
-    ins. rewrite seq_eqv_lr. split.
-    { red. ins. desc. red. splits; auto. }
-    red. ins. red in H. desc. splits; vauto.
-  Qed.
-
-  Lemma step2_label_ext_helper st1 st2 tid new_label index        
-        (STEP1: step2 st1 st2 tid index new_label)
-        n (REACH: (step tid) ^^ n (init (instrs st1)) st1):
-    let lbl_ext (S: (actid -> label) -> actid -> bool)
-                (matcher : label -> bool) :=
-        S (lab (G st2)) ≡₁ S (lab (G st1)) ∪₁ (if matcher new_label then eq (ThreadEvent tid index) else ∅) in
-    ⟪E_EXT: E (G st2) ≡₁ E (G st1) ∪₁ eq (ThreadEvent tid index) ⟫ /\
-    ⟪RMW_EXT: rmw (G st2) ≡ rmw (G st1) ⟫ /\
-    ⟪SB_EXT: E (G st1) ≡₁ ∅ \/ immediate (sb (G st2)) ≡ immediate (sb (G st1)) ∪ singl_rel (ThreadEvent tid (index - 1)) (ThreadEvent tid index) ⟫ /\
-    ⟪R_EXT: lbl_ext (@is_r actid) r_matcher ⟫ /\
-    ⟪W_EXT: lbl_ext (@is_w actid) w_matcher ⟫ /\
-    ⟪W_ORLX_EXT: lbl_ext (@is_orlx_w actid) orlx_w_matcher ⟫ /\
-    ⟪F_EXT: lbl_ext (@is_nonnop_f actid) nonnop_f_matcher ⟫ /\
-    ⟪ACQ_EXT: lbl_ext (@is_acq actid) acq_matcher ⟫ /\
-    ⟪ACQREL_EXT: lbl_ext (@is_acqrel actid) acqrel_matcher ⟫ /\
-    ⟪SC_EXT: lbl_ext (@is_sc actid) sc_matcher⟫ .
-  Proof.
-  
-    
-  Lemma step_11_label_ext_helper st1 st2 st3 tid new_label1 new_label2 index1 index2
-        (IND1: index1 >= eindex st1) (IND2: index2 >= eindex st2)
-        (STEP11: step1 st1 st2 tid index1 new_label1)
-        (STEP12: step1 st2 st3 tid index2 new_label2)
-        n (REACH: (step tid) ^^ n (init (instrs st1)) st1):
-    let ev1 := (ThreadEvent tid index1) in
-    let ev2 := (ThreadEvent tid index2) in
-    let lbl_ext2 (S: (actid -> label) -> actid -> bool)
-                (matcher : label -> bool) :=
-        S (lab (G st3)) ≡₁ S (lab (G st1)) ∪₁ (if matcher new_label1 then eq ev1 else ∅) ∪₁ (if matcher new_label2 then eq ev2 else ∅) in
-    ⟪E_EXT: E (G st3) ≡₁ E (G st1) ∪₁ eq ev1 ∪₁ eq ev2 ⟫ /\
-    ⟪RMW_EXT: rmw (G st3) ≡ rmw (G st1) ⟫ /\
-    ⟪SB_EXT: (E (G st1) ≡₁ ∅ /\ sb (G st3) ≡ singl_rel ev1 ev2) \/
-             immediate (sb (G st3)) ≡ immediate (sb (G st1)) ∪ singl_rel (ThreadEvent tid (index1 - 1)) ev1 ∪ singl_rel ev1 ev2 ⟫ /\
-    ⟪R_EXT: lbl_ext2 (@is_r actid) r_matcher ⟫ /\
-    ⟪W_EXT: lbl_ext2 (@is_w actid) w_matcher ⟫ /\
-    ⟪W_ORLX_EXT: lbl_ext2 (@is_orlx_w actid) orlx_w_matcher ⟫ /\
-    ⟪F_EXT: lbl_ext2 (@is_nonnop_f actid) nonnop_f_matcher ⟫ /\
-    ⟪ACQ_EXT: lbl_ext2 (@is_acq actid) acq_matcher ⟫ /\
-    ⟪ACQREL_EXT: lbl_ext2 (@is_acqrel actid) acqrel_matcher ⟫ /\
-    ⟪SC_EXT: lbl_ext2 (@is_sc actid) sc_matcher⟫ .
-  Proof.
-    forward eapply (@step1_index_exact st1 st2) as [H EINDEX2]; eauto.
-    forward eapply (@step1_index_exact st2 st3) as [H' EINDEX3]; eauto.
-    ins. subst. 
-    forward eapply (@step_1_label_ext_helper st1 st2 tid) as STEP1; eauto.
-    red in STEP11. desc.
-    forward eapply (@step_1_label_ext_helper st2 st3 tid new_label2 (eindex st2)) as STEP2; eauto.
-    { Unshelve. 2: exact (S n). replace (instrs st2) with (instrs st1).      
-      2: { apply steps_same_instrs. exists tid. apply rt_step. auto. }
-      apply step_prev. exists st1. split; auto. }
-    simpl in *. desc. simpl. splits.
-    4: { rewrite R_EXT, R_EXT0. auto. }
-    4: { rewrite W_EXT, W_EXT0. auto. }
-    4: { rewrite W_ORLX_EXT, W_ORLX_EXT0. auto. }
-    4: { rewrite F_EXT, F_EXT0. auto. }
-    4: { rewrite ACQ_EXT, ACQ_EXT0. auto. }
-    4: { rewrite ACQREL_EXT, ACQREL_EXT0. auto. }
-    4: { rewrite SC_EXT, SC_EXT0. auto. }
-    { rewrite E_EXT, E_EXT0. auto. }
-    { rewrite RMW_EXT, RMW_EXT0. auto. }
-    { clear W_EXT. clear W_EXT0. clear W_ORLX_EXT. clear W_ORLX_EXT0. clear F_EXT. clear F_EXT0. clear ACQ_EXT. clear ACQ_EXT0. clear ACQREL_EXT. clear ACQREL_EXT0. clear SC_EXT. clear SC_EXT0. clear R_EXT. clear R_EXT0. clear RMW_EXT. clear RMW_EXT0.
-      destruct SB_EXT as [NO_E2 | E2_ADD].
-      { exfalso. generalize E_EXT0. rewrite NO_E2. basic_solver. }
-      desc.
-      destruct SB_EXT0 as [NO_E1 | E1_ADD].
-      { left. split; auto.
-        unfold sb. rewrite E_EXT, E_EXT0, NO_E1. remove_emptiness.
-        assert (forall e, ⦗eq e⦘ ⨾ ext_sb ⨾ ⦗eq e⦘ ≡ ∅₂) as EXTSB_IRR.
-        { split; [| basic_solver]. rewrite seq_eqv_lr. red. ins.
-          desc. subst. red in H0. destruct y; vauto. desc. omega. }
-        assert (forall e1 e2, index e1 > index e2 -> ⦗eq e1⦘ ⨾ ext_sb ⨾ ⦗eq e2⦘ ≡ ∅₂) as EXTSB_MON.
-        { split; [| basic_solver]. rewrite seq_eqv_lr. red. ins.
-          desc. subst. red in H. destruct x.
-          { simpl in H. omega. }
-          destruct y; vauto. simpl in H. simpl in H1. desc. omega. }
-        rewrite id_union. rewrite seq_union_l, !seq_union_r.
-        repeat rewrite EXTSB_IRR.
-        rewrite EXTSB_MON with (e1 := (ThreadEvent tid (eindex st2))). 
-        2: { simpl. omega. }
-        remove_emptiness.
-        apply unique_restr. red. split; [auto| omega]. }
-      right. rewrite E2_ADD, E1_ADD.
-      replace (eindex st2 - 1) with (eindex st1); auto. omega. }
-    Qed.          
-    
-  Lemma comm_helper tid index S:
-    eq (ThreadEvent tid index) ∩₁ S ≡₁ S ∩₁ eq (ThreadEvent tid index).
-  Proof. by ins; apply set_interC. Qed. 
-
-  Ltac discr_new_body := rewrite label_set_bound_inter; [| by eauto | by omega | by (eauto with label_ext) | by vauto].
-  Ltac discr_new := discr_new_body || (rewrite comm_helper; discr_new_body). 
-  Ltac discr_E_body := rewrite E_bound_inter; [| by eauto | by omega]. 
-  Ltac discr_E := discr_E_body || (rewrite comm_helper; discr_E_body). 
-  Ltac discr_events := rewrite diff_events_empty; [| by omega].
-  Ltac same_events := rewrite set_interK.
-  Ltac simplify_updated_sets := repeat (discr_new || discr_E || discr_events || same_events); remove_emptiness.
-
-  Ltac unfold_clear_updated st := repeat match goal with
-                            | H: ?eset ≡₁ ?eset' |- _ => try rewrite H; clear H
-                            | H: ?erel ≡ ?erel' |- _ => try rewrite H; clear H
-                              end.
-  Ltac expand_rels := try rewrite !seq_union_l; remove_emptiness; try rewrite !seq_union_r; try rewrite !set_inter_union_r; remove_emptiness; try rewrite !set_inter_union_l; remove_emptiness. 
-  Ltac by_IH IH := red in IH; desc; vauto. 
-        
-  Lemma GI_1thread_omm_premises_block bst tid PO BPI
-        (COMP: is_thread_block_compiled PO BPI) 
-        (BLOCK_STEPS: (omm_block_step tid)＊ (binit BPI) bst):
-    omm_premises_hold (bG bst).
-  Proof.
-    apply crt_num_steps in BLOCK_STEPS. destruct BLOCK_STEPS as [n_steps BLOCK_STEPS].
-    generalize dependent bst. induction n_steps.
-    { ins. red in BLOCK_STEPS. desc. subst. simpl.
-      red. simpl. splits; basic_solver. }
-    ins. red in BLOCK_STEPS. destruct BLOCK_STEPS as [bst_prev [STEPS_PREV STEP_NEXT]].
-    specialize (IHn_steps bst_prev STEPS_PREV). 
-    red in STEP_NEXT. desc.
-    assert (PO0 = PO) by admit. subst PO0. 
-    red in BLOCK_STEP. desc.
-    assert (binstrs bst_prev = BPI) as BINSTRS by admit. 
-    remember (bpc bst_prev) as b. remember (bst2st bst_prev) as st_prev.
-    rewrite BINSTRS in *.
-    assert (exists oinstr, is_instruction_compiled oinstr block) as [oinstr COMP_BLOCK].
-    { eapply resulting_block_compiled; eauto. eapply COMPILED_NONEMPTY. eauto. }
-    assert (forall i block_i, Some block_i = nth_error block i -> Some block_i = nth_error (instrs st_prev) (pc st_prev + i)) as BLOCK_CONTENTS. 
-    { ins. forward eapply (@near_pc block_i block i H bst_prev); eauto.
-      { congruence. }
-      apply nth_error_Some, OPT_VAL. exists block. congruence. }
-    assert (forall i instr (BLOCK_I: Some instr = nth_error block i) instr' (OTHER: Some instr' = nth_error (instrs st_prev) (pc st_prev + i)) (NEQ: instr <> instr'), False).
-    { admit. }
-    assert (exists k, (step tid) ^^ k (init (instrs st_prev)) st_prev) as [k REACH] by admit.
-    assert (forall st', (step tid) st_prev st' -> (step tid) ^^ (k + 1) (init (instrs st')) st') as REACH'. 
-    { ins. replace (instrs st') with (instrs st_prev).
-      2: { apply steps_same_instrs. eexists. apply rt_step. basic_solver. }
-      rewrite Nat.add_1_r. apply step_prev. eexists. splits; eauto. }   
-    assert (wf_thread_state tid st_prev) as WFT.
-    { apply wf_thread_state_steps with (s := init (instrs st_prev)); [apply wf_thread_state_init| ]. 
-      apply crt_num_steps. eauto. }
-    (* assert (forall G, W G ∩₁ ORlx G ≡₁ fun x : actid => is_orlx_w (lab G) x) as ORLX_W_ALT.  *)
-    (* { unfold set_inter, is_orlx_w. basic_solver. } *)
-
-    inv COMP_BLOCK; simpl in *.
-    all: remember (bst2st bst_prev) as st_prev.
-    { apply (same_relation_exp (seq_id_l (step tid))) in BLOCK_STEP0.
-      do 2 (red in BLOCK_STEP0; desc).
-      forward eapply (BLOCK_CONTENTS 0 ld) as INSTR; eauto.
-      inversion ISTEP0.
-      all: try (forward eapply (@H 0 ld eq_refl instr); vauto; rewrite Nat.add_0_r; vauto).
-      assert (instr = ld). 
-      { cut (Some instr = Some ld); [ins; vauto| ].
-        rewrite ISTEP, INSTR. rewrite Nat.add_0_r.
-        vauto. }
-      subst instr. inversion H0. subst ord. subst reg. subst lexpr. 
-      remember (Aload false Orlx (RegFile.eval_lexpr (regf st_prev) loc) val) as lbl. 
-      remember (bst2st bst) as st.
-      replace (init (flatten (binstrs bst_prev))) with (init (instrs st_prev)) in * by vauto. 
-      red.
-      replace (bG bst) with (G st) by vauto.
-      forward eapply step_1_label_ext_helper as LBL_EXT; eauto.
-      { red. splits; eauto. red. eexists. red. splits; eauto. }
-      simpl in LBL_EXT. desc. 
-      assert (forall max_event index (IND: index >= eindex st_prev),
-                 singl_rel max_event (ThreadEvent tid (eindex st_prev)) ⨾ rmw (G st_prev) ≡ ∅₂) as SB_RMW_HELPER. 
-      { split; [| basic_solver].
-        rewrite rmw_bibounded; vauto. 
-        red. ins. red in H1. desc. red in H1. desc. subst.
-        simpl in H2. omega. }
-      subst lbl. simpl in *.
-      des.
-      { assert (sb (G st) ≡ ∅₂) as NO_SB.
-        { split; [| basic_solver]. unfold Execution.sb.
-          rewrite E_EXT, SB_EXT. remove_emptiness.
-          rewrite seq_eqv_lr. red. ins. desc.
-          subst. unfold ext_sb in H2. desc. omega. }
-        assert (immediate (sb (G st)) ≡ ∅₂) as NO_ISB.
-        { generalize NO_SB. basic_solver. }
-        rewrite SB_EXT in *. clear SB_EXT. 
-        splits.
-        all: unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        2: by_IH IHn_steps.
-        all: basic_solver. }
-      splits.
-      { unfold_clear_updated st. expand_rels. simplify_updated_sets.
-        rewrite SB_RMW_HELPER; eauto. remove_emptiness.
-        by_IH IHn_steps. }
-      { unfold_clear_updated st. expand_rels. simplify_updated_sets.
-        by_IH IHn_steps. }
-      { unfold_clear_updated st. expand_rels. simplify_updated_sets.
-        rewrite codom_union. apply set_subset_union_r. left. 
-        by_IH IHn_steps. }
-      { unfold_clear_updated st. expand_rels. simplify_updated_sets.
-        rewrite codom_union. apply set_subset_union_r. left.
-        by_IH IHn_steps. } }
-    { apply (same_relation_exp (@seqA _ _ _ _)) in BLOCK_STEP0.
-      apply (same_relation_exp (seq_id_l (step tid ⨾ step tid))) in BLOCK_STEP0.
-      red in BLOCK_STEP0. destruct BLOCK_STEP0 as [st_prev' [STEP1 STEP2]]. 
-      do 2 (red in STEP1; desc). do 2 (red in STEP2; desc).
-      forward eapply (BLOCK_CONTENTS 0 f) as INSTR; eauto.
-      inversion ISTEP0.
-      all: try (forward eapply (@H 0 f eq_refl instr); vauto; rewrite Nat.add_0_r; vauto).
-      assert (instr = f). 
-      { cut (Some instr = Some f); [ins; vauto| ].
-        rewrite ISTEP, INSTR. rewrite Nat.add_0_r.
-        vauto. }
-      rewrite <- INSTRS, UPC in *.      
-      subst instr. inversion H0. subst ord. (* subst reg. subst lexpr.  *)
-      forward eapply (BLOCK_CONTENTS 1 st) as INSTR'; eauto.
-      inversion ISTEP2.
-      all: try (forward eapply (@H 1 st eq_refl instr0); by vauto).
-      assert (instr0 = st). 
-      { cut (Some instr0 = Some st); [ins; vauto| ].
-        rewrite ISTEP1. vauto. }
-      subst instr0. inversion H1. subst ord. subst lexpr. subst expr.
-      subst x. subst l. subst v.  
-      
-      remember (Afence Oacqrel) as lbl. 
-      remember (Astore Xpln Orlx (RegFile.eval_lexpr (regf st_prev') loc)) as lbl'.
-      rename st into st_.
-      remember (bst2st bst) as st.
-      replace (init (flatten (binstrs bst_prev))) with (init (instrs st_prev)) in * by vauto. 
-      red.
-      replace (bG bst) with (G st) by vauto.
-      forward eapply (@step_11_label_ext_helper st_prev st_prev' st) as LBL_EXT; eauto.
-      { red. splits; eauto. do 2 (red; eexists); eauto. } 
-      { red. splits; eauto. red. eexists. red. splits.
-        { congruence. }
-        exists st_. splits; eauto. rewrite INSTR'. f_equal; vauto. } 
-
-      rewrite Heqlbl, Heqlbl' in LBL_EXT. simpl in LBL_EXT. desc. 
-      remember (ThreadEvent tid (eindex st_prev)) as ev.
-      remember (ThreadEvent tid (eindex st_prev')) as ev'. 
-      destruct SB_EXT as [[NO_E SB_TRIVIAL] | SB_EXT]. 
-      { assert (immediate (sb (G st)) ≡ singl_rel ev ev') as IMM_SB. 
-        { rewrite SB_TRIVIAL. split; [basic_solver| ].
-          red. ins. red. split; auto.
-          ins. red in H2, R1, R2. desc. subst.
-          inversion R2. rewrite UINDEX in H3. simpl in H3. omega. }
-        rewrite NO_E in *. (* clear NO_E. *)
-        subst ev ev'. rewrite UINDEX in *. 
-        splits. all: try rewrite IMM_SB.
-        { rewrite E_EXT, RMW_EXT. 
-          rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)). rewrite NO_E.
-          unfold_clear_updated st; expand_rels; simplify_updated_sets.          
-          basic_solver 10. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
-          by_IH IHn_steps. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
-          basic_solver 10. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
-          basic_solver. }
-      } 
-      
-      splits.
-      { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        assert (forall {A: Type} (x y: A), singl_rel x y ≡ ⦗eq x⦘ ⨾ singl_rel x y ⨾ ⦗eq y⦘) as singl_rel_restr. 
-        { ins. basic_solver. }          
-        assert (forall x d, singl_rel x (ThreadEvent tid (eindex st_prev + d)) ⨾ rmw (G st_prev) ≡ ∅₂).
-        { ins. rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)).
-          rewrite singl_rel_restr. rewrite !seqA. rewrite <- seqA with (r2 := ⦗E (G st_prev)⦘).
-          rewrite <- id_inter. simplify_updated_sets. basic_solver. }
-        rewrite <- Nat.add_0_r with (n := (eindex st_prev)) at 4. 
-        repeat rewrite H2. remove_emptiness.
-        rewrite id_union. expand_rels.
-        assert (forall {A: Type} (D: A -> Prop) r, immediate (restr_rel D r) ≡ restr_rel D (immediate (restr_rel D r))).
-        { ins. basic_solver. }
-        unfold sb at 2. rewrite <- restr_relE, H3, restr_relE.
-        rewrite !seqA. rewrite <- seqA with (r1 := ⦗eq (ThreadEvent tid (eindex st_prev))⦘).
-        rewrite <- id_inter. simplify_updated_sets.
-        arewrite (⦗@set_empty actid⦘ ≡ ∅₂) by basic_solver. remove_emptiness.
-        by_IH IHn_steps. }
-      { unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        by_IH IHn_steps. }
-      { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        apply set_subset_union_l. split; [| basic_solver 10]. 
-        rewrite id_union. expand_rels.
-        repeat rewrite codom_union. 
-        repeat (apply set_subset_union_r; left).
-        by_IH IHn_steps. }
-      { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        rewrite id_union. expand_rels.
-        repeat rewrite codom_union. 
-        repeat (apply set_subset_union_r; left).
-        by_IH IHn_steps. } }
-    { apply (same_relation_exp (@seqA _ _ _ _)) in BLOCK_STEP0.
-      apply (same_relation_exp (seq_id_l (step tid ⨾ step tid))) in BLOCK_STEP0.
-      red in BLOCK_STEP0. destruct BLOCK_STEP0 as [st_prev' [STEP1 STEP2]]. 
-      do 2 (red in STEP1; desc). do 2 (red in STEP2; desc).
-      forward eapply (BLOCK_CONTENTS 0 f) as INSTR; eauto.
-      inversion ISTEP0.
-      all: try (forward eapply (@H 0 f eq_refl instr); vauto; rewrite Nat.add_0_r; vauto).
-      assert (instr = f). 
-      { cut (Some instr = Some f); [ins; vauto| ].
-        rewrite ISTEP, INSTR. rewrite Nat.add_0_r.
-        vauto. }
-      rewrite <- INSTRS, UPC in *.      
-      subst instr. inversion H0. subst ord. (* subst reg. subst lexpr.  *)
-      forward eapply (BLOCK_CONTENTS 1 ld) as INSTR'; eauto.
-      inversion ISTEP2.
-      all: try (forward eapply (@H 1 ld eq_refl instr0); by vauto).
-      assert (instr0 = ld). 
-      { cut (Some instr0 = Some ld); [ins; vauto| ].
-        rewrite ISTEP1. vauto. }
-      subst instr0. inversion H1. subst ord. subst lexpr. subst reg.
-      (* subst x. *)
-      subst l.
-      (* subst val.   *)
-      
-      remember (Afence Oacq) as lbl. 
-      remember (Aload false Osc (RegFile.eval_lexpr (regf st_prev') loc) val) as lbl'.
-      remember (bst2st bst) as st.
-      replace (init (flatten (binstrs bst_prev))) with (init (instrs st_prev)) in * by vauto. 
-      red.
-      replace (bG bst) with (G st) by vauto.
-      forward eapply (@step_11_label_ext_helper st_prev st_prev' st) as LBL_EXT; eauto.
-      { red. splits; eauto. do 2 (red; eexists); eauto. } 
-      { red. splits; eauto. red. eexists. red. splits.
-        { congruence. }
-        exists ld. splits; eauto. rewrite INSTR'. f_equal; vauto. } 
-
-      rewrite Heqlbl, Heqlbl' in LBL_EXT. simpl in LBL_EXT. desc. 
-      remember (ThreadEvent tid (eindex st_prev)) as ev.
-      remember (ThreadEvent tid (eindex st_prev')) as ev'. 
-      destruct SB_EXT as [[NO_E SB_TRIVIAL] | SB_EXT]. 
-      { assert (immediate (sb (G st)) ≡ singl_rel ev ev') as IMM_SB. 
-        { rewrite SB_TRIVIAL. split; [basic_solver| ].
-          red. ins. red. split; auto.
-          ins. red in H2, R1, R2. desc. subst.
-          inversion R2. rewrite UINDEX in H3. simpl in H3. omega. }
-        rewrite NO_E in *. (* clear NO_E. *)
-        subst ev ev'. rewrite UINDEX in *. 
-        splits. all: try rewrite IMM_SB.
-        { rewrite E_EXT, RMW_EXT. 
-          rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)). rewrite NO_E.
-          unfold_clear_updated st; expand_rels; simplify_updated_sets.          
-          basic_solver 10. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
-          rewrite wft_rmwE at 2; eauto. fold (acts_set (G st_prev)).
-          rewrite !seqA. repeat seq_rewrite <- id_inter.
-          unfold_clear_updated st; expand_rels; simplify_updated_sets.
-          repeat rewrite id_inter. rewrite !seqA.
-          unfold acts_set. seq_rewrite <- wft_rmwE; eauto. 
-          by_IH IHn_steps. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
-          basic_solver 10. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
-          basic_solver 10. }
-      } 
-      
-      splits.
-      { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        assert (forall {A: Type} (x y: A), singl_rel x y ≡ ⦗eq x⦘ ⨾ singl_rel x y ⨾ ⦗eq y⦘) as singl_rel_restr. 
-        { ins. basic_solver. }          
-        assert (forall x d, singl_rel x (ThreadEvent tid (eindex st_prev + d)) ⨾ rmw (G st_prev) ≡ ∅₂).
-        { ins. rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)).
-          rewrite singl_rel_restr. rewrite !seqA. rewrite <- seqA with (r2 := ⦗E (G st_prev)⦘).
-          rewrite <- id_inter. simplify_updated_sets. basic_solver. }
-        rewrite set_interA with (s'' := eq (ThreadEvent tid (eindex st_prev + 1))). simplify_updated_sets. 
-        rewrite singl_rel_restr. rewrite singl_rel_restr with (y := (ThreadEvent tid (eindex st_prev + 1))). 
-        rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)).
-        rewrite !seqA. repeat seq_rewrite <- id_inter.
-        simplify_updated_sets.
-        repeat rewrite eqv_empty. remove_emptiness.
-        rewrite id_union, seq_union_l.
-        (* TODO: refactor with previous case; also maybe add tactic especially for rmw; add id_inter folding into simplification *)
-        assert (forall {A: Type} (D: A -> Prop) r, immediate (restr_rel D r) ≡ restr_rel D (immediate (restr_rel D r))).
-        { ins. basic_solver. }
-        arewrite (⦗eq (ThreadEvent tid (eindex st_prev))⦘
-                    ⨾ immediate (sb (G st_prev)) ≡ ∅₂).
-        { unfold sb. rewrite <- restr_relE, H3, restr_relE.
-          seq_rewrite <- id_inter. simplify_updated_sets. basic_solver. }
-        remove_emptiness. unfold acts_set. rewrite <- wft_rmwE; eauto.
-        by_IH IHn_steps. }
-      { unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        rewrite wft_rmwE at 2; eauto. fold (acts_set (G st_prev)).
-        rewrite !seqA. repeat seq_rewrite <- id_inter.
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        subst ev ev'. simplify_updated_sets. repeat rewrite id_inter.
-        rewrite !seqA.
-        unfold acts_set. seq_rewrite <- wft_rmwE; eauto. 
-        by_IH IHn_steps. }
-      { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        rewrite unionA, codom_union. apply set_subset_union_r. left.
-        by_IH IHn_steps. }
-      { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
-        rewrite set_interA with (s'' := eq (ThreadEvent tid (eindex st_prev + 1))). simplify_updated_sets. 
-        rewrite id_union. apply set_subset_union_l. split.
-        { expand_rels.
-          repeat rewrite codom_union. 
-          repeat (apply set_subset_union_r; left).
-          by_IH IHn_steps. }
-        repeat rewrite codom_union. 
-        repeat (apply set_subset_union_r; right).
-        basic_solver 10. }
-    }
-    { apply (same_relation_exp (@seqA _ _ _ _)) in BLOCK_STEP0.
-      apply (same_relation_exp (seq_id_l (step tid ⨾ step tid))) in BLOCK_STEP0.
-      red in BLOCK_STEP0. destruct BLOCK_STEP0 as [st_prev' [STEP1 STEP2]]. 
-      do 2 (red in STEP1; desc). do 2 (red in STEP2; desc).
-      forward eapply (BLOCK_CONTENTS 0 f) as INSTR; eauto.
-      inversion ISTEP0.
-      all: try (forward eapply (@H 0 f eq_refl instr); vauto; rewrite Nat.add_0_r; vauto).
-      assert (instr = f). 
-      { cut (Some instr = Some f); [ins; vauto| ].
-        rewrite ISTEP, INSTR. rewrite Nat.add_0_r.
-        vauto. }
-      rewrite <- INSTRS, UPC in *.      
-      subst instr. inversion H0. subst ord. (* subst reg. subst lexpr.  *)
-      forward eapply (BLOCK_CONTENTS 1 exc) as INSTR'; eauto.
-      inversion ISTEP2.
-      all: try (forward eapply (@H 1 exc eq_refl instr0); by vauto).
-      assert (instr0 = exc). 
-      { cut (Some instr0 = Some exc); [ins; vauto| ].
-        rewrite ISTEP1. vauto. }
-      subst instr0. inversion H1. subst new_expr xmod ordr ordw reg loc_expr loc0.
-      foobar_update_following. 
-      remember (Afence Oacq) as lbl. 
-      remember (Aload false Osc (RegFile.eval_lexpr (regf st_prev') loc) val) as lbl'.
-      remember (bst2st bst) as st.
-      replace (init (flatten (binstrs bst_prev))) with (init (instrs st_prev)) in * by vauto. 
-      red.
-      replace (bG bst) with (G st) by vauto.
-
-      (* subst val.   *) 
-  Admitted. 
-
-  Lemma GI_1thread_omm_premises tid PO PI (COMP: is_thread_compiled PO PI) Gi
-        (EXEC: thread_execution tid PI Gi):
-    omm_premises_hold Gi.
-  Proof.
-    red in EXEC. destruct EXEC as [st_fin [STEPS [TERM GRAPH]]]. 
-    red in COMP. desc. red in COMP. desc.
-    set (bst_fin := bst_from_st st_fin BPI (length BPI)).
-    assert (st_fin = bst2st bst_fin) as BST.
-    { replace PI with (instrs st_fin) in *.
-      2: { apply eq_trans with (y := instrs (init PI)); auto.
-           symmetry. apply steps_same_instrs. eauto. }
-      unfold bst2st. simpl. rewrite firstn_all.
-      red in TERM. apply is_terminal_pc_bounded in TERM. 
-      rewrite <- COMP0 in *.
-      rewrite <- TERM. apply state_record_equality. }
-    forward eapply (@steps_imply_ommblocks bst_fin) as BLOCK_STEPS; eauto.
-    { simpl. rewrite <- COMP0, <- BST. eauto. }
-    replace Gi with (bG bst_fin).
-    eapply GI_1thread_omm_premises_block; eauto. 
-  Qed. 
-
-End CompCorrHelpers.
 
 Section CorrectedDefinitions.
 
@@ -2329,11 +553,11 @@ Section CorrectedDefinitions.
   
   Lemma program_execution_equiv (prog : Prog.t) G:
     program_execution_corrected prog G <-> program_execution prog G.
-  Proof. Admitted. 
+  Proof. Admitted.
 
   Lemma Oprogram_execution_equiv prog G (OPROG: OCamlProgram prog):
     Oprogram_execution_corrected OPROG G <-> Oprogram_execution OPROG G.
-  Proof. Admitted. 
+  Proof. Admitted.
 
 End CorrectedDefinitions.   
 
@@ -2342,9 +566,8 @@ Section CompilationCorrectness.
   Notation "'E' G" := G.(acts_set) (at level 1).
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
   Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
-  Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
-  (* Warning: F implicitly means at least acq/rel fence *)
-  Notation "'F' G" := (fun a => is_true (is_nonnop_f G.(lab) a)) (at level 1).
+  Notation "'RW' G" := (R G ∪₁ W G) (at level 1).  
+  Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1).
   Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
   Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
@@ -2455,11 +678,60 @@ Section CompilationCorrectness.
     
   (* Admitted.   *)
 
+  Lemma programs_without_tid_init: ~ (IdentMap.In tid_init ProgI).
+  Proof. Admitted. 
+
   Lemma omm_premises_thread_local:
     (forall tid Pi (THREAD: Some Pi = IdentMap.find tid ProgI)
        Gi (THREAD_Gi: thread_restricted_execution GI tid Gi),
         omm_premises_hold Gi) -> omm_premises_hold GI.
-  Proof. Admitted. 
+  Proof.
+    intros THREADS_OMM. red in ExecI. destruct ExecI as [E_STRUCT RESTRS].
+    red. 
+    (* assert (E GI ≡₁ E GI ∩₁ is_init ∪₁ E GI ∩₁ set_bunion (fun thread => IdentMap.In thread ProgI) (fun thread e => exists ind, e = ThreadEvent thread ind)). *)
+    (* { split; [| basic_solver]. *)
+    (*   red. ins. specialize (E_STRUCT _ H). des. *)
+    (*   { left. basic_solver. } *)
+    (*   right. split; auto. *)
+    (*   red. *)
+    (*   destruct x. *)
+    (*   { simpl in E_STRUCT. apply programs_without_tid_init in E_STRUCT. vauto. } *)
+    (*   simpl in *.  *)
+    (*   assert (exists Pi, Some Pi = IdentMap.find thread ProgI) as [Pi THREAD].  *)
+    (*   { apply find_iff_in. auto. } *)
+    (*   eexists. splits; vauto. } *)
+    assert (E GI ≡₁ E GI ∩₁ set_bunion (fun thread => IdentMap.In thread ProgI \/ thread = tid_init) (fun thread e => tid e = thread)).
+    { split; [| basic_solver].
+      apply set_subset_inter_r. split; [basic_solver| ]. 
+      red. ins. red. specialize (E_STRUCT _ H).
+      des.
+      { unfold is_init in E_STRUCT. simpl in E_STRUCT. destruct x; vauto.
+        eexists; vauto. }
+      destruct x.
+      { simpl in E_STRUCT. apply programs_without_tid_init in E_STRUCT. vauto. }
+      simpl in *. 
+      assert (exists Pi, Some Pi = IdentMap.find thread ProgI) as [Pi THREAD]. 
+      { apply find_iff_in. auto. }
+      eexists. splits; vauto. }
+    splits.
+    { rewrite H. do 2 rewrite set_interA. rewrite <- set_bunion_inter_compat_r.
+      rewrite (wf_rmwE WFI). repeat rewrite <- seqA with (r3 := ⦗E GI⦘).
+      rewrite codom_eqv1.
+      rewrite set_interC. rewrite <- set_bunion_inter_compat_r.
+      rewrite H at 2. do 2 rewrite <- set_bunion_inter_compat_l.
+      apply set_equiv_bunion; auto.
+      intros thread THREAD. des.
+      2: { subst. rewrite set_interC with (s := W GI), <- set_interA.
+           arewrite (Tid_ tid_init ∩₁ Sc GI ≡₁ ∅).
+           {
+             (* split; [| basic_solver]. *)
+             (* arewrite (Tid_ tid_init ≡₁ (fun a : actid => is_init a)). *)
+             (* { unfold is_init. type_solver 100.  *)
+             (* rewrite (init_pln WFI).  *)
+             admit. (* should state that is_init <-> Tid_ tid_init *) }
+           admit. }
+      
+  Admitted. 
 
   Lemma GI_omm_premises : omm_premises_hold GI.
   Proof.
@@ -2492,14 +764,240 @@ Section CompilationCorrectness.
         (LOC_SEP: locations_separated Prog): locations_separated Prog'.
   Proof. Admitted. 
 
-  Lemma instr_of_event Prog G (EXEC: program_execution Prog G):
-    exists (f: actid -> Prog.Instr.t),
-      forall e (Ee: E G e) (NINITe: ~ is_init e)
-        l (LOC: Some l = loc (lab G) e),
-      exists tid Pi, Some Pi = IdentMap.find tid Prog /\
-                In (f e) Pi /\ In l (instr_locs (f e))
-                /\ Some (Events.mod G.(lab) e) = instr_mode (f e). 
+  Lemma E_restr_iff G Gi tid e (TRE: thread_restricted_execution G tid Gi)
+    (TID: Events.tid e = tid):
+    E G e <-> E Gi e.
+  Proof.
+    destruct TRE.
+    rewrite (proj1 (@set_equiv_exp_iff _ _ _) tr_acts_set).
+    unfold set_inter. subst. intuition. 
+  Qed. 
+    
+  Definition event_instr_prop st thread Pi :=
+    forall ind (Est: E (G st) (ThreadEvent thread ind)) l (LOC: Some l = loc (lab (G st)) (ThreadEvent thread ind)),
+    exists instr,
+      In instr Pi /\
+      In l (instr_locs instr) /\
+      (Some (Events.mod (lab (G st)) (ThreadEvent thread ind)) = instr_mode instr).
+
+  Lemma ordr_ordw_eq instr cas reg lexpr ordr ordw xmod (INSTR: instr = Instr.update cas xmod ordr ordw reg lexpr) Pi (COMP: exists PO, is_thread_compiled PO Pi) (IN: In instr Pi):
+    ordr = ordw.
   Proof. Admitted. 
+
+  Lemma EIP_steps st thread n_steps (REACH: (step thread) ^^ n_steps (init (instrs st)) st) (COMP: exists PO, is_thread_compiled PO (instrs st)):
+    event_instr_prop st thread (instrs st).
+  Proof.
+    generalize dependent st. induction n_steps.
+    { ins. red in REACH. desc. rewrite <- REACH. simpl.
+      red. ins. }
+    ins. red. ins.
+    red in REACH. destruct REACH as [st_prev [REACH_PREV STEP]].
+    assert (wf_thread_state thread st_prev) as WFTprev.
+    { eapply wf_thread_state_steps with (s := init (instrs st)); [apply wf_thread_state_init| ]; eauto.
+      apply crt_num_steps. eauto. }
+    assert (wf_thread_state thread st) as WFT.
+    { eapply wf_thread_state_step; eauto. }
+    assert (instrs st_prev = instrs st) as INSTRS_SAME.
+    { apply steps_same_instrs. eexists. apply rt_step. eauto. }
+    rewrite <- INSTRS_SAME in REACH_PREV. 
+    assert (ind < eindex st) as LT.
+    { destruct WFT. specialize (acts_rep _ Est). desc.
+      inversion REP. subst. vauto. }
+    destruct COMP as [PO COMP]. 
+    destruct (Nat.lt_ge_cases ind (eindex st_prev)) as [LTprev | GEprev]. 
+    { assert (E (G st_prev) (ThreadEvent thread ind)) as Eprev.
+      { destruct WFTprev. apply acts_clos. auto. }
+      specialize_full IHn_steps; eauto. 
+      { exists PO. congruence. }
+      red in IHn_steps. specialize_full IHn_steps; eauto.
+      { unfold loc. erewrite <- step_preserves_lab; eauto. }
+      desc. eexists. splits; eauto.
+      { congruence. }
+      unfold Events.mod. erewrite step_preserves_lab; eauto. }
+    assert (forall S' (EXT: E (G st) ≡₁ E (G st_prev) ∪₁ S'), S' (ThreadEvent thread ind)) as EVENT_EXT.
+    { ins. rewrite (set_equiv_exp EXT) in Est. red in Est. des; auto.
+      destruct WFTprev. specialize (acts_rep _ Est). desc.
+      inversion REP. omega. }
+    (* TODO: refactor *)
+    do 2 (red in STEP; desc). inversion ISTEP0.
+    1,2: by omega. 
+    { exists instr.
+      forward eapply (@step_1_label_ext_helper st_prev st) as LBL_EXT; eauto.
+      { red. splits; eauto. do 2 (red; eexists); eauto. } 
+      simpl in LBL_EXT. desc. 
+      apply EVENT_EXT in E_EXT. inversion E_EXT. subst.
+      splits.
+      { apply nth_error_In with (n := pc st_prev). congruence. }
+      { move LOC at bottom. move UG at bottom. 
+        unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
+        rewrite upds in LOC. inversion LOC. subst.
+        destruct lexpr; vauto. simpl.
+        destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
+      simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
+      rewrite upds. auto. }
+    { exists instr.
+      forward eapply (@step_1_label_ext_helper st_prev st) as LBL_EXT; eauto.
+      { red. splits; eauto. do 2 (red; eexists); eauto. } 
+      simpl in LBL_EXT. desc. 
+      apply EVENT_EXT in E_EXT. inversion E_EXT. subst.
+      splits.
+      { apply nth_error_In with (n := pc st_prev). congruence. }
+      { move LOC at bottom. move UG at bottom. 
+        unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
+        rewrite upds in LOC. inversion LOC. subst.
+        destruct lexpr; vauto. simpl.
+        destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
+      simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
+      rewrite upds. auto. }
+    { exists instr.
+      forward eapply (@step_1_label_ext_helper st_prev st) as LBL_EXT; eauto.
+      { red. splits; eauto. do 2 (red; eexists); eauto. } 
+      simpl in LBL_EXT. desc. 
+      apply EVENT_EXT in E_EXT. inversion E_EXT. subst.
+      rewrite UG in LOC. simpl in LOC.
+      unfold loc in LOC. rewrite upds in LOC. vauto. }
+    { exists instr.
+      forward eapply (@step_1_label_ext_helper st_prev st) as LBL_EXT; eauto.
+      { red. splits; eauto. do 2 (red; eexists); eauto. } 
+      simpl in LBL_EXT. desc. 
+      apply EVENT_EXT in E_EXT. inversion E_EXT. subst.
+      splits.
+      { apply nth_error_In with (n := pc st_prev). congruence. }
+      { move LOC at bottom. move UG at bottom. 
+        unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
+        rewrite upds in LOC. inversion LOC. subst.
+        destruct lexpr; vauto. simpl.
+        destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
+      simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
+      rewrite upds. auto. }
+    { exists instr.
+      forward eapply (@step_2_label_ext_helper st_prev st) as LBL_EXT; eauto.
+      { red. splits; eauto. do 2 (red; eexists); eauto. } 
+      simpl in LBL_EXT. desc. 
+      rewrite set_unionA in E_EXT. apply EVENT_EXT in E_EXT.
+      red in E_EXT. destruct E_EXT as [E_EXT | E_EXT].
+      { inversion E_EXT. subst.
+        splits.
+        { apply nth_error_In with (n := pc st_prev). congruence. }
+        { move LOC at bottom. move UG at bottom. 
+          unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
+          rewrite updo in LOC; [| intros C; inversion C; omega].
+          rewrite upds in LOC. inversion LOC. subst.
+          destruct lexpr; vauto. simpl.
+          destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
+        simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
+        rewrite updo; [| intros C; inversion C; omega].
+        rewrite upds. auto. }
+      { forward eapply (ordr_ordw_eq II) as ORD_EQ; eauto. 
+        { apply nth_error_In with (n := pc st_prev). congruence. }        
+        inversion E_EXT. subst.
+        splits.
+        { apply nth_error_In with (n := pc st_prev). congruence. }
+        { move LOC at bottom. move UG at bottom. 
+          unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
+          rewrite upds in LOC. inversion LOC. subst.
+          destruct lexpr; vauto. simpl.
+          destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
+        simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
+        rewrite upds. auto. } }      
+{ exists instr.
+      forward eapply (@step_2_label_ext_helper st_prev st) as LBL_EXT; eauto.
+      { red. splits; eauto. do 2 (red; eexists); eauto. } 
+      simpl in LBL_EXT. desc. 
+      rewrite set_unionA in E_EXT. apply EVENT_EXT in E_EXT.
+      red in E_EXT. destruct E_EXT as [E_EXT | E_EXT].
+      { inversion E_EXT. subst.
+        splits.
+        { apply nth_error_In with (n := pc st_prev). congruence. }
+        { move LOC at bottom. move UG at bottom. 
+          unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
+          rewrite updo in LOC; [| intros C; inversion C; omega].
+          rewrite upds in LOC. inversion LOC. subst.
+          destruct lexpr; vauto. simpl.
+          destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
+        simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
+        rewrite updo; [| intros C; inversion C; omega].
+        rewrite upds. auto. }
+      { forward eapply (ordr_ordw_eq II) as ORD_EQ; eauto. 
+        { apply nth_error_In with (n := pc st_prev). congruence. }        
+        inversion E_EXT. subst.
+        splits.
+        { apply nth_error_In with (n := pc st_prev). congruence. }
+        { move LOC at bottom. move UG at bottom. 
+          unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
+          rewrite upds in LOC. inversion LOC. subst.
+          destruct lexpr; vauto. simpl.
+          destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
+        simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
+        rewrite upds. auto. } }
+{ exists instr.
+      forward eapply (@step_2_label_ext_helper st_prev st) as LBL_EXT; eauto.
+      { red. splits; eauto. do 2 (red; eexists); eauto. } 
+      simpl in LBL_EXT. desc. 
+      rewrite set_unionA in E_EXT. apply EVENT_EXT in E_EXT.
+      red in E_EXT. destruct E_EXT as [E_EXT | E_EXT].
+      { inversion E_EXT. subst.
+        splits.
+        { apply nth_error_In with (n := pc st_prev). congruence. }
+        { move LOC at bottom. move UG at bottom. 
+          unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
+          rewrite updo in LOC; [| intros C; inversion C; omega].
+          rewrite upds in LOC. inversion LOC. subst.
+          destruct loc_expr; vauto. simpl.
+          destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
+        simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
+        rewrite updo; [| intros C; inversion C; omega].
+        rewrite upds. auto. }
+      { forward eapply (ordr_ordw_eq II) as ORD_EQ; eauto. 
+        { apply nth_error_In with (n := pc st_prev). congruence. }        
+        inversion E_EXT. subst.
+        splits.
+        { apply nth_error_In with (n := pc st_prev). congruence. }
+        { move LOC at bottom. move UG at bottom. 
+          unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
+          rewrite upds in LOC. inversion LOC. subst.
+          destruct loc_expr; vauto. simpl.
+          destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
+        simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
+        rewrite upds. auto. } } 
+  Qed. 
+
+            
+  Lemma instr_of_event:
+    forall e (Ee: E GI e) (NINITe: ~ is_init e) l (LOC: Some l = loc (lab GI) e),
+    exists instr tid Pi,
+      Some Pi = IdentMap.find tid ProgI /\
+      In instr Pi /\ In l (instr_locs instr)
+      /\ Some (Events.mod GI.(lab) e) = instr_mode instr. 
+  Proof.
+    ins.
+    red in ExecI. destruct ExecI as [E_STRUCT EXEC]. 
+    specialize (E_STRUCT _ Ee). des; vauto.
+    destruct e; vauto.
+    simpl in E_STRUCT. apply find_iff_in in E_STRUCT. destruct E_STRUCT as [Pi THREAD].
+    specialize_full EXEC; eauto. destruct EXEC as [Gi [TEi TREi]].
+    red in TEi. desc. subst.
+    cut (event_instr_prop s thread Pi).
+    { intros EIP. unfold event_instr_prop in EIP.
+      assert (E (ProgToExecution.G s) (ThreadEvent thread index)).
+      { forward eapply (E_restr_iff (ThreadEvent thread index) TREi); vauto.
+        intuition. }
+      forward eapply (EIP index); eauto. 
+      { destruct TREi.
+        unfold loc. rewrite tr_lab; auto.
+        fold (loc (lab GI) (ThreadEvent thread index)). vauto. }
+      ins. desc. repeat eexists; eauto.
+      unfold Events.mod. erewrite <- tr_lab; eauto. }
+    assert (Pi = instrs s) as INSTR_EQ.
+    { replace Pi with (instrs (init Pi)) by auto.
+      apply steps_same_instrs. eauto. }
+    rewrite INSTR_EQ. apply crt_num_steps in STEPS. desc.
+    eapply EIP_steps; vauto.
+    red in Compiled. destruct Compiled as [SAME_KEYS COMP].
+    assert (exists PO, Some PO = IdentMap.find thread ProgO) as [PO THREAD_O].
+    { apply find_iff_in, SAME_KEYS, find_iff_in. eauto. } 
+    red in COMP. specialize_full COMP; eauto. 
+  Qed. 
 
   Lemma GI_locations_separated: 
     let Loc_ := fun l e => loc (lab GI) e = Some l in
@@ -2507,8 +1005,7 @@ Section CompilationCorrectness.
       E GI ∩₁ Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ ORlx GI \/
       E GI ∩₁ Loc_ l \₁ (fun a : actid => is_init a) ⊆₁ Sc GI.
   Proof.
-    pose proof (instr_of_event ExecI) as LOC_MAP. 
-    destruct LOC_MAP as [ev2in ev2in_props]. 
+    pose proof (instr_of_event ExecI) as LOC_MAP.
     simpl. ins.
     destruct (classic (E GI ∩₁ (fun e : actid => loc (lab GI) e = Some l) \₁
                          (fun a : actid => is_init a) ⊆₁ ORlx GI \/
@@ -2523,11 +1020,9 @@ Section CompilationCorrectness.
     destruct e_props as [[[Ee Le] NINITe] NRLXe]. 
     destruct e0_props as [[[Ee0 Le0] NINITe0] NSC0].
     symmetry in Le, Le0.
-    pose proof (ev2in_props e Ee NINITe l Le) as [tid [PI [THREAD_PI [INSTR_PI INSTR_L]]]].
-    pose proof (ev2in_props e0 Ee0 NINITe0 l Le0) as [tid0 [PI0 [THREAD_PI0 [INSTR0_PI0 INSTR0_L]]]].
-    clear ev2in_props. 
-    remember (ev2in e) as instr. remember (ev2in e0) as instr0.
-    desc. 
+    pose proof (LOC_MAP e Ee NINITe l Le) as [instr [tid [PI [THREAD_PI [INSTR_PI INSTR_L]]]]].
+    pose proof (LOC_MAP e0 Ee0 NINITe0 l Le0) as [instr0 [tid0 [PI0 [THREAD_PI0 [INSTR0_PI0 INSTR0_L]]]]].
+    desc.
     pose proof (locations_separated_compiled Compiled (proj2 OCamlProgO)) as IMM_LOC_SEP. red in IMM_LOC_SEP. specialize (IMM_LOC_SEP l). 
     destruct IMM_LOC_SEP as [m [OMMm PROPSm]].
     pose proof (PROPSm tid PI (eq_sym THREAD_PI) instr INSTR_PI INSTR_L) as INSTR_m. 
@@ -2538,13 +1033,27 @@ Section CompilationCorrectness.
     type_solver. 
   Qed. 
 
+  (* Lemma ORLX_W_ALT G: *)
+  (*   .  *)
+  (* Proof. unfold set_inter, is_orlx_w. basic_solver. Qed. *)
+  
+  (* Lemma F_ACQREL_ALT G: *)
+  (*   W G ∩₁ ORlx G ≡₁ fun x : actid => is_orlx_w (lab G) x.  *)
+  (* Proof. unfold set_inter, is_orlx_w. basic_solver. Qed. *)
+  
   Lemma imm_implies_omm:
     ocaml_consistent GI.
   Proof.
     pose proof GI_omm_premises as GI_OMM_PREM. red in GI_OMM_PREM. desc.
     pose proof GI_locations_separated. 
-    rewrite only_nontrivial_fences_workaround in *. 
     eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto.
+    { rewrite set_interA.
+      arewrite (W GI ∩₁ ORlx GI ≡₁ fun x : actid => is_orlx_w (lab GI) x). 
+      { unfold set_inter, is_orlx_w. basic_solver. }
+      arewrite ((fun a : actid => is_f (lab GI) a) ∩₁ Acqrel GI ≡₁ fun a : actid => is_f_acqrel (lab GI) a).
+      { unfold set_inter, is_f_acqrel. basic_solver. }
+      auto. }
+    1, 2: arewrite ((fun a : actid => is_f (lab GI) a) ∩₁ Acq GI ≡₁ fun a : actid => is_f_acq (lab GI) a) by unfold set_inter, is_f_acq; basic_solver.
   Qed.
 
   Lemma IdentMap_explicit {A B: Type} (P: IdentMap.key -> A -> Prop) (orig: IdentMap.t B):
@@ -2653,8 +1162,10 @@ Section CompilationCorrectness.
   Lemma thread_execs_helper: exists GO,
       ⟪ E_STRUCT: forall e : actid, E GO e -> is_init e \/ IdentMap.In (tid e) ProgO ⟫/\
       ⟪ SAME_INIT: E GO ∩₁ is_init ≡₁ E GI ∩₁ is_init⟫ /\
+      (* ⟪ SAME_INIT_LABELS: forall e (INIT: (E GO ∩₁ is_init) e), lab GO e = lab GI e⟫ /\ *)
+      ⟪ SAME_INIT_LABELS: forall l, lab GO (InitEvent l) = Astore Xpln Opln l 0 ⟫ /\
       ⟪ SAME_CO: co GI ≡ co GO⟫ /\
-      ⟪ EXT_RF: rf GO ≡ rf GI ⨾ ⦗set_compl (dom_rel (rmw GI))⦘ ⟫ /\
+      ⟪ EXT_RF: rf GO ≡ restr_rel (RWO GI) (rf GI)⟫ /\
       ⟪ RESTR_SIM: forall tid POi
         (THREAD: Some POi = IdentMap.find tid ProgO)
         GOi (RESTR: thread_restricted_execution GO tid GOi)
@@ -2707,16 +1218,12 @@ Section CompilationCorrectness.
     red in Gie. desc. auto.
   Qed. 
 
-  Lemma E_restr_iff G Gi tid e (TRE: thread_restricted_execution G tid Gi)
-    (TID: Events.tid e = tid):
-    E G e <-> E Gi e.
-  Proof. Admitted. 
-
   Lemma GO_exists: exists GO,
       Oprogram_execution_corrected OCamlProgO GO /\
       same_behavior GO GI. 
   Proof.
-    pose proof thread_execs_helper as T_E_H. desc.
+    pose proof thread_execs_helper as T_E_H. 
+    desc.
     exists GO. split.
     { red. split; auto. 
       ins. specialize (RESTR_SIM _ _ THREAD Gi THREAD_EXEC).
@@ -2724,46 +1231,52 @@ Section CompilationCorrectness.
       desc. specialize (RESTR_SIM GIi RESTRI). desc. auto. }
     red. splits; auto.
     { red. splits. 
-      2: { ins. pose proof EGOx as EGOx_. apply into_restr in EGOx. destruct x.
-           { admit. }
-         destruct EGOx; vauto.
-         desc. inversion SAME_TID. subst. rename Gi into GOi. 
+      2: { ins. pose proof EGOx as EGOx_. apply into_restr in EGOx.
+           destruct EGOx.
+           { destruct x; vauto. destruct WFI. congruence. }
+         desc. subst. rename Gi into GOi. 
          replace (lab GO (ThreadEvent tid ind)) with (lab GOi (ThreadEvent tid ind)).
          2: { destruct TRE. intuition. }
-         specialize (E_STRUCT (ThreadEvent tid ind)).
-         edestruct E_STRUCT; eauto. 
-         - intuition.
-         - simpl in H.
-           apply find_iff_in in H. destruct H as [POi THREADO]. 
-           specialize (RESTR_SIM tid POi THREADO _ TRE).
-           pose proof (restr_graph GI tid). desc.
-           specialize (RESTR_SIM Gi H). desc.
-           replace (lab GI (ThreadEvent tid ind)) with (lab Gi (ThreadEvent tid ind)).
-           2: { destruct H. apply tr_lab.
-                destruct RESTR_SIM0. red in H.
-                apply (set_equiv_exp H) in EGi.
-                red in EGi. desc. auto. }
-           red in RESTR_SIM0. desc. apply SAME_LAB. auto. }
+         specialize (E_STRUCT (ThreadEvent tid ind) EGOx_).
+         destruct E_STRUCT; vauto. 
+         simpl in H.
+         apply find_iff_in in H. destruct H as [POi THREADO]. 
+         specialize (RESTR_SIM tid POi THREADO _ TRE).
+         pose proof (restr_graph GI tid). desc.
+         specialize (RESTR_SIM Gi H). desc.
+         replace (lab GI (ThreadEvent tid ind)) with (lab Gi (ThreadEvent tid ind)).
+         2: { destruct H. apply tr_lab.
+              destruct RESTR_SIM0. red in H.
+              apply (set_equiv_exp H) in EGi.
+              red in EGi. desc. auto. }
+         red in RESTR_SIM0. desc. apply SAME_LAB. auto. }
+      assert (forall S, S ≡₁ S ∩₁ (fun a : actid => is_init a) ∪₁ S ∩₁ (fun a : actid => ~ is_init a)) as INIT_SPLIT.
+      { ins. rewrite <- set_inter_union_r.
+        arewrite ((fun a : actid => is_init a) ∪₁ (fun a : actid => ~ is_init a) ≡₁ fun e => True).
+        { apply set_equiv_exp_iff. ins. destruct x; simpl; vauto. }
+        basic_solver. }
+      rewrite INIT_SPLIT. rewrite INIT_SPLIT with (S := E GI ∩₁ RWO GI).
+      apply set_equiv_union.
+      { rewrite set_interA.
+        arewrite (RWO GI ∩₁ (fun a : actid => is_init a) ≡₁ fun a : actid => is_init a); auto.
+        split; [basic_solver| ]. red. ins. red. split; auto.
+        red. red. split.
+        { red. right. apply init_w; auto. }
+        red. ins. red in H0. desc.
+        rewrite (same_relation_exp (rmw_from_non_init WFI)) in H0.
+        apply seq_eqv_l in H0. desc. vauto. } 
+
     apply set_equiv_exp_iff. ins.
     red. split.
-    { intros EGOx. red.
+    { intros [EGOx NINITx]. red.
       pose proof (into_restr _ _ EGOx). 
-      destruct H.
-      { split.
-        { apply SAME_INIT. split; auto. }
-        red. split.
-        { cut (W GI x); [basic_solver| ].
-          apply (init_w WFI); auto. }
-        red. intros RMW. red in RMW. desc. 
-        pose proof (proj1 (rmw_from_non_init WFI)).
-        apply (hahn_inclusion_exp H0) in RMW. apply seq_eqv_l in RMW. desc. 
-        auto. }
+      destruct H; vauto.       
       desc. rename Gi into GOi.
       specialize (E_STRUCT x EGOx). destruct E_STRUCT; vauto.
       simpl in H. apply find_iff_in in H. destruct H as [PO THREADO]. 
       assert (exists GIi, thread_restricted_execution GI tid GIi) by apply restr_graph. desc.  
       forward eapply RESTR_SIM as [OTHREADEXEC SAME_BEHL]; eauto.
-      split. 
+      split; vauto. split.  
       { eapply E_restr_iff; eauto.
         red in SAME_BEHL. desc. 
         apply (set_equiv_exp RESTR_EVENTS) in EGi.
@@ -2771,8 +1284,8 @@ Section CompilationCorrectness.
       red in SAME_BEHL. desc.
       apply (set_equiv_exp RESTR_EVENTS) in EGi.
       desc. red in EGi. desc. red in EGi0. desc. auto.       
-      red. split.
-      { replace (RW GI (ThreadEvent tid ind)) with (RW GIi (ThreadEvent tid ind)); auto.
+      red. red in EGi0. desc. split.
+      { replace (RW GI (ThreadEvent tid ind)) with (RW GIi (ThreadEvent tid ind)); auto. 
         destruct H. unfold is_r, is_w, set_union. 
         rewrite tr_lab; auto. }
       cut (~ dom_rel (rmw GIi) (ThreadEvent tid ind)); vauto. 
@@ -2783,12 +1296,16 @@ Section CompilationCorrectness.
       apply seq_eqv_lr. splits; auto.
       apply (hahn_inclusion_exp (rmw_in_sb WFI)) in H1.
       apply sb_tid_init in H1. simpl in H1. destruct H1; vauto. }
-    ins. red in H. desc.
-    destruct x.
-    { apply SAME_INIT. split; auto. }
+    ins. red in H. desc. split; auto. 
+    destruct x; vauto. 
     pose proof (restr_graph GO thread) as [GOi TRE]. 
     eapply E_restr_iff; eauto.     
-    { assert (exists PIi, Some PIi = IdentMap.find thread ProgI) by admit.
+    { assert (exists PIi, Some PIi = IdentMap.find thread ProgI).
+      { apply find_iff_in.
+        red in ExecI. destruct ExecI as [IMM_EVENTS _].
+        specialize (IMM_EVENTS (ThreadEvent thread index)). specialize_full IMM_EVENTS.
+        { red in H. desc. auto. }
+        des; vauto. }
       assert (exists POi, Some POi = IdentMap.find thread ProgO) as [POi THREADO]. 
       { apply find_iff_in. red in Compiled. destruct Compiled.
         apply H2. apply find_iff_in. auto. }
@@ -2797,19 +1314,20 @@ Section CompilationCorrectness.
       destruct SAME_BEHL. apply (set_equiv_exp H2).
       pose proof TREI as TREI_. destruct TREI. 
       assert (E GIi (ThreadEvent thread index)) as EGIi. 
-      { apply (@E_restr_iff _ _ _ _ TREI_); auto. }
+      { red in H. desc. 
+        apply (@E_restr_iff _ _ _ _ TREI_); auto. }
       red. split; auto.       
       red. red in H0. desc. split. 
-      { replace (RW GIi (ThreadEvent thread index)) with (RW GI (ThreadEvent thread index)); auto.
+      { red in H. desc. do 2 red in H4. desc. 
+        replace (RW GIi (ThreadEvent thread index)) with (RW GI (ThreadEvent thread index)); auto.
         unfold is_r, is_w, set_union. 
         rewrite tr_lab; auto. }
-      cut (~ dom_rel (rmw GI) (ThreadEvent thread index)); vauto. 
-      red. ins. red in H5.  
-      apply H5. 
-      unfold dom_rel. unfold dom_rel in H6. desc. exists y.
-      apply (same_relation_exp tr_rmw) in H6. apply seq_eqv_lr in H6. desc. auto. } }
-    
-  Admitted. 
+      red in H. desc. do 2 red in H4. desc. 
+      red. ins. apply H5. 
+      red in H6. desc. apply (same_relation_exp tr_rmw) in H6. apply seq_eqv_lr in H6. desc. subst. vauto. } }
+    { rewrite SAME_CO. auto. }
+    ins. destruct WFI. congruence. 
+  Qed. 
 
   Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI)
         (ExecO: Oprogram_execution OCamlProgO GO):
@@ -2861,10 +1379,9 @@ Section CompilationCorrectness.
       cut (W GI w).
       { ins. split; [basic_solver| ].
         pose proof wf_rmwD WFI.
-        pose proof (same_relation_exp_iff (rmw GI) (⦗R_ex GI⦘ ⨾ rmw GI ⨾ ⦗W GI⦘)) as [IMPL _].
-        red. ins. red in H1. desc. 
-        specialize (IMPL H0 w y). destruct IMPL as [IMPL _]. specialize (IMPL H1).
-        apply seq_eqv_lr in IMPL. desc. type_solver. }
+        red. ins. red in H1. desc.
+        rewrite (@same_relation_exp) in H1; [| eapply H0].
+        apply seq_eqv_lr in H1. desc. type_solver. }
       pose proof (wf_rfD WFI).
       pose proof (same_relation_exp_iff (rf GI) (⦗W GI⦘ ⨾ rf GI ⨾ ⦗R GI⦘)) as [IMPL _].
       specialize (IMPL H w x). destruct IMPL. specialize (H0 RFwx).

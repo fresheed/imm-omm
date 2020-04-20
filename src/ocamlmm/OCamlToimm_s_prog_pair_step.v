@@ -30,8 +30,7 @@ Section PairStep.
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
   Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
   Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
-  (* Warning: F implicitly means at least acq/rel fence *)
-  Notation "'F' G" := (fun a => is_true (is_nonnop_f G.(lab) a)) (at level 1).
+  Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1).
   Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
   Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 

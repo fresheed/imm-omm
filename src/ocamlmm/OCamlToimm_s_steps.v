@@ -26,12 +26,14 @@ From PromisingLib Require Import Basic Loc.
 Require Import Basics. 
 Set Implicit Arguments.
 
+Section Steps.
+
 Notation "'E' G" := G.(acts_set) (at level 1).
 Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
 Notation "'R_ex' G" := (fun a => is_true (R_ex G.(lab) a)) (at level 1).
 Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
 Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
-Notation "'F' G" := (fun a => is_true (is_nonnop_f G.(lab) a)) (at level 1).
+Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1).
 Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
 Notation "'ORlxW' G" := (fun a => is_true (is_orlx_w G.(lab) a)) (at level 1).
 Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
@@ -1034,3 +1036,4 @@ Proof.
   eexists. splits; eauto. rewrite BINSTRS_SAME. auto. 
 Qed. 
 
+End Steps.

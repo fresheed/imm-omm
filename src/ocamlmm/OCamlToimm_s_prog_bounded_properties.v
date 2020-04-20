@@ -20,14 +20,12 @@ Set Implicit Arguments.
 
 
 Section BoundedProperties.
-  Definition is_nonnop_f {A: Type} (labfun: A -> label) ev :=
-    andb (is_f labfun ev) (is_ra labfun ev). 
   
   Notation "'E' G" := G.(acts_set) (at level 1).
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
   Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
   Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
-  Notation "'F' G" := (fun a => is_true (is_nonnop_f G.(lab) a)) (at level 1).
+  Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1).
   Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
   Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
@@ -61,18 +59,6 @@ Section BoundedProperties.
   Proof.
     red. intros. unfold is_sc, Events.mod.
     destruct (labfun ev); auto. 
-  Qed. 
-  
-  Definition nonnop_f_matcher :=
-    (fun lbl => match lbl with
-             | Afence mode => orb (mode_le Oacq mode) (mode_le Orel mode)
-             | _ => false
-             end).
-  Lemma nonnop_f_pl: processes_lab (@is_nonnop_f actid) nonnop_f_matcher. 
-  Proof.
-    red. intros. unfold is_nonnop_f, nonnop_f_matcher, is_f. 
-    destruct (labfun ev) eqn:eq; auto.
-    unfold is_ra, is_acq, is_rel, Events.mod. rewrite eq. auto.
   Qed. 
   
   Definition acq_matcher :=
@@ -172,15 +158,43 @@ Section BoundedProperties.
       + rewrite MATCH in Sx. rewrite updo in Sx; [| congruence].
         forward eapply IHn; [auto | omega].
         rewrite MATCH; auto. 
-    - (* show there are no CAS instructions in compiled program *)
-      admit.
-    - (* show there are no CAS instructions in compiled program *)
-      admit.
-    - (* show there are no FADD instructions in compiled program *)
-      admit.
-    - (* TODO *)
-      admit.
-  Admitted. 
+    - rewrite UG in Sx. simpl in Sx. rewrite UINDEX.
+      destruct (classic (x = ev)).
+      + rewrite H, Heqev. simpl. omega.
+      + rewrite MATCH in Sx. rewrite updo in Sx; [| congruence].
+        forward eapply IHn; [auto | omega].
+        rewrite MATCH; auto.
+    - rewrite UG in Sx. simpl in Sx. rewrite UINDEX.
+      destruct (classic (x = ev)).
+      + rewrite H, Heqev. simpl. omega.
+      + rewrite MATCH in Sx.
+        remember (ThreadEvent tid (eindex st' + 1)) as ev'. 
+        destruct (classic (x = ev')).
+        * rewrite H0, Heqev'. simpl. omega.
+        * do 2 (rewrite updo in Sx; [| congruence]).
+          forward eapply IHn; [auto | omega].
+          rewrite MATCH; auto.
+    - rewrite UG in Sx. simpl in Sx. rewrite UINDEX.
+      destruct (classic (x = ev)).
+      + rewrite H, Heqev. simpl. omega.
+      + rewrite MATCH in Sx.
+        remember (ThreadEvent tid (eindex st' + 1)) as ev'. 
+        destruct (classic (x = ev')).
+        * rewrite H0, Heqev'. simpl. omega.
+        * do 2 (rewrite updo in Sx; [| congruence]).
+          forward eapply IHn; [auto | omega].
+          rewrite MATCH; auto.
+    - rewrite UG in Sx. simpl in Sx. rewrite UINDEX.
+      destruct (classic (x = ev)).
+      + rewrite H, Heqev. simpl. omega.
+      + rewrite MATCH in Sx.
+        remember (ThreadEvent tid (eindex st' + 1)) as ev'. 
+        destruct (classic (x = ev')).
+        * rewrite H0, Heqev'. simpl. omega.
+        * do 2 (rewrite updo in Sx; [| congruence]).
+          forward eapply IHn; [auto | omega].
+          rewrite MATCH; auto.
+  Qed.
   
   Lemma label_set_step (S: (actid -> label) -> actid -> bool) matcher st1 st2 tid new_label
         index (NEW_INDEX: index >= eindex st1)

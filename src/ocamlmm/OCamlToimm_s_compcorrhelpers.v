@@ -81,7 +81,7 @@ Section CompCorrHelpers.
     ⟪ WRLXF : E G ∩₁ ORlxW G ⊆₁ codom_rel (⦗AcqrelF G⦘ ⨾ immediate (sb G)) ⟫ /\
     ⟪ RSCF  : E G ∩₁ R G ∩₁ Sc G ⊆₁ codom_rel (⦗AcqF G⦘ ⨾ immediate (sb G)) ⟫.
 
-  Hint Resolve r_pl w_pl nonnop_f_pl acq_pl acqrel_pl sc_pl orlx_w_pl f_acqrel_pl f_acq_pl : label_ext.
+  Hint Resolve r_pl w_pl acq_pl acqrel_pl sc_pl orlx_w_pl f_acqrel_pl f_acq_pl : label_ext.
   
   Definition step0 st1 st2 tid :=
     ⟪STEP: step tid st1 st2 ⟫ /\
