@@ -679,8 +679,27 @@ Section CompilationCorrectness.
   (* Admitted.   *)
 
   Lemma programs_without_tid_init: ~ (IdentMap.In tid_init ProgI).
-  Proof. Admitted. 
+  Proof. Admitted.
 
+  Lemma seq_eqv_lr_l {A: Type} (d1 d2: A -> Prop) r:
+    r ≡ ⦗d1⦘ ⨾ r ⨾ ⦗d2⦘ -> r ≡ ⦗d1⦘ ⨾ r.
+  Proof. ins. rewrite H. basic_solver. Qed. 
+
+  Lemma seq_eqv_lr_r {A: Type} (d1 d2: A -> Prop) r:
+    r ≡ ⦗d1⦘ ⨾ r ⨾ ⦗d2⦘ -> r ≡ r ⨾ ⦗d2⦘.
+  Proof. ins. rewrite H. basic_solver. Qed.
+
+  Lemma inter_subset_helper {A: Type} (S S1 S2: A -> Prop):
+    (forall x (Sx: S x), S1 x <-> S2 x) -> S ∩₁ S1 ≡₁ S ∩₁ S2.
+  Proof.
+    ins. apply set_equiv_exp_iff. ins. specialize (H x).
+    unfold set_inter. 
+    split; ins; desc; split; intuition.
+  Qed.
+
+  Lemma init_equiv: Tid_ tid_init ≡₁ is_init.
+  Proof. Admitted. 
+  
   Lemma omm_premises_thread_local:
     (forall tid Pi (THREAD: Some Pi = IdentMap.find tid ProgI)
        Gi (THREAD_Gi: thread_restricted_execution GI tid Gi),
@@ -688,21 +707,10 @@ Section CompilationCorrectness.
   Proof.
     intros THREADS_OMM. red in ExecI. destruct ExecI as [E_STRUCT RESTRS].
     red. 
-    (* assert (E GI ≡₁ E GI ∩₁ is_init ∪₁ E GI ∩₁ set_bunion (fun thread => IdentMap.In thread ProgI) (fun thread e => exists ind, e = ThreadEvent thread ind)). *)
-    (* { split; [| basic_solver]. *)
-    (*   red. ins. specialize (E_STRUCT _ H). des. *)
-    (*   { left. basic_solver. } *)
-    (*   right. split; auto. *)
-    (*   red. *)
-    (*   destruct x. *)
-    (*   { simpl in E_STRUCT. apply programs_without_tid_init in E_STRUCT. vauto. } *)
-    (*   simpl in *.  *)
-    (*   assert (exists Pi, Some Pi = IdentMap.find thread ProgI) as [Pi THREAD].  *)
-    (*   { apply find_iff_in. auto. } *)
-    (*   eexists. splits; vauto. } *)
-    assert (E GI ≡₁ E GI ∩₁ set_bunion (fun thread => IdentMap.In thread ProgI \/ thread = tid_init) (fun thread e => tid e = thread)).
+    assert (E GI ≡₁ set_bunion (fun thread => IdentMap.In thread ProgI \/ thread = tid_init) (fun thread => Tid_ thread ∩₁ E GI)).
     { split; [| basic_solver].
-      apply set_subset_inter_r. split; [basic_solver| ]. 
+      rewrite set_bunion_inter_compat_r. 
+      apply set_subset_inter_r. split; [| basic_solver].
       red. ins. red. specialize (E_STRUCT _ H).
       des.
       { unfold is_init in E_STRUCT. simpl in E_STRUCT. destruct x; vauto.
@@ -713,23 +721,102 @@ Section CompilationCorrectness.
       assert (exists Pi, Some Pi = IdentMap.find thread ProgI) as [Pi THREAD]. 
       { apply find_iff_in. auto. }
       eexists. splits; vauto. }
+    assert (forall r thread (SAME_TID: r ⊆ same_tid), r ⨾ ⦗Tid_ thread⦘ ≡ ⦗Tid_ thread⦘ ⨾ r ⨾ ⦗Tid_ thread⦘) as TID_INFER.
+    { ins. split; [|basic_solver].
+      red in SAME_TID. red. ins.
+      apply seq_eqv_r in H0. desc.
+      apply seq_eqv_lr. splits; auto. rewrite <- H1. apply SAME_TID. auto. }
     splits.
-    { rewrite H. do 2 rewrite set_interA. rewrite <- set_bunion_inter_compat_r.
-      rewrite (wf_rmwE WFI). repeat rewrite <- seqA with (r3 := ⦗E GI⦘).
+    { rewrite (seq_eqv_lr_r (wf_rmwE WFI)). repeat rewrite <- seqA with (r3 := ⦗E GI⦘).
       rewrite codom_eqv1.
-      rewrite set_interC. rewrite <- set_bunion_inter_compat_r.
-      rewrite H at 2. do 2 rewrite <- set_bunion_inter_compat_l.
+      rewrite set_interC with (s' := E GI).
+      rewrite H. repeat rewrite <- set_bunion_inter_compat_r.
       apply set_equiv_bunion; auto.
+      assert (forall {A: Type} S S' (r: relation A), S ∩₁ S' ∩₁ codom_rel r ≡₁ S ∩₁ S' ∩₁ codom_rel (r ⨾ ⦗S⦘)) as CODOM_MOVE_HELPER. 
+      { ins. basic_solver 100. }
+      assert (forall {A: Type} (S1 S2 S3 S4: A -> Prop), S1 ≡₁ S3 -> S2 ≡₁ S4 -> S1 ≡₁ S2 -> S3 ≡₁ S4) as same_relation_goal. 
+      { ins. rewrite <- H0, <- H1. auto. }
+      assert (forall {A: Type} (S1 S2 S3: A -> Prop), S1 ∩₁ S2 ≡₁ S3 -> S1 ∩₁ S2 ≡₁ S1 ∩₁ S3) as INTER_HELPER. 
+      { ins. rewrite <- set_interK with (s := S1). rewrite !set_interA, H0. basic_solver. }
+      assert (forall {A: Type} (D: A -> Prop) r, immediate (restr_rel D r) ≡ restr_rel D (immediate (restr_rel D r))) as REFACTOR_RESTR_IMM. 
+      { ins. basic_solver. }
+      
       intros thread THREAD. des.
-      2: { subst. rewrite set_interC with (s := W GI), <- set_interA.
-           arewrite (Tid_ tid_init ∩₁ Sc GI ≡₁ ∅).
-           {
-             (* split; [| basic_solver]. *)
-             (* arewrite (Tid_ tid_init ≡₁ (fun a : actid => is_init a)). *)
-             (* { unfold is_init. type_solver 100.  *)
-             (* rewrite (init_pln WFI).  *)
-             admit. (* should state that is_init <-> Tid_ tid_init *) }
-           admit. }
+      { assert (exists PI, Some PI = IdentMap.find thread ProgI) as [PI THREADI].
+        { apply find_iff_in. auto. }
+        specialize (RESTRS _ _ THREADI). destruct RESTRS as [GIi [TEi TREi]]. 
+        destruct TREi.
+        rewrite CODOM_MOVE_HELPER.
+        rewrite set_interC with (s := Tid_ thread). rewrite <- tr_acts_set.
+        rewrite set_interA. apply INTER_HELPER. rewrite <- set_interA.
+        forward eapply THREADS_OMM as OMM_PREM_THREAD; eauto; vauto.
+        red in OMM_PREM_THREAD. desc.
+        generalize WSCFACQRMW. apply same_relation_goal.
+        { rewrite !set_interA. apply inter_subset_helper. ins.
+          unfold set_inter, is_w, is_sc, Events.mod.
+          rewrite tr_lab; vauto. }
+        apply codom_rel_more. 
+        rewrite !seqA. rewrite TID_INFER; [| apply (wf_rmwt WFI)].
+        rewrite <- seq_eqvK with (dom := Tid_ thread) at 1. rewrite !seqA, <- tr_rmw.
+        rewrite <- !seqA. apply seq_more; [| basic_solver].
+        rewrite TID_INFER.
+        2: { arewrite (immediate (sb GI) ⊆ sb GI).
+             arewrite ((fun a => is_f_acq (lab GI) a) ⊆₁ (fun e => ~ is_init e)).
+             { red. ins. eapply read_or_fence_is_not_init; eauto.
+               unfold is_f_acq in H0. desc. basic_solver. }
+             unfold sb. seq_rewrite <- id_inter.
+             red. ins. apply seq_eqv_lr in H0. desc. red in H0. desc.
+             unfold ext_sb in H1. destruct x; vauto. destruct y; desc; vauto. }
+        arewrite (immediate (sb GI) ≡ ⦗E GI⦘ ⨾ immediate (sb GI)).
+        { unfold sb. basic_solver. }
+        arewrite (immediate (sb GIi) ≡ ⦗E GIi⦘ ⨾ immediate (sb GIi)).
+        { unfold sb. basic_solver. }
+        rewrite <- !seqA. arewrite ((⦗Tid_ thread⦘ ⨾ ⦗fun a : actid => is_f_acq (lab GI) a⦘) ⨾ ⦗E GI⦘ ≡ (⦗Tid_ thread⦘ ⨾ ⦗fun a : actid => is_f_acq (lab GI) a⦘) ⨾ ⦗E GI⦘ ⨾ ⦗Tid_ thread⦘) by basic_solver.
+        do 3 seq_rewrite <- id_inter.
+        apply seq_more.
+        { apply eqv_rel_more.
+          rewrite set_interC with (s' := E GI), <- set_interA, <- tr_acts_set.
+          rewrite set_interC. apply inter_subset_helper. ins.
+          unfold is_f_acq, is_f, is_acq, Events.mod. rewrite tr_lab; auto. }
+        apply same_relation_exp_iff. red. ins. split.
+        { unfold immediate. ins. desc. red in H0. apply seq_eqv_lr in H0. desc.
+          rewrite (set_equiv_exp tr_acts_set) in H0, H3. unfold set_inter in H0, H3. desc.  
+          apply seq_eqv_lr. splits; auto.
+          { red. apply seq_eqv_lr. splits; auto. }
+          subst. destruct x; vauto.
+          { simpl in THREAD. apply programs_without_tid_init in THREAD. vauto. }
+          destruct y; vauto. simpl in *. desc. subst. 
+          ins. unfold sb in R1, R2. apply seq_eqv_lr in R1. apply seq_eqv_lr in R2. desc.  
+          unfold sb in *. apply H1 with (c := c); auto.
+          { apply seq_eqv_lr. splits; auto; rewrite (set_equiv_exp tr_acts_set); red; split; vauto.
+            destruct c; vauto. simpl. red in R0. desc. auto. } 
+          { apply seq_eqv_lr. splits; auto; rewrite (set_equiv_exp tr_acts_set); red; split; vauto.
+            destruct c; vauto. simpl. red in R0. desc. auto. } }
+        { ins. unfold sb in *. apply seq_eqv_lr in H0. desc. subst.
+          red in H1. desc. apply seq_eqv_lr in H1. desc.
+          assert (E GIi x) as E'x.
+          { apply tr_acts_set. red. splits; vauto. }
+          assert (E GIi y) as E'y.
+          { apply tr_acts_set. red. splits; vauto. }
+          red. split.
+          { apply seq_eqv_lr. splits; auto. }
+          ins. apply seq_eqv_lr in R1. apply seq_eqv_lr in R2. desc.
+          rewrite (set_equiv_exp tr_acts_set) in R5. red in R5. desc.  
+          apply H0 with (c := c); apply seq_eqv_lr; splits; auto. }
+        }
+      subst. rewrite init_equiv. 
+      assert ( (∅: actid -> Prop) ≡₁ ∅) by basic_solver. generalize H0. apply same_relation_goal.
+      { split; [basic_solver|].
+        arewrite (is_init ∩₁ E GI ∩₁ W GI ∩₁ Sc GI ⊆₁ is_init ∩₁ Sc GI) by basic_solver.
+        rewrite (init_pln WFI). unfold is_sc, is_only_pln. type_solver. }
+      split; [basic_solver| ].
+      arewrite ((fun a : actid => is_init a) ∩₁ E GI ⊆₁ (fun a : actid => is_init a)) by basic_solver.
+      rewrite set_interC, <- codom_eqv1. rewrite !seqA.
+      arewrite (rmw GI ⨾ ⦗fun a : actid => is_init a⦘ ⊆ ∅₂).
+      2: { remove_emptiness. basic_solver. }
+      rewrite (rmw_in_sb WFI). unfold sb. rewrite !seqA, <- id_inter.
+      red. ins. apply seq_eqv_lr in H1. desc. red in H3. desc. destruct x; vauto; destruct y; vauto. }
+    
       
   Admitted. 
 
@@ -760,9 +847,31 @@ Section CompilationCorrectness.
   (*   | None => default *)
   (*   end.  *)
 
-  Lemma locations_separated_compiled Prog Prog' (COMP: is_compiled Prog Prog')
-        (LOC_SEP: locations_separated Prog): locations_separated Prog'.
+  (* Lemma locations_separated_compiled ProgO ProgI (COMP: is_compiled ProgO ProgI) *)
+  (*       (LOC_SEP: locations_separated ProgO): locations_separated ProgI. *)
+
+  Lemma ORIG_INSTR instri (AT_LOC: instr_locs instri <> [])
+        PO PI (COMP: is_thread_compiled PO PI) (IN_PI: In instri PI):
+    exists instro, In instro PO /\ instr_locs instri = instr_locs instro /\
+              instr_mode instri = instr_mode instro.
   Proof. Admitted. 
+    
+  Lemma locations_separated_compiled: locations_separated ProgI.
+  Proof.
+    red in OCamlProgO. destruct OCamlProgO as [OINSTRS LOC_SEP_O].  (* TODO: <<>> into OCamlProg *)
+    unfold locations_separated. unfold locations_separated in LOC_SEP_O. 
+    ins. specialize (LOC_SEP_O loc).
+    desc. eexists. splits; eauto.
+    intros tid PI THREADI instr INSTR_PI LOC_INSTR.
+    red in Compiled. destruct Compiled as [SAME_KEYS COMP]. 
+    assert (exists PO, Some PO = IdentMap.find tid ProgO) as [PO THREADO].
+    { apply find_iff_in, SAME_KEYS, find_iff_in. eauto. }
+    specialize (LOC_SEP_O0 _ _ (eq_sym THREADO)).
+    forward eapply ORIG_INSTR as ORIG_INSTR; eauto.
+    { red. ins. rewrite H in LOC_INSTR. vauto. }
+    clear Compiled. 
+    desc. rewrite ORIG_INSTR1. eapply LOC_SEP_O0; eauto. congruence. 
+  Qed. 
 
   Lemma E_restr_iff G Gi tid e (TRE: thread_restricted_execution G tid Gi)
     (TID: Events.tid e = tid):
@@ -1023,7 +1132,7 @@ Section CompilationCorrectness.
     pose proof (LOC_MAP e Ee NINITe l Le) as [instr [tid [PI [THREAD_PI [INSTR_PI INSTR_L]]]]].
     pose proof (LOC_MAP e0 Ee0 NINITe0 l Le0) as [instr0 [tid0 [PI0 [THREAD_PI0 [INSTR0_PI0 INSTR0_L]]]]].
     desc.
-    pose proof (locations_separated_compiled Compiled (proj2 OCamlProgO)) as IMM_LOC_SEP. red in IMM_LOC_SEP. specialize (IMM_LOC_SEP l). 
+    pose proof (locations_separated_compiled) as IMM_LOC_SEP. red in IMM_LOC_SEP. specialize (IMM_LOC_SEP l). 
     destruct IMM_LOC_SEP as [m [OMMm PROPSm]].
     pose proof (PROPSm tid PI (eq_sym THREAD_PI) instr INSTR_PI INSTR_L) as INSTR_m. 
     pose proof (PROPSm tid0 PI0 (eq_sym THREAD_PI0) instr0 INSTR0_PI0 INSTR0_L) as INSTR0_m.
