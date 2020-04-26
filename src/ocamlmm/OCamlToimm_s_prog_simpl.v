@@ -698,7 +698,16 @@ Section CompilationCorrectness.
   Qed.
 
   Lemma init_equiv: Tid_ tid_init ∩₁ E GI ≡₁ is_init ∩₁ E GI.
-  Proof. Admitted. 
+  Proof.
+    split.
+    2: { rewrite is_init_tid. auto. }
+    red. ins. red in H. desc. red. split; auto.
+    red in ExecI. destruct ExecI as [E_STRUCT _].
+    destruct (E_STRUCT _ H0); auto.
+    destruct x; vauto.
+    exfalso. simpl in *. subst.
+    apply programs_without_tid_init. auto. 
+  Qed. 
   
   Lemma immediate_sb_restr G Gi thread (TRE: thread_restricted_execution G thread Gi) (NINIT: thread <> tid_init):
     immediate (sb Gi) ≡ ⦗Tid_ thread⦘ ⨾ immediate (sb G) ⨾ ⦗Tid_ thread⦘.
