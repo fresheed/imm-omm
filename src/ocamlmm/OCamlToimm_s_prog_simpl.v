@@ -697,8 +697,53 @@ Section CompilationCorrectness.
     split; ins; desc; split; intuition.
   Qed.
 
-  Lemma init_equiv: Tid_ tid_init ≡₁ is_init.
+  Lemma init_equiv: Tid_ tid_init ∩₁ E GI ≡₁ is_init ∩₁ E GI.
   Proof. Admitted. 
+  
+  Lemma immediate_sb_restr G Gi thread (TRE: thread_restricted_execution G thread Gi) (NINIT: thread <> tid_init):
+    immediate (sb Gi) ≡ ⦗Tid_ thread⦘ ⨾ immediate (sb G) ⨾ ⦗Tid_ thread⦘.
+  Proof.
+    destruct TRE. 
+    apply same_relation_exp_iff. red. ins. split.
+    { unfold immediate. intros [SB SB_IMM]. desc.
+      red in SB. apply seq_eqv_lr in SB. destruct SB as [E'x [ESBxy E'y]]. 
+      rewrite (set_equiv_exp tr_acts_set) in E'x, E'y. unfold set_inter in E'x, E'y. desc.  
+      apply seq_eqv_lr. splits; auto.
+      { red. apply seq_eqv_lr. splits; auto. }
+      subst. destruct x; vauto.
+      destruct y; vauto. simpl in *. desc. subst. 
+      ins. unfold sb in R1, R2. apply seq_eqv_lr in R1. apply seq_eqv_lr in R2. desc.  
+      unfold sb in *. apply SB_IMM with (c := c); auto.
+      { apply seq_eqv_lr. splits; auto; rewrite (set_equiv_exp tr_acts_set); red; split; vauto.
+        destruct c; vauto. simpl. red in R0. desc. auto. } 
+      { apply seq_eqv_lr. splits; auto; rewrite (set_equiv_exp tr_acts_set); red; split; vauto.
+        destruct c; vauto. simpl. red in R0. desc. auto. } }
+    { ins. unfold sb in *. apply seq_eqv_lr in H. desc. subst. 
+      red in H0. destruct H0 as [SBxy SB_IMMxy].
+      apply seq_eqv_lr in SBxy. destruct SBxy as [Ex [ESBxy Ey]]. 
+      assert (E Gi x) as E'x.
+      { apply tr_acts_set. red. splits; vauto. }
+      assert (E Gi y) as E'y.
+      { apply tr_acts_set. red. splits; vauto. }
+      red. split.
+      { apply seq_eqv_lr. splits; auto. }
+      ins. apply seq_eqv_lr in R1. apply seq_eqv_lr in R2. desc.
+      rewrite (set_equiv_exp tr_acts_set) in R5. red in R5. desc.  
+      apply SB_IMMxy with (c := c); apply seq_eqv_lr; splits; auto. }
+  Qed.
+
+  Lemma bunion_more_alt: forall (A B : Type) (x y : A -> Prop),
+      x ≡₁ y ->
+      forall (x0 y0 : A -> relation B), (forall a, x0 a ≡ y0 a) -> (⋃x ∈ x, x0 x) ≡ (⋃x ∈ y, y0 x).
+  Proof.
+    ins. apply same_relation_exp_iff. ins. red. splits.
+    { unfold bunion. ins. desc. exists a. splits.
+      { apply H. auto. }
+      apply H0. auto. }
+    { unfold bunion. ins. desc. exists a. splits. 
+      { apply H. auto. }
+      apply H0. auto. }
+  Qed.
   
   Lemma omm_premises_thread_local:
     (forall tid Pi (THREAD: Some Pi = IdentMap.find tid ProgI)
@@ -726,32 +771,37 @@ Section CompilationCorrectness.
       red in SAME_TID. red. ins.
       apply seq_eqv_r in H0. desc.
       apply seq_eqv_lr. splits; auto. rewrite <- H1. apply SAME_TID. auto. }
+    assert (forall {A: Type} S S' (r: relation A), S ∩₁ S' ∩₁ codom_rel r ≡₁ S ∩₁ S' ∩₁ codom_rel (r ⨾ ⦗S⦘)) as CODOM_MOVE_HELPER. 
+    { ins. basic_solver 100. }
+    assert (forall {A: Type} (S1 S2 S3 S4: A -> Prop), S1 ≡₁ S3 -> S2 ≡₁ S4 -> S1 ≡₁ S2 -> S3 ≡₁ S4) as same_relation_goal. 
+    { ins. rewrite <- H0, <- H1. auto. }
+    assert (forall {A: Type} (S1 S2 S3 S4: A -> Prop), S1 ≡₁ S3 -> S2 ≡₁ S4 -> S1 ⊆₁ S2 -> S3 ⊆₁ S4) as inclusion_goal. 
+    { ins. rewrite <- H0, <- H1. auto. }
+    assert (forall {A: Type} (S1 S2 S3: A -> Prop), S1 ∩₁ S2 ≡₁ S3 -> S1 ∩₁ S2 ≡₁ S1 ∩₁ S3) as INTER_HELPER. 
+    { ins. rewrite <- set_interK with (s := S1). rewrite !set_interA, H0. basic_solver. }
+    assert (forall {A: Type} (D: A -> Prop) r, immediate (restr_rel D r) ≡ restr_rel D (immediate (restr_rel D r))) as REFACTOR_RESTR_IMM. 
+    { ins. basic_solver. }
+    assert (forall G, immediate (sb G) ≡ ⦗E G⦘ ⨾ immediate (sb G)) as E_SB. 
+    { ins. unfold sb. basic_solver. }
+    assert (forall G, immediate (sb G) ≡  immediate (sb G) ⨾ ⦗E G⦘) as SB_E. 
+    { ins. unfold sb. basic_solver. }
+      
     splits.
     { rewrite (seq_eqv_lr_r (wf_rmwE WFI)). repeat rewrite <- seqA with (r3 := ⦗E GI⦘).
       rewrite codom_eqv1.
       rewrite set_interC with (s' := E GI).
       rewrite H. repeat rewrite <- set_bunion_inter_compat_r.
       apply set_equiv_bunion; auto.
-      assert (forall {A: Type} S S' (r: relation A), S ∩₁ S' ∩₁ codom_rel r ≡₁ S ∩₁ S' ∩₁ codom_rel (r ⨾ ⦗S⦘)) as CODOM_MOVE_HELPER. 
-      { ins. basic_solver 100. }
-      assert (forall {A: Type} (S1 S2 S3 S4: A -> Prop), S1 ≡₁ S3 -> S2 ≡₁ S4 -> S1 ≡₁ S2 -> S3 ≡₁ S4) as same_relation_goal. 
-      { ins. rewrite <- H0, <- H1. auto. }
-      assert (forall {A: Type} (S1 S2 S3: A -> Prop), S1 ∩₁ S2 ≡₁ S3 -> S1 ∩₁ S2 ≡₁ S1 ∩₁ S3) as INTER_HELPER. 
-      { ins. rewrite <- set_interK with (s := S1). rewrite !set_interA, H0. basic_solver. }
-      assert (forall {A: Type} (D: A -> Prop) r, immediate (restr_rel D r) ≡ restr_rel D (immediate (restr_rel D r))) as REFACTOR_RESTR_IMM. 
-      { ins. basic_solver. }
-      
       intros thread THREAD. des.
       { assert (exists PI, Some PI = IdentMap.find thread ProgI) as [PI THREADI].
         { apply find_iff_in. auto. }
         specialize (RESTRS _ _ THREADI). destruct RESTRS as [GIi [TEi TREi]]. 
+        specialize (THREADS_OMM _ _ THREADI _ TREi). 
         destruct TREi.
         rewrite CODOM_MOVE_HELPER.
         rewrite set_interC with (s := Tid_ thread). rewrite <- tr_acts_set.
         rewrite set_interA. apply INTER_HELPER. rewrite <- set_interA.
-        forward eapply THREADS_OMM as OMM_PREM_THREAD; eauto; vauto.
-        red in OMM_PREM_THREAD. desc.
-        generalize WSCFACQRMW. apply same_relation_goal.
+        red in THREADS_OMM. desc. generalize WSCFACQRMW. apply same_relation_goal.
         { rewrite !set_interA. apply inter_subset_helper. ins.
           unfold set_inter, is_w, is_sc, Events.mod.
           rewrite tr_lab; vauto. }
@@ -767,10 +817,7 @@ Section CompilationCorrectness.
              unfold sb. seq_rewrite <- id_inter.
              red. ins. apply seq_eqv_lr in H0. desc. red in H0. desc.
              unfold ext_sb in H1. destruct x; vauto. destruct y; desc; vauto. }
-        arewrite (immediate (sb GI) ≡ ⦗E GI⦘ ⨾ immediate (sb GI)).
-        { unfold sb. basic_solver. }
-        arewrite (immediate (sb GIi) ≡ ⦗E GIi⦘ ⨾ immediate (sb GIi)).
-        { unfold sb. basic_solver. }
+        rewrite (E_SB GI), (E_SB GIi). 
         rewrite <- !seqA. arewrite ((⦗Tid_ thread⦘ ⨾ ⦗fun a : actid => is_f_acq (lab GI) a⦘) ⨾ ⦗E GI⦘ ≡ (⦗Tid_ thread⦘ ⨾ ⦗fun a : actid => is_f_acq (lab GI) a⦘) ⨾ ⦗E GI⦘ ⨾ ⦗Tid_ thread⦘) by basic_solver.
         do 3 seq_rewrite <- id_inter.
         apply seq_more.
@@ -778,34 +825,10 @@ Section CompilationCorrectness.
           rewrite set_interC with (s' := E GI), <- set_interA, <- tr_acts_set.
           rewrite set_interC. apply inter_subset_helper. ins.
           unfold is_f_acq, is_f, is_acq, Events.mod. rewrite tr_lab; auto. }
-        apply same_relation_exp_iff. red. ins. split.
-        { unfold immediate. ins. desc. red in H0. apply seq_eqv_lr in H0. desc.
-          rewrite (set_equiv_exp tr_acts_set) in H0, H3. unfold set_inter in H0, H3. desc.  
-          apply seq_eqv_lr. splits; auto.
-          { red. apply seq_eqv_lr. splits; auto. }
-          subst. destruct x; vauto.
-          { simpl in THREAD. apply programs_without_tid_init in THREAD. vauto. }
-          destruct y; vauto. simpl in *. desc. subst. 
-          ins. unfold sb in R1, R2. apply seq_eqv_lr in R1. apply seq_eqv_lr in R2. desc.  
-          unfold sb in *. apply H1 with (c := c); auto.
-          { apply seq_eqv_lr. splits; auto; rewrite (set_equiv_exp tr_acts_set); red; split; vauto.
-            destruct c; vauto. simpl. red in R0. desc. auto. } 
-          { apply seq_eqv_lr. splits; auto; rewrite (set_equiv_exp tr_acts_set); red; split; vauto.
-            destruct c; vauto. simpl. red in R0. desc. auto. } }
-        { ins. unfold sb in *. apply seq_eqv_lr in H0. desc. subst.
-          red in H1. desc. apply seq_eqv_lr in H1. desc.
-          assert (E GIi x) as E'x.
-          { apply tr_acts_set. red. splits; vauto. }
-          assert (E GIi y) as E'y.
-          { apply tr_acts_set. red. splits; vauto. }
-          red. split.
-          { apply seq_eqv_lr. splits; auto. }
-          ins. apply seq_eqv_lr in R1. apply seq_eqv_lr in R2. desc.
-          rewrite (set_equiv_exp tr_acts_set) in R5. red in R5. desc.  
-          apply H0 with (c := c); apply seq_eqv_lr; splits; auto. }
-        }
-      subst. rewrite init_equiv. 
-      assert ( (∅: actid -> Prop) ≡₁ ∅) by basic_solver. generalize H0. apply same_relation_goal.
+        apply immediate_sb_restr; vauto.
+        red. ins. apply programs_without_tid_init. congruence. }
+      subst. rewrite init_equiv.
+      apply same_relation_goal with (S1 := ∅) (S2 := ∅); [| | basic_solver]. 
       { split; [basic_solver|].
         arewrite (is_init ∩₁ E GI ∩₁ W GI ∩₁ Sc GI ⊆₁ is_init ∩₁ Sc GI) by basic_solver.
         rewrite (init_pln WFI). unfold is_sc, is_only_pln. type_solver. }
@@ -815,11 +838,124 @@ Section CompilationCorrectness.
       arewrite (rmw GI ⨾ ⦗fun a : actid => is_init a⦘ ⊆ ∅₂).
       2: { remove_emptiness. basic_solver. }
       rewrite (rmw_in_sb WFI). unfold sb. rewrite !seqA, <- id_inter.
-      red. ins. apply seq_eqv_lr in H1. desc. red in H3. desc. destruct x; vauto; destruct y; vauto. }
+      red. ins. apply seq_eqv_lr in H0. desc. red in H2. desc. destruct x; vauto; destruct y; vauto. }
+    { assert (forall r (ST: r ⊆ same_tid), r ≡ bunion (fun _ => True) (fun t => restr_rel (Tid_ t) r)) as SAME_TID_SEPARATION. 
+      { ins. split; try basic_solver. red in ST.
+        red. ins. pose proof (ST _ _ H0) as SAME. red in SAME. 
+        red. exists (tid x). split; auto. red. splits; auto. }
+      rewrite SAME_TID_SEPARATION; [| apply (wf_rmwt WFI)].
+      rewrite seq_bunion_l, seq_bunion_r.
+      apply bunion_more_alt; [auto| ].
+      intros thread.
+      rewrite (wf_rmwE WFI), <- restr_relE, restr_restr.
+      destruct (classic (thread = tid_init)) as [INIT | NINIT].
+      { subst. rewrite set_interC, init_equiv.
+        rewrite restr_relE. arewrite (⦗(fun a : actid => is_init a) ∩₁ E GI⦘
+  ⨾ rmw GI ≡ ∅₂); [| basic_solver].
+        split; [| basic_solver].
+        rewrite (rmw_from_non_init WFI). basic_solver. }
+      destruct (IdentMap.Properties.F.In_dec ProgI thread) as [THREAD | NTHREAD].
+      2: { arewrite (E GI ∩₁ Tid_ thread ≡₁ ∅); [| basic_solver].
+           split; [|basic_solver]. red. ins. red in H0. desc. subst.
+           destruct (E_STRUCT _ H0); destruct x; vauto. }
+      apply find_iff_in in THREAD. destruct THREAD as [PI THREADI].
+      specialize_full RESTRS; eauto. destruct RESTRS as [GIi [TEi TREi]].      
+      specialize_full THREADS_OMM; eauto. red in THREADS_OMM. desc.
+      rewrite <- restr_relE, restr_restr.
+      arewrite (E GI ∩₁ Tid_ thread ∩₁ Sc GI ≡₁ E GI ∩₁ Tid_ thread ∩₁ Sc GIi).
+      { destruct TREi. rewrite <- tr_acts_set.
+        apply inter_subset_helper. ins. unfold is_sc, Events.mod.
+        rewrite tr_lab; vauto. }
+      rewrite set_interC with (s' := Sc GIi). rewrite <- restr_restr with (d' := Sc GIi).
+      rewrite set_interC. do 2 rewrite <- restr_restr. 
+      apply restr_rel_more; [basic_solver| ].  
+      rewrite restrC.
+      destruct TREi. rewrite restr_relE, <- tr_rmw. rewrite restr_relE. auto. } 
+    { rewrite SB_E. rewrite <- !seqA, codom_eqv1. rewrite set_interC with (s' := E GI). 
+      rewrite H. repeat rewrite <- set_bunion_inter_compat_r.
+      eapply set_subset_bunion.
+      { edestruct set_equiv_refl2; eauto. }
+      intros thread THREAD. des.
+      { assert (exists PI, Some PI = IdentMap.find thread ProgI) as [PI THREADI].
+        { apply find_iff_in. auto. }
+        specialize (RESTRS _ _ THREADI). destruct RESTRS as [GIi [TEi TREi]]. 
+        specialize (THREADS_OMM _ _ THREADI _ TREi). 
+        destruct TREi.
+        rewrite CODOM_MOVE_HELPER.
+        rewrite set_interC with (s := Tid_ thread). rewrite <- tr_acts_set.
+        rewrite <- set_interK with (s := E GIi) at 1. 
+        rewrite set_interA. apply set_subset_inter; [basic_solver| ].  
+        red in THREADS_OMM. desc. generalize WRLXF. apply inclusion_goal.
+        { apply inter_subset_helper. ins.
+          unfold is_orlx_w, is_w, is_only_rlx, Events.mod.
+          rewrite tr_lab; vauto. }
+        apply codom_rel_more. 
+        rewrite TID_INFER.
+        2: { arewrite (immediate (sb GI) ⊆ sb GI).
+             arewrite ((fun a => is_f_acqrel (lab GI) a) ⊆₁ (fun e => ~ is_init e)).
+             { red. ins. eapply read_or_fence_is_not_init; eauto.
+               unfold is_f_acqrel in H0. desc. basic_solver. }
+             unfold sb. seq_rewrite <- id_inter.
+             red. ins. apply seq_eqv_lr in H0. desc. red in H0. desc.
+             unfold ext_sb in H1. destruct x; vauto. destruct y; desc; vauto. }
+        rewrite (E_SB GI), (E_SB GIi). 
+        rewrite <- !seqA. arewrite ((⦗Tid_ thread⦘ ⨾ ⦗fun a : actid => is_f_acqrel (lab GI) a⦘) ⨾ ⦗E GI⦘ ≡ (⦗Tid_ thread⦘ ⨾ ⦗fun a : actid => is_f_acqrel (lab GI) a⦘) ⨾ ⦗E GI⦘ ⨾ ⦗Tid_ thread⦘) by basic_solver.
+        do 3 seq_rewrite <- id_inter.
+        apply seq_more.
+        { apply eqv_rel_more.
+          rewrite set_interC with (s' := E GI), <- set_interA, <- tr_acts_set.
+          rewrite set_interC. apply inter_subset_helper. ins.
+          unfold is_f_acqrel, is_f, is_acqrel, Events.mod. rewrite tr_lab; auto. }
+        apply immediate_sb_restr; vauto.
+        red. ins. apply programs_without_tid_init. congruence. }
+      subst.
+      arewrite (Tid_ tid_init ∩₁ E GI ∩₁ (fun a : actid => is_orlx_w (lab GI) a) ⊆₁ ∅); [| basic_solver]. 
+      rewrite init_equiv. rewrite (init_pln WFI).
+      rewrite set_interC, <- set_interA.
+      unfold is_orlx_w, is_w, is_only_pln, is_only_rlx. mode_solver. }
+    { rewrite SB_E. rewrite <- !seqA, codom_eqv1. rewrite set_interC with (s' := E GI). 
+      rewrite H. repeat rewrite <- set_bunion_inter_compat_r.
+      eapply set_subset_bunion.
+      { edestruct set_equiv_refl2; eauto. }
+      intros thread THREAD. des.
+      { assert (exists PI, Some PI = IdentMap.find thread ProgI) as [PI THREADI].
+        { apply find_iff_in. auto. }
+        specialize (RESTRS _ _ THREADI). destruct RESTRS as [GIi [TEi TREi]]. 
+        specialize (THREADS_OMM _ _ THREADI _ TREi). 
+        destruct TREi.
+        rewrite CODOM_MOVE_HELPER.
+        rewrite set_interC with (s := Tid_ thread). rewrite <- tr_acts_set.
+        rewrite <- set_interK with (s := E GIi) at 1. 
+        do 2 rewrite set_interA. apply set_subset_inter; [basic_solver| ].  
+        red in THREADS_OMM. desc. generalize RSCF. apply inclusion_goal.
+        { rewrite set_interA. apply inter_subset_helper. ins.
+          unfold set_inter, is_r, is_sc, Events.mod.
+          rewrite tr_lab; vauto. }
+        apply codom_rel_more. 
+        rewrite TID_INFER.
+        2: { arewrite (immediate (sb GI) ⊆ sb GI).
+             arewrite ((fun a => is_f_acq (lab GI) a) ⊆₁ (fun e => ~ is_init e)).
+             { red. ins. eapply read_or_fence_is_not_init; eauto.
+               unfold is_f_acq in H0. desc. basic_solver. }
+             unfold sb. seq_rewrite <- id_inter.
+             red. ins. apply seq_eqv_lr in H0. desc. red in H0. desc.
+             unfold ext_sb in H1. destruct x; vauto. destruct y; desc; vauto. }
+        rewrite (E_SB GI), (E_SB GIi). 
+        rewrite <- !seqA. arewrite ((⦗Tid_ thread⦘ ⨾ ⦗fun a : actid => is_f_acq (lab GI) a⦘) ⨾ ⦗E GI⦘ ≡ (⦗Tid_ thread⦘ ⨾ ⦗fun a : actid => is_f_acq (lab GI) a⦘) ⨾ ⦗E GI⦘ ⨾ ⦗Tid_ thread⦘) by basic_solver.
+        do 3 seq_rewrite <- id_inter.
+        apply seq_more.
+        { apply eqv_rel_more.
+          rewrite set_interC with (s' := E GI), <- set_interA, <- tr_acts_set.
+          rewrite set_interC. apply inter_subset_helper. ins.
+          unfold is_f_acq, is_f, is_acq, Events.mod. rewrite tr_lab; auto. }
+        apply immediate_sb_restr; vauto.
+        red. ins. apply programs_without_tid_init. congruence. }
+      subst.
+      arewrite (Tid_ tid_init ∩₁ E GI ∩₁ R GI ∩₁ Sc GI ⊆₁ ∅); [| basic_solver].
+      rewrite init_equiv. rewrite (init_pln WFI).
+      unfold is_orlx_w, is_w, is_only_pln, is_only_rlx. mode_solver. }
+  Qed. 
     
-      
-  Admitted. 
-
   Lemma GI_omm_premises : omm_premises_hold GI.
   Proof.
     apply omm_premises_thread_local.
