@@ -995,6 +995,23 @@ Section CompilationCorrectness.
   (* Lemma locations_separated_compiled ProgO ProgI (COMP: is_compiled ProgO ProgI) *)
   (*       (LOC_SEP: locations_separated ProgO): locations_separated ProgI. *)
 
+  Lemma comp_corr_result oinstr block0 block BPI_corr
+        (COMP: is_instruction_compiled oinstr block0)
+        (CORR: block_corrected BPI_corr block0 block):
+    block0 = block \/ exists cond adr, block = [Instr.ifgoto cond adr].
+  Proof.
+    inversion COMP; subst.
+    6: { right.
+         red in CORR. inversion CORR. subst. inversion H3. subst.
+         inversion H1; subst igt; eauto. }
+    all: left.
+    1, 5:  by (red in CORR; inversion CORR; subst; inversion H3; subst;
+      inversion H1; vauto).
+    all: by (red in CORR; inversion CORR; subst;
+             inversion H3; inversion H5; subst;
+             inversion H1; inversion H2; subst; vauto). 
+  Qed. 
+
   Lemma ORIG_INSTR instri (AT_LOC: instr_locs instri <> [])
         PO PI (COMP: is_thread_compiled PO PI) (IN_PI: In instri PI):
     exists instro, In instro PO /\ instr_locs instri = instr_locs instro /\
@@ -1026,40 +1043,21 @@ Section CompilationCorrectness.
     desc. subst.
     simpl in H. apply in_app_or in H. des.
     { inversion_clear COMP0. inversion_clear CORR.
-      inversion H0; subst. 
-      - red in H2. inversion H2. subst. inversion H6. subst.
-        apply Forall2_length in H8. destruct l'; vauto.
-        red in H. des; [| done]. subst. 
-        exists ld. splits; vauto.
-      - red in H2. inversion H2. subst.
-        inversion H8. subst. 
-        apply Forall2_length in H10. destruct l'0; vauto.
-        inversion H6. inversion H7. subst. 
-        red in H. des; [| by vauto | done]; subst.
-        exists st. splits; vauto.
-      - red in H2. inversion H2. subst.
-        inversion H8. subst. 
-        apply Forall2_length in H10. destruct l'0; vauto.
-        inversion H6. inversion H7. subst. 
-        red in H. des; [| by vauto | done]; subst.
-        exists ld. splits; vauto.
-      - red in H2. inversion H2. subst.
-        inversion H8. subst. 
-        apply Forall2_length in H10. destruct l'0; vauto.
-        inversion H6. inversion H7. subst. 
-        red in H. des; [| by vauto | done]; subst.
-        exists exc. splits; vauto.
-      - red in H2. inversion H2. subst. inversion H6. subst.
-        apply Forall2_length in H8. destruct l'; vauto.
-        red in H. des; [by vauto| done]. 
-      - red in H2. inversion H2. subst. inversion H6.
-        + subst. 
-          apply Forall2_length in H8. destruct l'; vauto.
-          red in H. des; [by vauto| done].
-        + subst.
-          apply Forall2_length in H8. destruct l'; vauto.
-          red in H. des; [by vauto| done].
-    } 
+      forward eapply comp_corr_result as CC_RESULT; eauto.
+      des.
+      { subst.
+        inversion H0; subst. 
+        - red in H. des; [| done]. subst. exists ld. splits; vauto.
+        - red in H. des; [| by vauto | done]; subst.
+          exists st. splits; vauto.
+        - red in H. des; [| by vauto | done]; subst.
+          exists ld. splits; vauto.
+        - red in H. des; [| by vauto | done]; subst.
+          exists exc. splits; vauto.
+        - red in H. des; [| done]. subst. exists asn. splits; vauto.
+        - red in H. des; [| done]. subst. exists igt. splits; vauto. }      
+      subst. red in H. des; [| done]. subst.
+      simpl in AT_LOC. vauto. }
     specialize (IH (length (flatten BPI'))). specialize_full IH. 
     { simpl. rewrite app_length. cut (length block > 0); [ins; omega| ].
       forward eapply (@COMPILED_NONEMPTY_weak (oinstr :: PO') (block :: BPI')) as COMP_NONEMPTY. 
@@ -1108,7 +1106,28 @@ Section CompilationCorrectness.
 
   Lemma ordr_ordw_eq instr cas reg lexpr ordr ordw xmod (INSTR: instr = Instr.update cas xmod ordr ordw reg lexpr) Pi (COMP: exists PO, is_thread_compiled PO Pi) (IN: In instr Pi):
     ordr = ordw.
-  Proof. Admitted. 
+  Proof.
+    desc. red in COMP. desc. red in COMP. desc. subst Pi.
+    apply in_flatten_iff in IN. destruct IN as [block [BLOCK_IN INSTR_BLOCK]].
+    red in COMP. desc.
+    apply In_nth_error in BLOCK_IN. desc.
+    symmetry in BLOCK_IN.
+    assert (exists block0, Some block0 = nth_error BPI0 n) as [block0 BLOCK0_IN]. 
+    { apply OPT_VAL, nth_error_Some.
+      erewrite Forall2_length; eauto. 
+      apply nth_error_Some, OPT_VAL. eauto. }
+    assert (exists oinstr, Some oinstr = nth_error PO n) as [oinstr OINSTR_IN]. 
+    { apply OPT_VAL, nth_error_Some.
+      erewrite Forall2_length; eauto. 
+      apply nth_error_Some, OPT_VAL. eauto. }
+    assert (is_instruction_compiled oinstr block0) as COMP_INSTR by (eapply Forall2_index; eauto). 
+    assert (block_corrected BPI0 block0 block) as CORR_BLOCK by (eapply Forall2_index; eauto).
+    forward eapply comp_corr_result as CC_RESULT; eauto. des. 
+    { subst. inversion COMP_INSTR.
+      all: try (subst; simpl in INSTR_BLOCK; des; vauto). 
+      inversion COMP_INSTR. subst exc. vauto. }
+    subst. simpl in INSTR_BLOCK; des; vauto. 
+  Qed. 
 
   Lemma EIP_steps st thread n_steps (REACH: (step thread) ^^ n_steps (init (instrs st)) st) (COMP: exists PO, is_thread_compiled PO (instrs st)):
     event_instr_prop st thread (instrs st).
