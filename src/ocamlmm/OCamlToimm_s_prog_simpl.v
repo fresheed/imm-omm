@@ -999,7 +999,79 @@ Section CompilationCorrectness.
         PO PI (COMP: is_thread_compiled PO PI) (IN_PI: In instri PI):
     exists instro, In instro PO /\ instr_locs instri = instr_locs instro /\
               instr_mode instri = instr_mode instro.
-  Proof. Admitted. 
+  Proof.
+    red in COMP. desc. red in COMP. desc. (* red in COMP. desc. *)
+    subst.
+    apply itbc_implies_itbcw in COMP. 
+    remember (length (flatten BPI)) as comp_length.
+    generalize dependent PO. generalize dependent BPI. generalize dependent comp_length. 
+    set (P := fun (comp_length : nat) => forall (BPI : list (list Instr.t)),
+                  In instri (flatten BPI) ->
+                  comp_length = length (flatten BPI) ->
+                  forall PO : list Instr.t,
+                    itbc_weak PO BPI ->
+                    exists instro : Instr.t,
+                      In instro PO /\
+                      instr_locs instri = instr_locs instro /\
+                      instr_mode instri = instr_mode instro).
+    apply (strong_induction P). intros comp_length IH.
+    red. ins. 
+    destruct BPI as [| block BPI']; [vauto| ].
+    red in H1. destruct H1 as [BPI0 [BPI_corr [COMP0 CORR]]]. 
+    assert (exists block0 BPI0', BPI0 = block0 :: BPI0').
+    { destruct BPI0; vauto. apply Forall2_length in CORR. vauto. }
+    desc. subst.
+    assert (exists oinstr PO', PO = oinstr :: PO').
+    { destruct PO; vauto. apply Forall2_length in COMP0. vauto. }
+    desc. subst.
+    simpl in H. apply in_app_or in H. des.
+    { inversion_clear COMP0. inversion_clear CORR.
+      inversion H0; subst. 
+      - red in H2. inversion H2. subst. inversion H6. subst.
+        apply Forall2_length in H8. destruct l'; vauto.
+        red in H. des; [| done]. subst. 
+        exists ld. splits; vauto.
+      - red in H2. inversion H2. subst.
+        inversion H8. subst. 
+        apply Forall2_length in H10. destruct l'0; vauto.
+        inversion H6. inversion H7. subst. 
+        red in H. des; [| by vauto | done]; subst.
+        exists st. splits; vauto.
+      - red in H2. inversion H2. subst.
+        inversion H8. subst. 
+        apply Forall2_length in H10. destruct l'0; vauto.
+        inversion H6. inversion H7. subst. 
+        red in H. des; [| by vauto | done]; subst.
+        exists ld. splits; vauto.
+      - red in H2. inversion H2. subst.
+        inversion H8. subst. 
+        apply Forall2_length in H10. destruct l'0; vauto.
+        inversion H6. inversion H7. subst. 
+        red in H. des; [| by vauto | done]; subst.
+        exists exc. splits; vauto.
+      - red in H2. inversion H2. subst. inversion H6. subst.
+        apply Forall2_length in H8. destruct l'; vauto.
+        red in H. des; [by vauto| done]. 
+      - red in H2. inversion H2. subst. inversion H6.
+        + subst. 
+          apply Forall2_length in H8. destruct l'; vauto.
+          red in H. des; [by vauto| done].
+        + subst.
+          apply Forall2_length in H8. destruct l'; vauto.
+          red in H. des; [by vauto| done].
+    } 
+    specialize (IH (length (flatten BPI'))). specialize_full IH. 
+    { simpl. rewrite app_length. cut (length block > 0); [ins; omega| ].
+      forward eapply (@COMPILED_NONEMPTY_weak (oinstr :: PO') (block :: BPI')) as COMP_NONEMPTY. 
+      { red. eexists. eexists. splits; eauto. }
+      inversion COMP_NONEMPTY. destruct block; vauto. simpl. omega. }
+    red in IH. specialize (IH BPI' H eq_refl PO').
+    specialize_full IH.
+    { red. exists BPI0'. exists BPI_corr.
+      inversion CORR. inversion COMP0. subst.
+      splits; vauto. }
+    desc. exists instro. splits; vauto.
+  Qed. 
     
   Lemma locations_separated_compiled: locations_separated ProgI.
   Proof.
