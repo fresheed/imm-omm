@@ -1503,7 +1503,21 @@ Section CompilationCorrectness.
   (*   { apply program_execution_equiv in ExecI. red in ExecI. *)
   (*     destruct ExecI as [INIT EXEC]. clear ExecI. *)
   (*     destruct OEXEC as [INIT' EXEC']. *)
+  (* Definition enum_type := exists tid PO PI SGI, *)
+  (*     is_thread_compiled PO PI /\ thread_execution tid PI SGI.  *)
 
+  (* Definition build_result_type (ei: enum_type): Prop. *)
+  (*   unfold enum_type in *.  *)
+  
+  Lemma set_finite_alt {A: Type} (S: A -> Prop) (FIN: set_finite S):
+    exists findom, forall x, S x <-> In x findom.
+  Proof.
+    destruct FIN as [lst FIN].
+    exists (filterP S lst). ins. split.
+    { ins. apply in_filterP_iff. split; auto. }
+    ins. apply in_filterP_iff in H. desc. auto. 
+  Qed. 
+  
   Lemma thread_execs_helper: exists GO,
       ⟪ E_STRUCT: forall e : actid, E GO e -> is_init e \/ IdentMap.In (tid e) ProgO ⟫/\
       ⟪ SAME_INIT: E GO ∩₁ is_init ≡₁ E GI ∩₁ is_init⟫ /\
@@ -1517,7 +1531,92 @@ Section CompilationCorrectness.
         GIi (RESTR: thread_restricted_execution GI tid GIi),
         Othread_execution tid POi GOi /\ same_behavior_local GOi GIi ⟫.
   Proof.
-    eexists. 
+(*     red in ExecI. destruct ExecI. *)
+(*     set (enum_type := exists tid PO PI SGI, *)
+(*               is_thread_compiled PO PI /\ thread_execution tid PI SGI).  *)
+(*     set (foo := set_bunion (fun enum_item: enum_type => True) (fun enum_item (_: actid) => True)). *)
+    
+(*     assert (forall (ei: enum_type), exists SGO: execution, True). *)
+(*     { intros ei. destruct ei. proj_sig1 *)
+(* ) *)
+(*     thread_execs *)
+(*     assert (set_finite (fun thread => IdentMap.In thread ProgI)) as FIN_THREADS by admit. *)
+(*     assert (set_finite (fun GOi => exists tid POi *)
+(*                                   (THREAD: Some POi = IdentMap.find tid ProgO) *)
+(*                                   GIi (RESTR: thread_restricted_execution GI tid GIi), *)
+(*                             Othread_execution tid POi GOi /\ same_behavior_local GOi GIi)). *)
+    (*     { apply set_finite_more with (x := (fun thread : IdentMap.key => IdentMap.In thread ProgI)).  *)
+    set (GOi_prop := fun thread GOi =>
+                       exists POi GIi,
+                         Some POi = IdentMap.find thread ProgO /\
+                         thread_restricted_execution GI thread GIi /\
+                         Othread_execution thread POi GOi /\ 
+                         same_behavior_local GOi GIi). 
+    set (all_acts := set_bunion
+                       (fun thread => IdentMap.In thread ProgI)
+                       (fun thread e => exists GOi, GOi_prop thread GOi /\ E GOi e)).
+    assert (set_finite all_acts) as FIN_EGO. 
+    { admit. }
+    apply set_finite_alt in FIN_EGO. destruct FIN_EGO as [GO_actsset EGO].
+    assert (set_finite (E GI ∩₁ is_init)) as FIN_INIT.
+    { admit. }
+    apply set_finite_alt in FIN_INIT. destruct FIN_INIT as [GO_initset INIT_GO].
+    set (GOi_rel := fun (rel: execution -> relation actid) =>
+                      bunion
+                        (fun thread => IdentMap.In thread ProgI)
+                        (fun thread x y => exists GOi, GOi_prop thread GOi /\ (rel GOi x y))). 
+    
+    set (GO :=   {| acts := GO_actsset ++ GO_initset;
+                    lab := fun _ => Afence Opln;
+                    rmw := GOi_rel rmw; 
+                    data := GOi_rel data;
+                    addr := GOi_rel addr;
+                    ctrl := GOi_rel ctrl;
+                    rmw_dep := GOi_rel rmw_dep;
+                    rf := restr_rel (RWO GI) (rf GI);
+                    co := co GI |}).
+    assert (forall e (E_ACT: In e GO_actsset), exists thread index GOi,
+                 e = ThreadEvent thread index /\
+                 GOi_prop thread GOi) as E_GO_STRUCT. 
+    { ins.
+      apply EGO in E_ACT. subst all_acts.
+      red in E_ACT. destruct E_ACT as [thread [THREAD [GOi [EGOi_prop EGOi]]]].
+      red in EGOi_prop. desc.
+      red in EGOi_prop2. desc. rewrite (set_equiv_exp RESTR_EVENTS) in EGOi.
+      red in EGOi. desc. 
+      destruct EGOi_prop0. rewrite (set_equiv_exp tr_acts_set) in EGOi.
+      red in EGOi. desc.
+      destruct e.
+      { subst. simpl in THREAD. apply programs_without_tid_init in THREAD. vauto. }
+      simpl in EGOi1. subst. do 3 eexists; eauto. split; eauto.
+      vauto. }
+
+    exists GO. splits.
+    { subst GO. unfold acts_set. simpl. ins.
+      destruct e; [by vauto| ].
+      right. simpl.
+      apply in_app_or in H. des.
+      2: { apply INIT_GO in H. red in H. desc.
+           unfold is_init in H0. vauto. }
+      apply E_GO_STRUCT in H. desc. inversion H. subst.
+      red in H0. desc. apply find_iff_in. eauto. } 
+    { subst GO. unfold acts_set. simpl.
+      assert (forall {A: Type} (l1 l2: list A), (fun x => In x (l1 ++ l2)) ≡₁ (fun x => In x l1) ∪₁ (fun x => In x l2)) as IN_SET_UNION. 
+      { ins. apply set_equiv_exp_iff. ins. split. 
+        { ins. red. apply in_app_or. auto. }
+        ins. red in H. apply in_or_app. auto. }
+      rewrite IN_SET_UNION, set_inter_union_l.
+      arewrite ((fun x : actid => In x GO_actsset) ∩₁ (fun a : actid => is_init a) ≡₁ ∅).
+      { split; [| basic_solver]. red. ins. red in H. desc.
+        apply E_GO_STRUCT in H. desc. subst. unfold is_init in H0. vauto. }
+      remove_emptiness. rewrite <- set_interK with (s := is_init) at 2.
+      rewrite <- set_interA. apply set_equiv_inter; [| basic_solver].
+      symmetry. apply set_equiv_exp_iff. apply INIT_GO. }
+    2: { vauto. }
+    2: { vauto. }
+    { admit. }
+    ins.
+    pose proof thread_execs.  
   Admitted.
 
   Lemma restr_graph G tid: exists Gi, thread_restricted_execution G tid Gi.
