@@ -1377,14 +1377,6 @@ Section CompilationCorrectness.
     replace (Events.mod (lab GI) e0) with m in *; [| congruence].
     type_solver. 
   Qed. 
-
-  (* Lemma ORLX_W_ALT G: *)
-  (*   .  *)
-  (* Proof. unfold set_inter, is_orlx_w. basic_solver. Qed. *)
-  
-  (* Lemma F_ACQREL_ALT G: *)
-  (*   W G ∩₁ ORlx G ≡₁ fun x : actid => is_orlx_w (lab G) x.  *)
-  (* Proof. unfold set_inter, is_orlx_w. basic_solver. Qed. *)
   
   Lemma imm_implies_omm:
     ocaml_consistent GI.
@@ -1408,107 +1400,6 @@ Section CompilationCorrectness.
     <-> forall key (KEY: IdentMap.In key orig), exists value, P key value. 
   Proof. Admitted. 
     
-  (* Lemma build_GOi_map TSGI (WFG: Wf (tsg2g TSGI)) (TSG_EXECI : program_execution_tsg ProgI TSGI): *)
-  (*   exists GOis, same_keys GOis (Gis TSGI) /\ *)
-  (*           forall tid GOi (THREAD_GRAPH: Some GOi = IdentMap.find tid GOis) *)
-  (*             GIi (THREAD: Some GIi = IdentMap.find tid (Gis TSGI)) *)
-  (*             Po (THREAD_O: Some Po = IdentMap.find tid ProgO), *)
-  (*             same_behavior_local GOi GIi /\ *)
-  (*             Othread_execution tid Po GOi.  *)
-  (* Proof. *)
-  (*   set (P := fun tid GOi => *)
-  (*               forall GIi (THREAD: Some GIi = IdentMap.find tid (Gis TSGI)) *)
-  (*                 Po (THREAD_O: Some Po = IdentMap.find tid ProgO), *)
-  (*                 same_behavior_local GOi GIi /\ *)
-  (*                 Othread_execution tid Po GOi).  *)
-  (*   apply (@IdentMap_explicit execution execution P (Gis TSGI)). *)
-  (*   intros tid THREAD. *)
-  (*   red in TSG_EXECI. desc. *)
-  (*   red in Compiled. destruct Compiled as [SAME_THREADS THREADS_COMPILED]. clear Compiled. *)
-  (*   assert (exists Pi, Some Pi = IdentMap.find tid ProgI) as [Pi THREAD_PROGI].  *)
-  (*   { apply find_iff_in. apply SAME_KEYS. auto. } *)
-  (*   assert (exists Po, Some Po = IdentMap.find tid ProgO) as [Po THREAD_PROGO].  *)
-  (*   { apply find_iff_in. apply SAME_THREADS. apply find_iff_in. eauto. } *)
-  (*   apply find_iff_in in THREAD. destruct THREAD as [Gi THREAD_EXEC].  *)
-  (*   specialize (THREAD_GRAPH_EXEC tid Pi THREAD_PROGI Gi THREAD_EXEC).  *)
-  (*   forward eapply thread_execs; eauto. *)
-  (*   (* { pose proof (proj1 (Wf_tsg (tsg2g TSGI))). apply H in WFG. desc. *) *)
-  (*   (*   eapply WFG. rewrite (proj2 tsg_g_bijection). eauto. } *) *)
-  (*   ins. unfold P. destruct H as [GOi GOi_PROPS]. *)
-  (*   exists GOi. ins. *)
-  (*   (* TODO: correct this duplication? *) *)
-  (*   replace GIi with Gi; [| congruence]. replace Po0 with Po; [| congruence]. *)
-  (*   desc. split; auto.  *)
-  (* Qed.  *)
-
-  (* Lemma TSGO_exists TSGI (WFG: Wf (tsg2g TSGI)) (TSG_EXECI : program_execution_tsg ProgI TSGI): *)
-  (*   exists TSGO, *)
-  (*   Oprogram_execution_tsg TSGO OCamlProgO /\ *)
-  (*   co_tsg TSGO ≡ co_tsg TSGI /\ *)
-  (*   rf_tsg TSGO ≡ rf_tsg TSGI ⨾ ⦗set_compl (dom_rel (rmw_tsg TSGI))⦘ /\ *)
-  (*   (forall tid : IdentMap.key, *)
-  (*       IdentMap.In tid (Gis TSGO) -> *)
-  (*       forall GOi GIi : execution, *)
-  (*         Some GOi = IdentMap.find tid (Gis TSGO) -> *)
-  (*         Some GIi = IdentMap.find tid (Gis TSGI) -> same_behavior_local GOi GIi).  *)
-  (* Proof. *)
-  (*   pose proof (build_GOi_map WFG TSG_EXECI) as [GOis [SAME_TIDS GOis_PROPS]].  *)
-  (*   set (TSGO := {| Gis := GOis; *)
-  (*                   Einit_tsg := Einit_tsg TSGI; *)
-  (*                   rf_tsg := rf_tsg TSGI ⨾ ⦗set_compl (dom_rel (rmw_tsg TSGI))⦘; *)
-  (*                   co_tsg := co_tsg TSGI; *)
-  (*                   rmw_tsg := ∅₂; |} ). *)
-  (*   exists TSGO. *)
-  (*   destruct Compiled as [SAME_THREADS THREADS_COMPILED]. clear Compiled. *)
-  (*   splits; [| basic_solver | subst TSGO; basic_solver |].  *)
-  (*   { red. ins.  *)
-  (*     specialize (SAME_THREADS tid). *)
-  (*     assert (exists Pi, Some Pi = IdentMap.find tid ProgI) as [Pi THREAD_PROGI].  *)
-  (*     { apply find_iff_in. apply SAME_THREADS. apply find_iff_in. eauto. } *)
-  (*     assert (exists GIi, Some GIi = IdentMap.find tid (Gis TSGI)) as [Gi THREAD_EXECI]. *)
-  (*     { red in TSG_EXECI. desc. red in SAME_KEYS. specialize (SAME_KEYS tid). *)
-  (*       apply find_iff_in. apply SAME_KEYS. apply find_iff_in. eauto. } *)
-  (*     assert (exists GOi, Some GOi = IdentMap.find tid (Gis TSGO)) as [GOi THREAD_EXECO]. *)
-  (*     { simpl. apply find_iff_in, SAME_TIDS, find_iff_in. eauto. } *)
-  (*     forward eapply GOis_PROPS; eauto. *)
-  (*     ins. desc. eauto. } *)
-  (*   ins. *)
-  (*   assert (exists Pi, Some Pi = IdentMap.find tid ProgI) as [Pi THREAD_PROGI].  *)
-  (*   { red in TSG_EXECI. desc. red in SAME_KEYS. apply find_iff_in. *)
-  (*     apply SAME_KEYS. apply find_iff_in. eauto. } *)
-  (*   assert (exists Po, Some Po = IdentMap.find tid ProgO) as [Po THREAD_PROGO].  *)
-  (*   { apply find_iff_in. apply SAME_THREADS. apply find_iff_in. eauto. } *)
-  (*   forward eapply GOis_PROPS; eauto. ins. desc. auto.  *)
-  (* Qed.  *)
-    
-  Definition  thread_execs_fun tid PIi (THREADI: Some PIi = IdentMap.find tid ProgI):
-    inhabited {GOi | forall POi (COMP: Some POi = IdentMap.find tid ProgO), Othread_execution tid POi GOi}.
-    apply exists_to_inhabited_sig. 
-    assert (exists Po, Some Po = IdentMap.find tid ProgO). 
-    { (* apply find_iff_in. apply SAME_THREADS. apply find_iff_in. eauto. *) admit.  }
-    desc.
-  Admitted.
-
-  Definition merge (GOis: list execution): execution.
-  Admitted.
-
-  (* Lemma sbl_restricted GO (OEXEC: Oprogram_execution_corrected OCamlProgO GO) *)
-  (*       (* (BY_THREADS: forall tid GOi GIi *) *)
-  (*       (*                (RESTRO: thread_restricted_execution GO tid GOi) *) *)
-  (*       (*                (RESTRI: thread_restricted_execution GI tid GIi), *) *)
-  (*           (* same_behavior_local GOi GIi): *):  *)
-  (*   same_behavior_local GO GI. *)
-  (* Proof. *)
-  (*   red. splits. *)
-  (*   { apply program_execution_equiv in ExecI. red in ExecI. *)
-  (*     destruct ExecI as [INIT EXEC]. clear ExecI. *)
-  (*     destruct OEXEC as [INIT' EXEC']. *)
-  (* Definition enum_type := exists tid PO PI SGI, *)
-  (*     is_thread_compiled PO PI /\ thread_execution tid PI SGI.  *)
-
-  (* Definition build_result_type (ei: enum_type): Prop. *)
-  (*   unfold enum_type in *.  *)
-  
   Lemma set_finite_alt {A: Type} (S: A -> Prop) (FIN: set_finite S):
     exists findom, forall x, S x <-> In x findom.
   Proof.
@@ -1516,7 +1407,137 @@ Section CompilationCorrectness.
     exists (filterP S lst). ins. split.
     { ins. apply in_filterP_iff. split; auto. }
     ins. apply in_filterP_iff in H. desc. auto. 
+  Qed.
+
+  Definition graphs_sim (G1 G2: execution) :=
+    (* acts G1 = acts G2 /\ *)
+    (fun x => In x (acts G1)) ≡₁ (fun x => In x (acts G2)) /\
+    (forall x, E G1 x -> lab G1 x = lab G2 x) /\
+    rmw G1 ≡ rmw G2 /\
+    data G1 ≡ data G2 /\
+    addr G1 ≡ addr G2 /\
+    ctrl G1 ≡ ctrl G2 /\
+    rmw_dep G1 ≡ rmw_dep G2 /\
+    rf G1 ≡ rf G2 /\
+    co G1 ≡ co G2. 
+
+  Lemma graphs_sim_steps G1 G2 (SIM: graphs_sim G1 G2) tid
+        st1 (G_ST: G st1 = G1) (REACH: (Ostep tid)＊ (init (instrs st1)) st1):
+    exists st2, (Ostep tid)＊ (init (instrs st2)) st2 /\ G st2 = G2 /\
+           instrs st1 = instrs st2 /\
+           pc st1 = pc st2. 
+  Proof.
+    admit.
+  Admitted. 
+    
+  Lemma sim_exec_equiv G1 G2 (SIM: graphs_sim G1 G2) Pi tid:
+    Othread_execution tid Pi G1 -> Othread_execution tid Pi G2.
+  Proof.
+    ins. red. red in H. desc.
+    assert (instrs (init Pi) = instrs s).
+    { apply omm_steps_same_instrs. eauto. }
+    simpl in H. subst. 
+    pose proof (@graphs_sim_steps _ _ SIM tid s eq_refl STEPS). desc.
+    exists st2. unfold is_terminal in *. splits; congruence. 
   Qed. 
+    
+  Lemma sim_sbl G1 G2 (SIM: graphs_sim G1 G2) G':
+    same_behavior_local G1 G' -> same_behavior_local G2 G'. 
+  Proof.
+    ins. 
+    unfold same_behavior_local in *. desc.
+    red in SIM. desc. splits.
+    { unfold acts_set. rewrite <- SIM. auto. }
+    ins. rewrite <- SAME_LAB; [| apply SIM; vauto].
+    rewrite SIM0; auto. apply SIM; vauto. 
+  Qed. 
+  
+  (* Lemma tre_sim G G1 G2 thread (SIM: graphs_sim G1 G2) *)
+  (*       (TRE: thread_restricted_execution G thread G1): *)
+  (*   thread_restricted_execution G thread G2. *)
+  (* Proof. *)
+  (*   red in SIM. desc. destruct TRE. *)
+  (*   split. *)
+  (*   { rewrite <- tr_acts_set. unfold acts_set. rewrite SIM. auto. } *)
+  (*   { ins. rewrite <- tr_lab. rewrite SIM0; auto. unfold acts_set. rewrite SIM. auto.  } *)
+  (*   { rewrite <- tr_rmw, SIM1. auto. } *)
+  (*   { rewrite <- tr_data, SIM2. auto. } *)
+  (*   { rewrite <- tr_addr, SIM3. auto. } *)
+  (*   { rewrite <- tr_ctrl, SIM4. auto. } *)
+  (*   { rewrite <- tr_rmw_dep, SIM5. auto. } *)
+  (* Qed.  *)
+
+  Lemma tre_sim G G1 G2 thread
+        (TRE1: thread_restricted_execution G thread G1)
+        (TRE2: thread_restricted_execution G thread G2)
+        (NO_RF1: rf G1 ≡ ∅₂) (NO_RF2: rf G2 ≡ ∅₂)
+        (NO_CO1: co G1 ≡ ∅₂) (NO_CO2: co G2 ≡ ∅₂):
+    graphs_sim G1 G2. 
+  Proof.
+    destruct TRE1, TRE2. red.
+    assert (E G1 ≡₁ E G2) as E_SIM. 
+    { rewrite <- tr_acts_set0 in tr_acts_set.
+      unfold acts_set in tr_acts_set. 
+      rewrite <- tr_acts_set. unfold acts_set. vauto. }
+    Ltac rel_congruence := match goal with
+                           | H1: ?r1 ≡ ?r, H2: ?r2 ≡ ?r |- ?r1 ≡ ?r2
+                             => rewrite H1, H2; auto
+                           end. 
+    splits; auto.
+    all: try by rel_congruence. 
+    ins. rewrite tr_lab; auto. rewrite tr_lab0; auto.
+    apply E_SIM. auto. 
+  Qed. 
+
+  Definition graphs_sim_weak (G1 G2: execution) :=
+    (* acts G1 = acts G2 /\ *)
+    (fun x => In x (acts G1)) ≡₁ (fun x => In x (acts G2)) /\
+    (forall x, E G1 x -> lab G1 x = lab G2 x) /\
+    rmw G1 ≡ rmw G2 /\
+    data G1 ≡ data G2 /\
+    addr G1 ≡ addr G2 /\
+    ctrl G1 ≡ ctrl G2 /\
+    rmw_dep G1 ≡ rmw_dep G2. 
+  
+  Lemma tre_sim_weak G G1 G2 thread
+        (TRE1: thread_restricted_execution G thread G1)
+        (TRE2: thread_restricted_execution G thread G2):
+    graphs_sim_weak G1 G2. 
+  Proof. Admitted. 
+
+
+  Lemma graphs_sim_steps_weak G1 G2 (SIM: graphs_sim_weak G1 G2) tid
+        st1 (G_ST: G st1 = G1) (REACH: (Ostep tid)＊ (init (instrs st1)) st1):
+    exists st2, (Ostep tid)＊ (init (instrs st2)) st2 /\ G st2 = G2 /\
+           instrs st1 = instrs st2 /\
+           pc st1 = pc st2. 
+  Proof.
+    admit.
+  Admitted. 
+    
+  Lemma sim_exec_equiv_weak G1 G2 (SIM: graphs_sim_weak G1 G2) Pi tid:
+    Othread_execution tid Pi G1 -> Othread_execution tid Pi G2.
+  Proof.
+    ins. red. red in H. desc.
+    assert (instrs (init Pi) = instrs s).
+    { apply omm_steps_same_instrs. eauto. }
+    simpl in H. subst. 
+    pose proof (@graphs_sim_steps_weak _ _ SIM tid s eq_refl STEPS). desc.
+    exists st2. unfold is_terminal in *. splits; congruence. 
+  Qed. 
+
+  Definition same_behavior_local_ext GO GI :=
+    ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\
+    ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫ /\
+    ⟪ RESTR_RMW: rmw GO ≡ restr_rel (RWO GI) (rmw GI)⟫ /\
+    ⟪ RESTR_DATA: data GO ≡ restr_rel (RWO GI) (data GI)⟫ /\
+    ⟪ RESTR_CTRL: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI)⟫ /\ 
+    ⟪ RESTR_ADDR: addr GO ≡ restr_rel (RWO GI) (addr GI)⟫ /\ 
+    ⟪ RESTR_RMWDEP: rmw_dep GO ≡ restr_rel (RWO GI) (rmw_dep GI)⟫. 
+  
+  Lemma sbl_ext_TMP GOi GIi (SBL: same_behavior_local GOi GIi):
+    same_behavior_local_ext GOi GIi.
+  Proof. Admitted. 
   
   Lemma thread_execs_helper: exists GO,
       ⟪ E_STRUCT: forall e : actid, E GO e -> is_init e \/ IdentMap.In (tid e) ProgO ⟫/\
