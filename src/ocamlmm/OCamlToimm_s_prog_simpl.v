@@ -1490,8 +1490,7 @@ Section CompilationCorrectness.
   Qed. 
 
   Definition graphs_sim_weak (G1 G2: execution) :=
-    (* acts G1 = acts G2 /\ *)
-    (fun x => In x (acts G1)) ≡₁ (fun x => In x (acts G2)) /\
+    E G1 ≡₁ E G2 /\
     (forall x, E G1 x -> lab G1 x = lab G2 x) /\
     rmw G1 ≡ rmw G2 /\
     data G1 ≡ data G2 /\
@@ -1542,8 +1541,9 @@ Section CompilationCorrectness.
   Record hlpr := { htid: thread_id; hPO: list Instr.t; hPI: list Instr.t; hSGI: execution}.
   
   Definition hlpr_restr hlpr := 
-    is_thread_compiled (hPO hlpr) (hPI hlpr) /\
-    thread_execution (htid hlpr) (hPI hlpr) (hSGI hlpr) /\
+    Some (hPO hlpr) = IdentMap.find (htid hlpr) ProgO /\
+    Some (hPI hlpr) = IdentMap.find (htid hlpr) ProgI /\
+    thread_restricted_execution GI (htid hlpr) (hSGI hlpr). 
     
 
   (* Lemma thread_execs_sigma (tpl: hlpr_restr): *)
@@ -1570,8 +1570,25 @@ Section CompilationCorrectness.
   (*   destruct tpl, x. simpl in *. desc. *)
   (*   apply (thread_execs a a0). *)
   (* Qed.  *)
+
+  Lemma sbl_sim_rect GI1 GO1 GI2 GO2 (SIM: graphs_sim_weak GI1 GI2)
+        (SBL: same_behavior_local GO1 GI1)
+        (SBL': same_behavior_local GO2 GI2):
+    graphs_sim_weak GO1 GO2.
+  Proof.
+    apply sbl_ext_TMP in SBL. apply sbl_ext_TMP in SBL'.
+    red in SIM, SBL, SBL'. desc.
+    red. splits.
+    { rewrite RESTR_EVENTS, RESTR_EVENTS0. rewrite <- SIM.
+      unfold RWO. rewrite <- SIM1. repeat rewrite set_inter_minus_r.
+      apply set_equiv_inter; [| basic_solver].
+      apply inter_subset_helper. ins. unfold is_r, is_w, set_union.
+      rewrite SIM0; vauto. }
+    { ins. admit. }
+    { rewrite RESTR_RMW, RESTR_RMW0, SIM1. admit. }
+    { rewrite RESTR_DATA, RESTR_DATA0, SIM2. foobar. 
+      
     
-  
   Lemma thread_execs_helper: exists GO,
       ⟪ E_STRUCT: forall e : actid, E GO e -> is_init e \/ IdentMap.In (tid e) ProgO ⟫/\
       ⟪ SAME_INIT: E GO ∩₁ is_init ≡₁ E GI ∩₁ is_init⟫ /\
@@ -1664,7 +1681,9 @@ Section CompilationCorrectness.
         admit. }
       assert (exists PIi, Some PIi = IdentMap.find tid ProgI) as [PIi THREADI] by admit.
       assert (is_thread_compiled POi PIi) as COMP by admit.
-      assert (thread_execution tid PIi GIi) as EXECIi by admit. 
+      assert (thread_execution tid PIi GIi) as EXECIi. 
+      { apply program_execution_equiv in ExecI. destruct ExecI.
+        apply H0; auto. }
       pose proof (thread_execs COMP EXECIi). desc.
       eexists. splits; vauto.
       cut (same_behavior_local GOi GIi).
@@ -1691,9 +1710,32 @@ Section CompilationCorrectness.
              splits; vauto.
              exists SGO. splits; vauto.
              admit. }
-        { ins. red in H0. desc. subst.
+        { ins. cut (E SGO x); [ins; vauto| ].
+          red in H0. desc. subst.
           destruct y. red in H0. red in H1. desc. simpl in *.
-          red in 
+          destruct x.
+          { simpl in *. exfalso.
+            apply programs_without_tid_init. apply find_iff_in. vauto. }
+          simpl in *.
+          assert (htid0 = thread).
+          { red in H3. desc. rewrite (set_equiv_exp RESTR_EVENTS0) in H2.
+            red in H2. desc.
+            destruct H5. rewrite (set_equiv_exp tr_acts_set0) in H2.
+            red in H2. desc. vauto. }
+          subst htid0. assert (hPI0 = PIi /\ hPO0 = POi) by (split; congruence).
+          desc. subst hPI0 hPO0. clear H4 H0.
+          cut (graphs_sim_weak SGO GOi0).
+          { ins. red in H0. desc. apply H0. auto. }
+          cut (graphs_sim_weak GIi hSGI0).
+          { ins. move H3 at bottom. move SBL at bottom. 
+            red in H0. desc.
+            
+          rewrite (set_equiv_exp RESTR_EVENTS). 
+          (* cut (graphs_sim_weak GOi SGO). *)
+          (* { ins. red in H0. desc. *)
+          (*   symmetry in H0. rewrite (set_equiv_exp H0).  *)
+          
+          red in H3. desc. 
     
     pose proof thread_execs.  
   Admitted.
