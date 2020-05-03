@@ -1704,6 +1704,15 @@ Section CompilationCorrectness.
     ins. red in H. apply in_or_app. auto.
   Qed.
 
+  Lemma eqv_rel_more_inv {A: Type} (S1 S2: A -> Prop) (EQV_REL: ⦗S1⦘ ≡ ⦗S2⦘):
+    S1 ≡₁ S2.
+  Proof. 
+    apply set_equiv_exp_iff. ins.
+    apply (same_relation_exp)with (x := x) (y := x) in EQV_REL.
+    unfold eqv_rel in EQV_REL. red in EQV_REL. desc. 
+    red. splits; desc; intuition.
+  Qed.
+  
   Lemma thread_execs_helper: exists GO,
       ⟪ E_STRUCT: forall e : actid, E GO e -> is_init e \/ IdentMap.In (tid e) ProgO ⟫/\
       ⟪ SAME_INIT: E GO ∩₁ is_init ≡₁ E GI ∩₁ is_init⟫ /\
@@ -1721,12 +1730,13 @@ Section CompilationCorrectness.
                        hlpr_restr
                        (fun hlpr e => exists GOi, hlpr_GO GOi hlpr /\ E GOi e)).
 
-    (* set (GOi_prop := fun thread GOi => *)
-    (*                    exists POi GIi, *)
-    (*                      Some POi = IdentMap.find thread ProgO /\ *)
-    (*                      thread_restricted_execution GI thread GIi /\ *)
-    (*                      Othread_execution thread POi GOi /\  *)
-    (*                      same_behavior_local GOi GIi).  *)
+    set (GOi_prop := fun thread GOi =>
+                       exists POi GIi,
+                         Some POi = IdentMap.find thread ProgO /\
+                         thread_restricted_execution GI thread GIi /\
+                         Othread_execution thread POi GOi /\
+                         same_behavior_local GOi GIi).
+    
     assert (set_finite all_acts) as FIN_EGO. 
     { admit. }
     apply set_finite_alt in FIN_EGO. destruct FIN_EGO as [GO_actsset EGO].
@@ -1747,333 +1757,174 @@ Section CompilationCorrectness.
                     rmw_dep := GOi_rel rmw_dep;
                     rf := restr_rel (RWO GI) (rf GI);
                     co := co GI |}).
-    (* assert (forall e (E_ACT: In e GO_actsset), exists thread index GOi, *)
-    (*              e = ThreadEvent thread index /\ *)
-    (*              GOi_prop thread GOi) as E_GO_STRUCT.  *)
-    (* { ins. *)
-    (*   apply EGO in E_ACT. subst all_acts. *)
-    (*   red in E_ACT. destruct E_ACT as [thread [THREAD [GOi [EGOi_prop EGOi]]]]. *)
-    (*   red in EGOi_prop. desc. *)
-    (*   red in EGOi_prop2. desc. rewrite (set_equiv_exp RESTR_EVENTS) in EGOi. *)
-    (*   red in EGOi. desc.  *)
-    (*   destruct EGOi_prop0. rewrite (set_equiv_exp tr_acts_set) in EGOi. *)
-    (*   red in EGOi. desc. *)
-    (*   destruct e. *)
-    (*   { subst. simpl in THREAD. apply programs_without_tid_init in THREAD. vauto. } *)
-    (*   simpl in EGOi1. subst. do 3 eexists; eauto. split; eauto. *)
-    (*   vauto. } *)
+    assert (forall e (E_ACT: In e GO_actsset), exists thread index GOi,
+                 e = ThreadEvent thread index /\
+                 GOi_prop thread GOi) as E_GO_STRUCT.
+    { ins.
+      apply EGO in E_ACT. subst all_acts.
+      red in E_ACT. destruct E_ACT as [[thread' POi' PI' GI'] [THREAD [GOi [EGOi_prop EGOi]]]]. 
+      red in EGOi_prop. red in THREAD. desc. simpl in *. 
+      red in SBL'. desc. rewrite (set_equiv_exp RESTR_EVENTS) in EGOi.
+      red in EGOi. desc. 
+      destruct RESTR'. rewrite (set_equiv_exp tr_acts_set) in EGOi.
+      red in EGOi. desc.
+      destruct e.
+      { subst. exfalso. apply programs_without_tid_init.
+        apply find_iff_in. simpl in THREADI'. vauto. }
+      simpl in EGOi1. subst. do 3 eexists; eauto. split; eauto. vauto. }
 
     exists GO. splits.
-    (* { subst GO. unfold acts_set. simpl. ins. *)
-    (*   destruct e; [by vauto| ]. *)
-    (*   right. simpl. *)
-    (*   apply in_app_or in H. des. *)
-    (*   2: { apply INIT_GO in H. red in H. desc. *)
-    (*        unfold is_init in H0. vauto. } *)
-    (*   apply E_GO_STRUCT in H. desc. inversion H. subst. *)
-    (*   red in H0. desc. apply find_iff_in. eauto. }  *)
-    (* { subst GO. unfold acts_set. simpl. *)
-    (*   assert (forall {A: Type} (l1 l2: list A), (fun x => In x (l1 ++ l2)) ≡₁ (fun x => In x l1) ∪₁ (fun x => In x l2)) as IN_SET_UNION.  *)
-    (*   { ins. apply set_equiv_exp_iff. ins. split.  *)
-    (*     { ins. red. apply in_app_or. auto. } *)
-    (*     ins. red in H. apply in_or_app. auto. } *)
-    (*   rewrite IN_SET_UNION, set_inter_union_l. *)
-    (*   arewrite ((fun x : actid => In x GO_actsset) ∩₁ (fun a : actid => is_init a) ≡₁ ∅). *)
-    (*   { split; [| basic_solver]. red. ins. red in H. desc. *)
-    (*     apply E_GO_STRUCT in H. desc. subst. unfold is_init in H0. vauto. } *)
-    (*   remove_emptiness. rewrite <- set_interK with (s := is_init) at 2. *)
-    (*   rewrite <- set_interA. apply set_equiv_inter; [| basic_solver]. *)
-    (*   symmetry. apply set_equiv_exp_iff. apply INIT_GO. } *)
-    (* 2: { vauto. } *)
-    (* 2: { vauto. } *)
-    (* { admit. } *)
-    6: { 
-      ins.
-      assert (exists PIi, Some PIi = IdentMap.find tid ProgI) as [PIi THREADI].
-      { apply find_iff_in. red in Compiled. destruct Compiled. apply H.
-        apply find_iff_in. vauto. }
-      assert (is_thread_compiled POi PIi) as COMP.
-      { red in Compiled. destruct Compiled. red in H0. eapply H0; vauto. }
-      assert (thread_execution tid PIi GIi) as EXECIi. 
-      { apply program_execution_equiv in ExecI. destruct ExecI.
-        apply H0; auto. }
-      pose proof (thread_execs COMP EXECIi) as [SGO [OEXEC SBL]]. desc.
-      apply sbl_ext_TMP in SBL. 
-      cut (graphs_sim_weak SGO GOi).
-      { ins. split.
-        { eapply sim_exec_equiv_weak; vauto. }
-        eapply sbl_sim; vauto.
-        red in SBL. desc. vauto. }
-      assert (forall rel
-                (RWO_RESTR_IF_SBL: forall Go Gi,
-                    same_behavior_local_ext Go Gi ->
-                    rel Go ≡ restr_rel (RWO Gi) (rel Gi))
-                (TID_RESTR_IF_TRE: forall G G' tid,
-                    thread_restricted_execution G tid G' ->
-                    rel G' ≡ ⦗Tid_ tid⦘ ⨾ rel G ⨾ ⦗Tid_ tid⦘)
-                (REL_GO: rel GO ≡ GOi_rel rel)
-                (REL_EQ_IF_GSW: forall GOi', graphs_sim_weak SGO GOi' -> rel SGO ≡ rel GOi'),
-                 rel SGO ≡ rel GOi) as INTRA_REL_HELPER. 
-      { ins.
-        rewrite (RWO_RESTR_IF_SBL _ _ SBL).
-        rewrite (TID_RESTR_IF_TRE _ _ _ RESTR). rewrite REL_GO.  
-        unfold GOi_rel.
-        rewrite seq_bunion_l, seq_bunion_r.
-        apply same_relation_exp_iff. ins. split.
-        { intros [RELxy [RWOx RWOy]]. 
-          exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
-          splits; vauto. apply seq_eqv_lr.
-          rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR0)) in RELxy.
-          apply seq_eqv_lr in RELxy. desc.
-          splits; vauto. 
-          exists SGO. splits.
-          { unfold hlpr_GO. simpl. destruct SBL. desc. splits; vauto. }
-          rewrite (same_relation_exp (RWO_RESTR_IF_SBL _ _ SBL)).
-          red. splits; auto.
-          rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR0)). 
-          apply seq_eqv_lr. splits; auto. }
-        { ins. red in H. destruct H as [[thread' POi' PIi' GIi'] [HLPR_RESTR BAR]].
-          apply seq_eqv_lr in BAR. destruct BAR as [TIDx [BAR TIDy]].
-          destruct BAR as [GOi' [[OEXEC' SBL'] REL'xy]].
-          red in SBL'. apply sbl_ext_TMP in SBL'. 
-          red in HLPR_RESTR. desc. simpl in *.
-          cut (graphs_sim_weak SGO GOi').
-          { ins. red in H.
-            specialize (REL_EQ_IF_GSW _ H). 
-            desc.
-            apply (RWO_RESTR_IF_SBL _ _ SBL).
-            apply (same_relation_exp REL_EQ_IF_GSW). auto. }
-          cut (graphs_sim_weak GIi GIi').
-          { ins.
-            red in SBL'. desc. 
-            eapply sbl_sim_rect; vauto.
-            { red in SBL. desc. vauto. }
-            eapply wf_tre_intra_E; vauto. }
-          eapply tre_sim_weak; vauto. 
-          replace thread' with (tid x) in *; [congruence| ]. 
-          rewrite (same_relation_exp (RWO_RESTR_IF_SBL _ _ SBL')) in REL'xy.
-          red in REL'xy. desc.
-          rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR')) in REL'xy. 
-          apply seq_eqv_lr in REL'xy. desc. vauto. }
-      }
-      
-      red. splits.
-      { symmetry. 
-        rewrite tr_acts_set; eauto. subst GO. unfold acts_set at 1. simpl.
-        arewrite ((fun x : actid => In x (GO_actsset ++ GO_initset)) ∩₁ Tid_ tid ≡₁ ((fun x : actid => In x (GO_actsset))  ∩₁ Tid_ tid)).
-        { rewrite IN_SET_UNION. rewrite set_inter_union_l.
-          arewrite ((fun x : actid => In x GO_initset) ∩₁ Tid_ tid ≡₁ ∅); [| basic_solver].
-          split; [| basic_solver]. red. ins. red in H. desc.
-          subst. apply INIT_GO in H. red in H. desc. destruct x; vauto.
-          red. apply programs_without_tid_init. apply find_iff_in. vauto. }
-        arewrite ((fun x : actid => In x GO_actsset) ≡₁ all_acts).
-        { apply set_equiv_exp_iff. ins. symmetry. vauto. }
-        unfold all_acts.
-        rewrite <- set_bunion_inter_compat_r.
-        unfold set_inter.
-        arewrite ((⋃₁x ∈ hlpr_restr,
-                   fun x0 =>
-                     (exists GOi0, hlpr_GO GOi0 x /\ E GOi0 x0) /\
-                     Events.tid x0 = tid)
-                    ≡₁ (⋃₁x ∈ hlpr_restr,
-                        fun x0 =>
-                          (exists GOi0, hlpr_GO GOi0 x /\ E GOi0 x0 /\
-                                   Events.tid x0 = tid))) by basic_solver 100.
-        apply set_equiv_exp_iff. ins. red. split.
-        2: { ins. red. exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
-             splits; vauto.
-             exists SGO. splits; vauto.
-             { red in SBL. desc. vauto. }
-             red in SBL. desc.
-             rewrite (set_equiv_exp RESTR_EVENTS) in H.
-             red in H. desc.
-             destruct RESTR0. rewrite (set_equiv_exp tr_acts_set) in H.
-             red in H. desc. auto. }             
-        intros EGOx. cut (E SGO x); [ins; vauto| ].
-        red in EGOx.
-        destruct EGOx as [[thread' POi' PIi' GIi'] [HLPR_RESTR [GOi' [HLPR_GO [EGOi'x TIDx]]]]]. 
-        destruct x.
-        { simpl in *. exfalso.
-          apply programs_without_tid_init. apply find_iff_in. vauto. }
-        simpl in *. subst tid. 
-        red in HLPR_RESTR. red in HLPR_GO. desc. simpl in *. 
-        red in SBL'. desc. 
-        assert (thread' = thread).
-        { rewrite (set_equiv_exp RESTR_EVENTS) in EGOi'x. 
-          red in EGOi'x. desc.
-          destruct RESTR'. rewrite (set_equiv_exp tr_acts_set) in EGOi'x.
-          red in EGOi'x. desc. vauto. }
-        subst thread'. assert (PIi' = PIi /\ POi' = POi) by (split; congruence).
-        desc. subst PIi' POi'. clear THREADI' THREADO'. 
+    { subst GO. unfold acts_set. simpl. ins.
+      destruct e; [by vauto| ].
+      right. simpl.
+      apply in_app_or in H. des.
+      2: { apply INIT_GO in H. red in H. desc.
+           unfold is_init in H0. vauto. }
+      apply E_GO_STRUCT in H. desc. inversion H. subst.
+      red in H0. desc. apply find_iff_in. eauto. }
+    { subst GO. unfold acts_set. simpl.
+      assert (forall {A: Type} (l1 l2: list A), (fun x => In x (l1 ++ l2)) ≡₁ (fun x => In x l1) ∪₁ (fun x => In x l2)) as IN_SET_UNION.
+      { ins. apply set_equiv_exp_iff. ins. split.
+        { ins. red. apply in_app_or. auto. }
+        ins. red in H. apply in_or_app. auto. }
+      rewrite IN_SET_UNION, set_inter_union_l.
+      arewrite ((fun x : actid => In x GO_actsset) ∩₁ (fun a : actid => is_init a) ≡₁ ∅).
+      { split; [| basic_solver]. red. ins. red in H. desc.
+        apply E_GO_STRUCT in H. desc. subst. unfold is_init in H0. vauto. }
+      remove_emptiness. rewrite <- set_interK with (s := is_init) at 2.
+      rewrite <- set_interA. apply set_equiv_inter; [| basic_solver].
+      symmetry. apply set_equiv_exp_iff. apply INIT_GO. }
+    2: { vauto. }
+    2: { vauto. }
+    { admit. }
+
+    ins.
+    assert (exists PIi, Some PIi = IdentMap.find tid ProgI) as [PIi THREADI].
+    { apply find_iff_in. red in Compiled. destruct Compiled. apply H.
+      apply find_iff_in. vauto. }
+    assert (is_thread_compiled POi PIi) as COMP.
+    { red in Compiled. destruct Compiled. red in H0. eapply H0; vauto. }
+    assert (thread_execution tid PIi GIi) as EXECIi. 
+    { apply program_execution_equiv in ExecI. destruct ExecI.
+      apply H0; auto. }
+    pose proof (thread_execs COMP EXECIi) as [SGO [OEXEC SBL]]. desc.
+    apply sbl_ext_TMP in SBL. 
+    cut (graphs_sim_weak SGO GOi).
+    { ins. split.
+      { eapply sim_exec_equiv_weak; vauto. }
+      eapply sbl_sim; vauto.
+      red in SBL. desc. vauto. }
+    assert (forall rel
+              (RWO_RESTR_IF_SBL: forall Go Gi,
+                  same_behavior_local_ext Go Gi ->
+                  rel Go ≡ restr_rel (RWO Gi) (rel Gi))
+              (TID_RESTR_IF_TRE: forall G G' tid,
+                  thread_restricted_execution G tid G' ->
+                  rel G' ≡ ⦗Tid_ tid⦘ ⨾ rel G ⨾ ⦗Tid_ tid⦘)
+              (REL_GO: rel GO ≡ GOi_rel rel)
+              (REL_EQ_IF_GSW: forall GOi', graphs_sim_weak SGO GOi' -> rel SGO ≡ rel GOi'),
+               rel SGO ≡ rel GOi) as INTRA_REL_HELPER. 
+    { ins.
+      rewrite (RWO_RESTR_IF_SBL _ _ SBL).
+      rewrite (TID_RESTR_IF_TRE _ _ _ RESTR). rewrite REL_GO.  
+      unfold GOi_rel.
+      rewrite seq_bunion_l, seq_bunion_r.
+      apply same_relation_exp_iff. ins. split.
+      { intros [RELxy [RWOx RWOy]]. 
+        exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
+        splits; vauto. apply seq_eqv_lr.
+        rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR0)) in RELxy.
+        apply seq_eqv_lr in RELxy. desc.
+        splits; vauto. 
+        exists SGO. splits.
+        { unfold hlpr_GO. simpl. destruct SBL. desc. splits; vauto. }
+        rewrite (same_relation_exp (RWO_RESTR_IF_SBL _ _ SBL)).
+        red. splits; auto.
+        rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR0)). 
+        apply seq_eqv_lr. splits; auto. }
+      { ins. red in H. destruct H as [[thread' POi' PIi' GIi'] [HLPR_RESTR BAR]].
+        apply seq_eqv_lr in BAR. destruct BAR as [TIDx [BAR TIDy]].
+        destruct BAR as [GOi' [[OEXEC' SBL'] REL'xy]].
+        red in SBL'. apply sbl_ext_TMP in SBL'. 
+        red in HLPR_RESTR. desc. simpl in *.
         cut (graphs_sim_weak SGO GOi').
-        { ins. red in H. desc. apply H. auto. }
+        { ins. red in H.
+          specialize (REL_EQ_IF_GSW _ H). 
+          desc.
+          apply (RWO_RESTR_IF_SBL _ _ SBL).
+          apply (same_relation_exp REL_EQ_IF_GSW). auto. }
         cut (graphs_sim_weak GIi GIi').
         { ins.
-          red in SBL. desc. 
+          red in SBL'. desc. 
           eapply sbl_sim_rect; vauto.
+          { red in SBL. desc. vauto. }
           eapply wf_tre_intra_E; vauto. }
-        eapply tre_sim_weak; vauto. }
-      { admit. }
-      all: by apply INTRA_REL_HELPER; vauto; ins; destruct H; desc; vauto.
+        eapply tre_sim_weak; vauto. 
+        replace thread' with (tid x) in *; [congruence| ]. 
+        rewrite (same_relation_exp (RWO_RESTR_IF_SBL _ _ SBL')) in REL'xy.
+        red in REL'xy. desc.
+        rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR')) in REL'xy. 
+        apply seq_eqv_lr in REL'xy. desc. vauto. }
     }
     
-
-          
-
-
-
-        red in SBL. desc. rewrite RESTR_RMW.
-        destruct RESTR. rewrite tr_rmw. 
-        subst GO. simpl. unfold GOi_rel.
-        rewrite seq_bunion_l, seq_bunion_r.
-        apply same_relation_exp_iff. ins. split.
-        { intros [RMWxy [RWOx RWOy]]. 
-          exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
-          splits; vauto. apply seq_eqv_lr.
-          destruct RESTR0. rewrite (same_relation_exp tr_rmw0) in RMWxy.
-          apply seq_eqv_lr in RMWxy. desc.
-          splits; vauto. 
-          exists SGO. splits; vauto. 
-          rewrite (same_relation_exp RESTR_RMW). red. splits; auto.
-          rewrite (same_relation_exp tr_rmw0). apply seq_eqv_lr. splits; auto. }
-        { ins. red in H. destruct H as [[thread' POi' PIi' GIi'] [HLPR_RESTR BAR]].
-          apply seq_eqv_lr in BAR. destruct BAR as [TIDx [BAR TIDy]].
-          destruct BAR as [GOi' [[OEXEC' SBL'] RMW'xy]].
-          red in SBL'. apply sbl_ext_TMP in SBL'. 
-          red in HLPR_RESTR. desc. simpl in *.
-          cut (graphs_sim_weak SGO GOi').
-          { ins. red in H. desc.
-            apply (same_relation_exp RESTR_RMW).
-            apply (same_relation_exp H1). auto. }
-          cut (graphs_sim_weak GIi GIi').
-          { ins.
-            red in SBL'. desc. 
-            eapply sbl_sim_rect; vauto.
-            eapply wf_tre_intra_E; vauto. }
-          eapply tre_sim_weak; vauto. 
-          replace thread' with (tid x) in *; [congruence| ]. 
-          red in SBL'. desc. rewrite (same_relation_exp RESTR_RMW0) in RMW'xy.
-          red in RMW'xy. desc.
-          destruct RESTR'. rewrite (same_relation_exp tr_rmw0) in RMW'xy.
-          apply seq_eqv_lr in RMW'xy. desc. vauto. }
-        }
-
-
-      assert (same_behavior_local GOi GIi) as SBL.
-      {
-      red. splits.
-      { destruct RESTR.
-        red in H0. desc. rewrite <- RESTR_EVENTS.
-
-        rewrite tr_acts_set. subst GO. unfold acts_set. simpl.
-        arewrite ((fun x : actid => In x (GO_actsset ++ GO_initset)) ∩₁ Tid_ tid ≡₁ ((fun x : actid => In x (GO_actsset))  ∩₁ Tid_ tid)) by admit.
-        arewrite ((fun x : actid => In x GO_actsset) ≡₁ all_acts).
-        { apply set_equiv_exp_iff. ins. symmetry. vauto. }
-        unfold all_acts.
-        rewrite <- set_bunion_inter_compat_r.
-        unfold set_inter.
-        arewrite ((⋃₁x ∈ hlpr_restr,
-    fun x0 : actid =>
-    (exists GOi0 : execution, hlpr_GO GOi0 x /\ E GOi0 x0) /\
-    Events.tid x0 = tid) ≡₁ (⋃₁x ∈ hlpr_restr,
-    fun x0 : actid =>
-    (exists GOi0 : execution, hlpr_GO GOi0 x /\ E GOi0 x0 /\
-                         Events.tid x0 = tid))) by basic_solver 100.
-        apply set_equiv_exp_iff. ins. red. split.
-        2: { ins. red. exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
-             splits; vauto.
-             exists SGO. splits; vauto.
-             admit. }
-        { ins. cut (E SGO x); [ins; vauto| ].
-          red in H0. desc. subst.
-          destruct y. red in H0. red in H1. desc. simpl in *.
-          destruct x.
-          { simpl in *. exfalso.
-            apply programs_without_tid_init. apply find_iff_in. vauto. }
-          simpl in *.
-          assert (htid0 = thread).
-          { red in H3. desc. rewrite (set_equiv_exp RESTR_EVENTS0) in H2.
-            red in H2. desc.
-            destruct H5. rewrite (set_equiv_exp tr_acts_set0) in H2.
-            red in H2. desc. vauto. }
-          subst htid0. assert (hPI0 = PIi /\ hPO0 = POi) by (split; congruence).
-          
-          desc. subst hPI0 hPO0. clear H4 H0.
-          cut (graphs_sim_weak SGO GOi0).
-          { ins. red in H0. desc. apply H0. auto. }
-          cut (graphs_sim_weak GIi hSGI0).
-          { ins. eapply sbl_sim_rect; vauto.
-            eapply wf_tre_intra_E; vauto. }
-          eapply tre_sim_weak; vauto. } }
-    (*   admit. *)
-    (*   } *)
-      
-
-      
-      cut (exists GOi', Othread_execution tid POi GOi' /\ same_behavior_local GOi' GIi /\
-                 graphs_sim_weak GOi' GOi).
-      { ins. desc. split.
-        { eapply sim_exec_equiv_weak; eauto. }
-        apply SBL. }
-      pose proof (thread_execs COMP EXECIi). desc.
-      eexists. splits; vauto.
-      cut (same_behavior_local GOi GIi).
-      { ins. eapply sbl_sim_rect; vauto. eapply wf_tre_intra_E; vauto. }
-      apply SBL.
-
-      foobar.
-      
-      eapply sbl_sim; vauto.
-      red. 
-      
-      
-      red. splits.
-      { pose proof H0 as SBL. destruct RESTR.
-        red in H0. desc. rewrite <- RESTR_EVENTS. 
-        rewrite tr_acts_set. subst GO. unfold acts_set. simpl.
-        arewrite ((fun x : actid => In x (GO_actsset ++ GO_initset)) ∩₁ Tid_ tid ≡₁ ((fun x : actid => In x (GO_actsset))  ∩₁ Tid_ tid)) by admit.
-        arewrite ((fun x : actid => In x GO_actsset) ≡₁ all_acts).
-        { apply set_equiv_exp_iff. ins. symmetry. vauto. }
-        unfold all_acts. 
-        rewrite <- set_bunion_inter_compat_r.
-        unfold set_inter.
-        arewrite ((⋃₁x ∈ hlpr_restr,
-    fun x0 : actid =>
-    (exists GOi0 : execution, hlpr_GO GOi0 x /\ E GOi0 x0) /\
-    Events.tid x0 = tid) ≡₁ (⋃₁x ∈ hlpr_restr,
-    fun x0 : actid =>
-    (exists GOi0 : execution, hlpr_GO GOi0 x /\ E GOi0 x0 /\
-                         Events.tid x0 = tid))) by basic_solver 100. 
-        apply set_equiv_exp_iff. ins. red. split.
-        2: { ins. red. exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
-             splits; vauto.
-             exists SGO. splits; vauto.
-             admit. }
-        { ins. cut (E SGO x); [ins; vauto| ].
-          red in H0. desc. subst.
-          destruct y. red in H0. red in H1. desc. simpl in *.
-          destruct x.
-          { simpl in *. exfalso.
-            apply programs_without_tid_init. apply find_iff_in. vauto. }
-          simpl in *.
-          assert (htid0 = thread).
-          { red in H3. desc. rewrite (set_equiv_exp RESTR_EVENTS0) in H2.
-            red in H2. desc.
-            destruct H5. rewrite (set_equiv_exp tr_acts_set0) in H2.
-            red in H2. desc. vauto. }
-          subst htid0. assert (hPI0 = PIi /\ hPO0 = POi) by (split; congruence).
-          
-          desc. subst hPI0 hPO0. clear H4 H0.
-          cut (graphs_sim_weak SGO GOi0).
-          { ins. red in H0. desc. apply H0. auto. }
-          cut (graphs_sim_weak GIi hSGI0).
-          { ins. eapply sbl_sim_rect; vauto.
-            eapply wf_tre_intra_E; vauto. }
-          eapply tre_sim_weak; vauto. } } 
-      admit.
-      }
-      
-      
+    red. splits.
+    { symmetry. 
+      rewrite tr_acts_set; eauto. subst GO. unfold acts_set at 1. simpl.
+      arewrite ((fun x : actid => In x (GO_actsset ++ GO_initset)) ∩₁ Tid_ tid ≡₁ ((fun x : actid => In x (GO_actsset))  ∩₁ Tid_ tid)).
+      { rewrite IN_SET_UNION. rewrite set_inter_union_l.
+        arewrite ((fun x : actid => In x GO_initset) ∩₁ Tid_ tid ≡₁ ∅); [| basic_solver].
+        split; [| basic_solver]. red. ins. red in H. desc.
+        subst. apply INIT_GO in H. red in H. desc. destruct x; vauto.
+        red. apply programs_without_tid_init. apply find_iff_in. vauto. }
+      arewrite ((fun x : actid => In x GO_actsset) ≡₁ all_acts).
+      { apply set_equiv_exp_iff. ins. symmetry. vauto. }
+      unfold all_acts.
+      rewrite <- set_bunion_inter_compat_r.
+      unfold set_inter.
+      arewrite ((⋃₁x ∈ hlpr_restr,
+                 fun x0 =>
+                   (exists GOi0, hlpr_GO GOi0 x /\ E GOi0 x0) /\
+                   Events.tid x0 = tid)
+                  ≡₁ (⋃₁x ∈ hlpr_restr,
+                      fun x0 =>
+                        (exists GOi0, hlpr_GO GOi0 x /\ E GOi0 x0 /\
+                                 Events.tid x0 = tid))) by basic_solver 100.
+      apply set_equiv_exp_iff. ins. red. split.
+      2: { ins. red. exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
+           splits; vauto.
+           exists SGO. splits; vauto.
+           { red in SBL. desc. vauto. }
+           red in SBL. desc.
+           rewrite (set_equiv_exp RESTR_EVENTS) in H.
+           red in H. desc.
+           destruct RESTR0. rewrite (set_equiv_exp tr_acts_set) in H.
+           red in H. desc. auto. }             
+      intros EGOx. cut (E SGO x); [ins; vauto| ].
+      red in EGOx.
+      destruct EGOx as [[thread' POi' PIi' GIi'] [HLPR_RESTR [GOi' [HLPR_GO [EGOi'x TIDx]]]]]. 
+      destruct x.
+      { simpl in *. exfalso.
+        apply programs_without_tid_init. apply find_iff_in. vauto. }
+      simpl in *. subst tid. 
+      red in HLPR_RESTR. red in HLPR_GO. desc. simpl in *. 
+      red in SBL'. desc. 
+      assert (thread' = thread).
+      { rewrite (set_equiv_exp RESTR_EVENTS) in EGOi'x. 
+        red in EGOi'x. desc.
+        destruct RESTR'. rewrite (set_equiv_exp tr_acts_set) in EGOi'x.
+        red in EGOi'x. desc. vauto. }
+      subst thread'. assert (PIi' = PIi /\ POi' = POi) by (split; congruence).
+      desc. subst PIi' POi'. clear THREADI' THREADO'. 
+      cut (graphs_sim_weak SGO GOi').
+      { ins. red in H. desc. apply H. auto. }
+      cut (graphs_sim_weak GIi GIi').
+      { ins.
+        red in SBL. desc. 
+        eapply sbl_sim_rect; vauto.
+        eapply wf_tre_intra_E; vauto. }
+      eapply tre_sim_weak; vauto. }
+    { admit. }
+    all: by apply INTRA_REL_HELPER; vauto; ins; destruct H; desc; vauto.
   Admitted.
 
   Lemma restr_graph G tid: exists Gi, thread_restricted_execution G tid Gi.
