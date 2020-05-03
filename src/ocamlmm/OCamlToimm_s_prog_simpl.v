@@ -1716,7 +1716,6 @@ Section CompilationCorrectness.
   Lemma thread_execs_helper: exists GO,
       ⟪ E_STRUCT: forall e : actid, E GO e -> is_init e \/ IdentMap.In (tid e) ProgO ⟫/\
       ⟪ SAME_INIT: E GO ∩₁ is_init ≡₁ E GI ∩₁ is_init⟫ /\
-      (* ⟪ SAME_INIT_LABELS: forall e (INIT: (E GO ∩₁ is_init) e), lab GO e = lab GI e⟫ /\ *)
       ⟪ SAME_INIT_LABELS: forall l, lab GO (InitEvent l) = Astore Xpln Opln l 0 ⟫ /\
       ⟪ SAME_CO: co GI ≡ co GO⟫ /\
       ⟪ EXT_RF: rf GO ≡ restr_rel (RWO GI) (rf GI)⟫ /\
@@ -1755,9 +1754,8 @@ Section CompilationCorrectness.
                       bunion
                         hlpr_restr
                         (fun hlpr x y => exists GOi, (hlpr_GO GOi hlpr) /\ (rel GOi x y))). 
-    
     set (GO :=   {| acts := GO_actsset ++ GO_initset;
-                    lab := fun _ => Afence Opln;
+                    lab := lab GI;
                     rmw := GOi_rel rmw; 
                     data := GOi_rel data;
                     addr := GOi_rel addr;
@@ -1804,8 +1802,7 @@ Section CompilationCorrectness.
       symmetry. apply set_equiv_exp_iff. apply INIT_GO. }
     2: { vauto. }
     2: { vauto. }
-    { admit. }
-
+    { simpl. destruct WFI. auto. }
     ins.
     assert (exists PIi, Some PIi = IdentMap.find tid ProgI) as [PIi THREADI].
     { apply find_iff_in. red in Compiled. destruct Compiled. apply H.
@@ -1874,8 +1871,7 @@ Section CompilationCorrectness.
         rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR')) in REL'xy. 
         apply seq_eqv_lr in REL'xy. desc. vauto. }
     }
-    
-    red. splits.
+    assert (E SGO ≡₁ E GOi) as E_EQUIV. 
     { symmetry. 
       rewrite tr_acts_set; eauto. subst GO. unfold acts_set at 1. simpl.
       arewrite ((fun x : actid => In x (GO_actsset ++ GO_initset)) ∩₁ Tid_ tid ≡₁ ((fun x : actid => In x (GO_actsset))  ∩₁ Tid_ tid)).
@@ -1930,10 +1926,16 @@ Section CompilationCorrectness.
         red in SBL. desc. 
         eapply sbl_sim_rect; vauto.
         eapply wf_tre_intra_E; vauto. }
-      eapply tre_sim_weak; vauto. }
-    { admit. }
+      eapply tre_sim_weak; vauto. }      
+    red. splits; auto. 
+    { intros e ESGOx.
+      red in SBL. desc. rewrite SAME_LAB; auto.
+      destruct RESTR. rewrite tr_lab; [| by apply E_EQUIV].
+      subst GO. simpl in *.
+      destruct RESTR0. apply tr_lab0.
+      rewrite (set_equiv_exp RESTR_EVENTS) in ESGOx. red in ESGOx. desc. auto. }
     all: by apply INTRA_REL_HELPER; vauto; ins; destruct H; desc; vauto.
-  Admitted.
+  Qed. 
 
   Lemma restr_graph G tid: exists Gi, thread_restricted_execution G tid Gi.
   Proof.
