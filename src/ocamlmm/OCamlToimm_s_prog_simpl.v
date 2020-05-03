@@ -1738,10 +1738,18 @@ Section CompilationCorrectness.
                          same_behavior_local GOi GIi).
     
     assert (set_finite all_acts) as FIN_EGO. 
-    { admit. }
+    { red. exists (acts GI). ins.
+      do 2 red in IN. destruct IN as [[tid POi PIi GIi] [HLPR_RESTR [GOi [HLPR_GO EGOx]]]].
+      cut (E GIi x).
+      { ins. red in HLPR_RESTR. desc. simpl in *.
+        destruct RESTR'. rewrite (set_equiv_exp tr_acts_set) in H.
+        red in H. desc. auto. }
+      red in HLPR_GO. desc. simpl in *.
+      red in SBL'. desc. rewrite (set_equiv_exp RESTR_EVENTS) in EGOx.
+      red in EGOx. desc. auto. }
     apply set_finite_alt in FIN_EGO. destruct FIN_EGO as [GO_actsset EGO].
     assert (set_finite (E GI ∩₁ is_init)) as FIN_INIT.
-    { admit. }
+    { red. exists (acts GI). ins. red in IN. desc. auto. }
     apply set_finite_alt in FIN_INIT. destruct FIN_INIT as [GO_initset INIT_GO].
     set (GOi_rel := fun (rel: execution -> relation actid) =>
                       bunion
