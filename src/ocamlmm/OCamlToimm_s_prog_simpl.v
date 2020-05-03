@@ -1804,6 +1804,59 @@ Section CompilationCorrectness.
         { eapply sim_exec_equiv_weak; vauto. }
         eapply sbl_sim; vauto.
         red in SBL. desc. vauto. }
+      assert (forall rel
+                (RWO_RESTR_IF_SBL: forall Go Gi,
+                    same_behavior_local_ext Go Gi ->
+                    rel Go ≡ restr_rel (RWO Gi) (rel Gi))
+                (TID_RESTR_IF_TRE: forall G G' tid,
+                    thread_restricted_execution G tid G' ->
+                    rel G' ≡ ⦗Tid_ tid⦘ ⨾ rel G ⨾ ⦗Tid_ tid⦘)
+                (REL_GO: rel GO ≡ GOi_rel rel)
+                (REL_EQ_IF_GSW: forall GOi', graphs_sim_weak SGO GOi' -> rel SGO ≡ rel GOi'),
+                 rel SGO ≡ rel GOi) as INTRA_REL_HELPER. 
+      { ins.
+        rewrite (RWO_RESTR_IF_SBL _ _ SBL).
+        rewrite (TID_RESTR_IF_TRE _ _ _ RESTR). rewrite REL_GO.  
+        unfold GOi_rel.
+        rewrite seq_bunion_l, seq_bunion_r.
+        apply same_relation_exp_iff. ins. split.
+        { intros [RELxy [RWOx RWOy]]. 
+          exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
+          splits; vauto. apply seq_eqv_lr.
+          rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR0)) in RELxy.
+          apply seq_eqv_lr in RELxy. desc.
+          splits; vauto. 
+          exists SGO. splits.
+          { unfold hlpr_GO. simpl. destruct SBL. desc. splits; vauto. }
+          rewrite (same_relation_exp (RWO_RESTR_IF_SBL _ _ SBL)).
+          red. splits; auto.
+          rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR0)). 
+          apply seq_eqv_lr. splits; auto. }
+        { ins. red in H. destruct H as [[thread' POi' PIi' GIi'] [HLPR_RESTR BAR]].
+          apply seq_eqv_lr in BAR. destruct BAR as [TIDx [BAR TIDy]].
+          destruct BAR as [GOi' [[OEXEC' SBL'] REL'xy]].
+          red in SBL'. apply sbl_ext_TMP in SBL'. 
+          red in HLPR_RESTR. desc. simpl in *.
+          cut (graphs_sim_weak SGO GOi').
+          { ins. red in H.
+            specialize (REL_EQ_IF_GSW _ H). 
+            desc.
+            apply (RWO_RESTR_IF_SBL _ _ SBL).
+            apply (same_relation_exp REL_EQ_IF_GSW). auto. }
+          cut (graphs_sim_weak GIi GIi').
+          { ins.
+            red in SBL'. desc. 
+            eapply sbl_sim_rect; vauto.
+            { red in SBL. desc. vauto. }
+            eapply wf_tre_intra_E; vauto. }
+          eapply tre_sim_weak; vauto. 
+          replace thread' with (tid x) in *; [congruence| ]. 
+          rewrite (same_relation_exp (RWO_RESTR_IF_SBL _ _ SBL')) in REL'xy.
+          red in REL'xy. desc.
+          rewrite (same_relation_exp (TID_RESTR_IF_TRE _ _ _ RESTR')) in REL'xy. 
+          apply seq_eqv_lr in REL'xy. desc. vauto. }
+      }
+      
       red. splits.
       { symmetry. 
         rewrite tr_acts_set; eauto. subst GO. unfold acts_set at 1. simpl.
@@ -1861,13 +1914,49 @@ Section CompilationCorrectness.
           eapply wf_tre_intra_E; vauto. }
         eapply tre_sim_weak; vauto. }
       { admit. }
-      { red in SBL. desc. rewrite RESTR_RMW.
+      all: by apply INTRA_REL_HELPER; vauto; ins; destruct H; desc; vauto.
+    }
+    
+
+          
+
+
+
+        red in SBL. desc. rewrite RESTR_RMW.
         destruct RESTR. rewrite tr_rmw. 
-
-
-
-
-
+        subst GO. simpl. unfold GOi_rel.
+        rewrite seq_bunion_l, seq_bunion_r.
+        apply same_relation_exp_iff. ins. split.
+        { intros [RMWxy [RWOx RWOy]]. 
+          exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
+          splits; vauto. apply seq_eqv_lr.
+          destruct RESTR0. rewrite (same_relation_exp tr_rmw0) in RMWxy.
+          apply seq_eqv_lr in RMWxy. desc.
+          splits; vauto. 
+          exists SGO. splits; vauto. 
+          rewrite (same_relation_exp RESTR_RMW). red. splits; auto.
+          rewrite (same_relation_exp tr_rmw0). apply seq_eqv_lr. splits; auto. }
+        { ins. red in H. destruct H as [[thread' POi' PIi' GIi'] [HLPR_RESTR BAR]].
+          apply seq_eqv_lr in BAR. destruct BAR as [TIDx [BAR TIDy]].
+          destruct BAR as [GOi' [[OEXEC' SBL'] RMW'xy]].
+          red in SBL'. apply sbl_ext_TMP in SBL'. 
+          red in HLPR_RESTR. desc. simpl in *.
+          cut (graphs_sim_weak SGO GOi').
+          { ins. red in H. desc.
+            apply (same_relation_exp RESTR_RMW).
+            apply (same_relation_exp H1). auto. }
+          cut (graphs_sim_weak GIi GIi').
+          { ins.
+            red in SBL'. desc. 
+            eapply sbl_sim_rect; vauto.
+            eapply wf_tre_intra_E; vauto. }
+          eapply tre_sim_weak; vauto. 
+          replace thread' with (tid x) in *; [congruence| ]. 
+          red in SBL'. desc. rewrite (same_relation_exp RESTR_RMW0) in RMW'xy.
+          red in RMW'xy. desc.
+          destruct RESTR'. rewrite (same_relation_exp tr_rmw0) in RMW'xy.
+          apply seq_eqv_lr in RMW'xy. desc. vauto. }
+        }
 
 
       assert (same_behavior_local GOi GIi) as SBL.
