@@ -308,14 +308,6 @@ Section CompCorrHelpers.
     all: eapply nonnop_bounded; eauto with label_ext; vauto.
   Qed. 
   
-  Lemma unique_restr x y (r: relation actid) (Rxy: r x y):
-    ⦗eq x⦘ ⨾ r ⨾ ⦗eq y⦘ ≡ singl_rel x y.
-  Proof.
-    ins. rewrite seq_eqv_lr. split.
-    { red. ins. desc. red. splits; auto. }
-    red. ins. red in H. desc. splits; vauto.
-  Qed.
-
   Lemma EXTSB_IRR e:
     ⦗eq e⦘ ⨾ ext_sb ⨾ ⦗eq e⦘ ≡ ∅₂.
   Proof. 
@@ -475,18 +467,6 @@ Section CompCorrHelpers.
       replace (eindex st2 - 1) with (eindex st1); auto. omega. }
     Qed.
       
-  Lemma singl_rel_restr {A: Type} (x y: A):
-    singl_rel x y ≡ ⦗eq x⦘ ⨾ singl_rel x y ⨾ ⦗eq y⦘. 
-  Proof. ins. basic_solver. Qed. 
-
-  Lemma rel_endpoints_dom {A: Type} (D C EL ER : A -> Prop) r (DOM: r ≡ ⦗D⦘ ⨾ r ⨾ ⦗C⦘):
-    ⦗EL⦘ ⨾ r ⨾ ⦗ER⦘ ≡ ⦗EL ∩₁ D⦘ ⨾ r ⨾ ⦗ER ∩₁ C⦘.
-  Proof.
-    rewrite set_interC with (s' := C). 
-    do 2 rewrite id_inter. rewrite !seqA.
-    seq_rewrite <- DOM. basic_solver.
-  Qed.
-
   Lemma compilation_injective PO1 PO2 BPI (COMP1: is_thread_block_compiled PO1 BPI) (COMP2: is_thread_block_compiled PO2 BPI):
     PO1 = PO2.
   Proof. Admitted. 

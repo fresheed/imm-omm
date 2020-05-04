@@ -21,7 +21,7 @@ Section OCaml_IMM_Compilation.
 
   Definition exchange_reg: Reg.t.
     vauto.
-  Admitted.      
+  Admitted.
 
   Inductive is_instruction_compiled: Prog.Instr.t -> list Prog.Instr.t -> Prop :=
   | compiled_Rna lhs loc:
@@ -580,3 +580,63 @@ Section OCaml_IMM_Correspondence.
   Qed. 
 
 End OCaml_IMM_Correspondence. 
+
+Section CorrectedDefinitions.
+
+  Notation "'E' G" := G.(acts_set) (at level 1).
+
+  Definition program_execution_corrected (prog : Prog.t) G :=
+    (forall e : actid, E G e -> is_init e \/ IdentMap.In (tid e) prog) /\
+    (forall (thread : IdentMap.key) (PIi : list Instr.t)
+       (THREAD: Some PIi = IdentMap.find thread prog)
+       Gi (THREAD_EXEC: thread_restricted_execution G thread Gi),
+        thread_execution thread PIi Gi).
+
+
+  Definition graphs_sim_weak (G1 G2: execution) :=
+    E G1 ≡₁ E G2 /\
+    (forall x, E G1 x -> lab G1 x = lab G2 x) /\
+    rmw G1 ≡ rmw G2 /\
+    data G1 ≡ data G2 /\
+    addr G1 ≡ addr G2 /\
+    ctrl G1 ≡ ctrl G2 /\
+    rmw_dep G1 ≡ rmw_dep G2.    
+
+  Definition Othread_execution_sim tid instrs G_ :=
+    exists s,
+      ⟪ STEPS : (Ostep tid)＊ (init instrs) s ⟫ /\
+      ⟪ TERMINAL : is_terminal s ⟫ /\
+      ⟪ PEQ : graphs_sim_weak s.(G) G_ ⟫.
+
+  Definition Oprogram_execution_corrected prog (OPROG: OCamlProgram prog) G :=
+    (forall e (IN: G.(acts_set) e), is_init e \/ IdentMap.In (tid e) prog) /\
+    (forall (thread : IdentMap.key) (POi : list Instr.t)
+       (THREAD: Some POi = IdentMap.find thread prog)
+       Gi (THREAD_EXEC: thread_restricted_execution G thread Gi),
+        (* Othread_execution thread POi Gi). *)
+        Othread_execution_sim thread POi Gi).
+  
+  Lemma program_execution_equiv (prog : Prog.t) G:
+    program_execution_corrected prog G <-> program_execution prog G.
+  Proof. Admitted.
+
+  Lemma Oprogram_execution_equiv prog G (OPROG: OCamlProgram prog):
+    Oprogram_execution_corrected OPROG G <-> Oprogram_execution OPROG G.
+  Proof. Admitted.
+
+    
+  Definition same_behavior_local_ext GO GI :=
+    ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\
+    ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫ /\
+    ⟪ RESTR_RMW: rmw GO ≡ restr_rel (RWO GI) (rmw GI)⟫ /\
+    ⟪ RESTR_DATA: data GO ≡ restr_rel (RWO GI) (data GI)⟫ /\
+    ⟪ RESTR_CTRL: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI)⟫ /\ 
+    ⟪ RESTR_ADDR: addr GO ≡ restr_rel (RWO GI) (addr GI)⟫ /\ 
+    ⟪ RESTR_RMWDEP: rmw_dep GO ≡ restr_rel (RWO GI) (rmw_dep GI)⟫. 
+  
+  Lemma sbl_ext_TMP GOi GIi (SBL: same_behavior_local GOi GIi):
+    same_behavior_local_ext GOi GIi.
+  Proof. Admitted.
+
+  
+End CorrectedDefinitions.   
