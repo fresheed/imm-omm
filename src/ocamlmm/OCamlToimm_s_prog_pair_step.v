@@ -699,7 +699,7 @@ Section PairStep.
         unfold_clear_updated. replace_bg_rels. expand_rels.
         discr_intra. remove_emptiness.
         apply MM_SIM4. auto. }
-      { subst sto'. simpl in *. unfold_clear_updated. rewrite UECTRL, RWO_SPLITS. 
+      { subst sto'. simpl in *. unfold_clear_updated. rewrite UECTRL. 
         expand_rels. replace_bg_rels. discr_intra. remove_emptiness. auto. }
       subst sto'. simpl. replace (beindex bsti') with (eindex sti') by auto.
       congruence. 
