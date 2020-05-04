@@ -619,7 +619,7 @@ Section PairStep.
       apply (@ISTEP1 ld _ BLOCK_CONTENTS) in OSEQ_STEP; [| omega].
       destruct OSEQ_STEP as [SAME_INSTRS [lbls ISTEP_]].
       infer_istep_ ISTEP_ ld II. 
-
+      
       set (sto' :=
              {| instrs := instrs sto;
                 pc := pc sto + 1;
@@ -630,7 +630,7 @@ Section PairStep.
                 regf := RegFun.add reg val (regf sto);
                 depf := RegFun.add reg (eq (ThreadEvent tid (eindex sto))) (depf sto);
                 ectrl := ectrl sto |}).
-
+      
       exists sto'. splits.
       { red. exists [Aload false Orlx (RegFile.eval_lexpr (regf sto) lexpr) val].
         red. splits; [subst; simpl; auto| ].
@@ -644,21 +644,21 @@ Section PairStep.
         [repeat eexists; eauto| ].          
       forward eapply (@RWO_ADD sti sti') as RWO_SPLITS; eauto.
       forward eapply (@E_ADD (G sto) (G sto')) as EGO'; [repeat eexists; eauto| ].
-      assert (EINDEX_EQ: eindex sto = eindex sti).
-      { cdes MM_SIM. vauto. }
-      assert (ECTRL_EQ: ectrl sto ≡₁ ectrl sti ∩₁ (RWO (G sti))).
-      { cdes MM_SIM. vauto. }
+      (* assert (EINDEX_EQ: eindex sto = eindex sti). *)
+      (* { cdes MM_SIM. vauto. } *)
+      (* assert (ECTRL_EQ: ectrl sto ≡₁ ectrl sti ∩₁ (RWO (G sti))). *)
+      (* { cdes MM_SIM. vauto. } *)
+      cdes MM_SIM. 
       forward eapply INSTR_LEXPR_HELPER as LEXPR_SAME; [vauto| vauto | vauto | vauto| ].
       forward eapply INSTR_LEXPR_DEPS_HELPER as LEXPR_DEPS_SAME; [vauto| vauto | vauto | vauto| ].
       simpl in RWO_SPLITS.
-      cdes MM_SIM.
       red. splits.
       { subst sto'. simpl. congruence. }
       { subst sto'. simpl. apply OPC'; auto. }
       { red.        
         splits.
         { unfold_clear_updated. expand_rels.
-          rewrite EINDEX_EQ. simpl.
+          rewrite MM_SIM6. simpl.
           replace_bg_rels. (* expand_intra sto' UG.  *)
           simplify_updated_sets. 
           apply set_equiv_union; [by_IH MM_SIM2 | basic_solver]. }
@@ -669,7 +669,7 @@ Section PairStep.
           subst sto'. simpl.
           replace (lab (bG bsti') (ThreadEvent tid (eindex sto))) with (Aload false Orlx (RegFile.eval_lexpr (regf sto) lexpr) val).
           { simpl. repeat eexists; eauto. }
-          simpl in *. rewrite UG, EINDEX_EQ. simpl. rewrite upds.
+          simpl in *. rewrite UG, MM_SIM6. simpl. rewrite upds.
           erewrite INSTR_LEXPR_HELPER; vauto. }
         { subst sto'. simpl. by_IH MM_SIM2. }
         { expand_intra sto' UG. 
@@ -694,7 +694,7 @@ Section PairStep.
       { subst sto'. simpl. ins. rewrite UDEPS. 
         unfold RegFun.add. destruct (LocSet.Facts.eq_dec reg0 reg).
         { unfold_clear_updated. replace_bg_rels. expand_rels.
-          simplify_updated_sets. rewrite EINDEX_EQ. auto. }
+          simplify_updated_sets. rewrite MM_SIM6. auto. }
         unfold RegFun.find.
         unfold_clear_updated. replace_bg_rels. expand_rels.
         discr_intra. remove_emptiness.
@@ -702,7 +702,7 @@ Section PairStep.
       { subst sto'. simpl in *. unfold_clear_updated. rewrite UECTRL. 
         expand_rels. replace_bg_rels. discr_intra. remove_emptiness. auto. }
       subst sto'. simpl. replace (beindex bsti') with (eindex sti') by auto.
-      congruence. 
+      rewrite MM_SIM13. simpl. vauto. 
     - replace block with [f; st] in *.
       2: { subst f. subst st. inversion CORR_BLOCK.
            inversion H3. inversion H1. inversion H6. inversion H8.
