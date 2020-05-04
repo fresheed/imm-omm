@@ -264,7 +264,15 @@ Section OCaml_IMM_Compilation.
     | Instr.load _ reg' _ => reg = reg'
     | _ => False
     end. 
+
   
+  Notation "'E' G" := G.(acts_set) (at level 1).
+  Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
+  Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
+  Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
+  
+  Definition RWO GI := (RW GI \₁ dom_rel (rmw GI)). 
+
   Lemma eval_expr_same st st'
         (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
         expr (NOT_EXC: ~ In exchange_reg (expr_regs expr)):
@@ -339,54 +347,48 @@ Section OCaml_IMM_Compilation.
   Qed.
 
   Lemma eval_expr_deps_same st st'
-        (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg),
-            depf st reg = depf st' reg)
+        (DEPF_SIM: forall reg (NEXC: reg <> exchange_reg), depf st reg ≡₁ depf st' reg ∩₁ RWO (G st'))
         expr (NOT_EXC: ~ In exchange_reg (expr_regs expr)):
-    DepsFile.expr_deps (depf st) expr = DepsFile.expr_deps (depf st') expr.
+    DepsFile.expr_deps (depf st) expr ≡₁ DepsFile.expr_deps (depf st') expr ∩₁ RWO (G st').
   Proof.
     unfold DepsFile.expr_deps, DepsFile.val_deps. destruct expr; vauto.
-    - destruct val; vauto. simpl in NOT_EXC. unfold RegFun.find.
-      apply REGF_SIM. intuition.
-    - destruct op; vauto. destruct op0; vauto. simpl in NOT_EXC. 
-      unfold RegFun.find.
-      apply REGF_SIM. intuition.
+    - destruct val; [basic_solver| ]. simpl in NOT_EXC. unfold RegFun.find.
+      intuition.
+    - destruct op; vauto. destruct op0; [basic_solver| ]. simpl in NOT_EXC. 
+      unfold RegFun.find. intuition.
     - destruct op1, op2; vauto; unfold RegFun.find; simpl in NOT_EXC.
-      + replace (depf st' reg) with (depf st reg); auto.
-      + replace (depf st' reg) with (depf st reg); auto.
-      + replace (depf st' reg) with (depf st reg); auto.
-        replace (depf st' reg0) with (depf st reg0); auto.
-        apply REGF_SIM. intuition.
+      + basic_solver. 
+      + remove_emptiness. intuition. 
+      + remove_emptiness. intuition.
+      + rewrite set_inter_union_l. apply set_equiv_union; intuition. 
   Qed. 
-        
+  
   Lemma eval_instr_expr_deps PI (COMP: exists PO, is_thread_compiled PO PI)
-        st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg),
-                   depf st reg = depf st' reg)
+        st st' (DEPF_SIM: forall reg (NEXC: reg <> exchange_reg), depf st reg ≡₁ depf st' reg ∩₁ RWO (G st'))
         instr (INSTR: In instr PI) expr (EXPR_OF: expr_of expr instr):
-    DepsFile.expr_deps (depf st) expr = DepsFile.expr_deps (depf st') expr.
+    DepsFile.expr_deps (depf st) expr ≡₁ DepsFile.expr_deps (depf st') expr ∩₁ RWO (G st').
   Proof.
     apply eval_expr_deps_same; auto.
     forward eapply exchange_reg_dedicated' as DED; eauto.
     red in EXPR_OF. 
     destruct instr; desc; vauto.    
-  Qed.     
-    
+  Qed.
+  
   Lemma eval_lexpr_deps_same st st'
-        (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg),
-            depf st reg = depf st' reg)
+        (DEPF_SIM: forall reg (NEXC: reg <> exchange_reg), depf st reg ≡₁ depf st' reg ∩₁ RWO (G st'))
         lexpr (NOT_EXC: ~ In exchange_reg (lexpr_regs lexpr)):
-    DepsFile.lexpr_deps (depf st) lexpr = DepsFile.lexpr_deps (depf st') lexpr.
+    DepsFile.lexpr_deps (depf st) lexpr ≡₁ DepsFile.lexpr_deps (depf st') lexpr ∩₁ RWO (G st').
   Proof.
-    unfold DepsFile.lexpr_deps. destruct lexpr; vauto.
-    unfold DepsFile.val_deps. destruct r;vauto.
-    unfold RegFun.find. apply REGF_SIM.
+    unfold DepsFile.lexpr_deps. destruct lexpr; [basic_solver |]. 
+    unfold DepsFile.val_deps. destruct r; [basic_solver| ]. 
+    unfold RegFun.find. apply DEPF_SIM.  
     red. ins. apply NOT_EXC. vauto.
   Qed. 
     
   Lemma eval_instr_lexpr_deps PI (COMP: exists PO, is_thread_compiled PO PI)
-        st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg),
-                   depf st reg = depf st' reg)
+        st st' (DEPF_SIM: forall reg (NEXC: reg <> exchange_reg), depf st reg ≡₁ depf st' reg ∩₁ RWO (G st'))
         instr (INSTR: In instr PI) lexpr (EXPR_OF: lexpr_of lexpr instr):
-    DepsFile.lexpr_deps (depf st) lexpr = DepsFile.lexpr_deps (depf st') lexpr.
+    DepsFile.lexpr_deps (depf st) lexpr ≡₁ DepsFile.lexpr_deps (depf st') lexpr ∩₁ RWO (G st').
   Proof.
     apply eval_lexpr_deps_same; auto.
     forward eapply exchange_reg_dedicated' as DED; eauto.
@@ -398,6 +400,11 @@ End OCaml_IMM_Compilation.
 
 
 Section OCaml_IMM_Correspondence.
+  Notation "'E' G" := G.(acts_set) (at level 1).
+  Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
+  Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
+  Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
+  
   Record block_state :=
     { binstrs : list (list Instr.t);
       bpc : nat;
@@ -467,13 +474,7 @@ Section OCaml_IMM_Correspondence.
   Proof.
     (* not true in general because of non-injective flatten *)
   Admitted.  
-  
-  Notation "'E' G" := G.(acts_set) (at level 1).
-  Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
-  Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
-  Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
 
-  Definition RWO GI := (RW GI \₁ dom_rel (rmw GI)). 
 
   Definition same_behavior_local (GO GI: execution) :=
     ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\
@@ -628,11 +629,11 @@ Section CorrectedDefinitions.
   Definition same_behavior_local_ext GO GI :=
     ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\
     ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫ /\
-    ⟪ RESTR_RMW: rmw GO ≡ restr_rel (RWO GI) (rmw GI)⟫ /\
+    ⟪ RESTR_RMW: rmw GO ≡ ∅₂⟫ /\
     ⟪ RESTR_DATA: data GO ≡ restr_rel (RWO GI) (data GI)⟫ /\
     ⟪ RESTR_CTRL: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI)⟫ /\ 
     ⟪ RESTR_ADDR: addr GO ≡ restr_rel (RWO GI) (addr GI)⟫ /\ 
-    ⟪ RESTR_RMWDEP: rmw_dep GO ≡ restr_rel (RWO GI) (rmw_dep GI)⟫. 
+    ⟪ RESTR_RMWDEP: rmw_dep GO ≡ ∅₂⟫. 
   
   Lemma sbl_ext_TMP GOi GIi (SBL: same_behavior_local GOi GIi):
     same_behavior_local_ext GOi GIi.
