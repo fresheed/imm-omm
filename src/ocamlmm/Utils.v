@@ -199,4 +199,5 @@ Ltac remove_emptiness :=
           rewrite set_union_empty_r || rewrite set_union_empty_l ||
           rewrite union_false_r || rewrite union_false_l ||
           rewrite inter_false_r || rewrite inter_false_l ||
-          rewrite seq_false_r || rewrite seq_false_l || rewrite eqv_empty). 
+          rewrite seq_false_r || rewrite seq_false_l || rewrite eqv_empty ||
+          rewrite cross_false_l || rewrite cross_false_r). 

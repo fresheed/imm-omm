@@ -380,26 +380,6 @@ Section CompCorrHelpers.
       replace (eindex st2 - 1) with (eindex st1); auto. omega. }
     Qed.          
 
-  Lemma comm_helper tid index S:
-    eq (ThreadEvent tid index) ∩₁ S ≡₁ S ∩₁ eq (ThreadEvent tid index).
-  Proof. by ins; apply set_interC. Qed. 
-
-  Ltac discr_new_body := rewrite label_set_bound_inter; [| by eauto | by omega | by (eauto with label_ext) | by vauto].
-  Ltac discr_new := discr_new_body || (rewrite comm_helper; discr_new_body). 
-  Ltac discr_E_body := rewrite E_bound_inter; [| by eauto | by omega]. 
-  Ltac discr_E := discr_E_body || (rewrite comm_helper; discr_E_body). 
-  Ltac discr_events := rewrite diff_events_empty; [| by omega].
-  Ltac same_events := rewrite set_interK.
-  Ltac simplify_updated_sets := repeat (discr_new || discr_E || discr_events || same_events); remove_emptiness.
-
-  Ltac unfold_clear_updated st := repeat match goal with
-                            | H: ?eset ≡₁ ?eset' |- _ => try rewrite H; clear H
-                            | H: ?erel ≡ ?erel' |- _ => try rewrite H; clear H
-                                         end.
-  Ltac expand_sets_only := try rewrite !set_inter_union_r; remove_emptiness; try rewrite !set_inter_union_l; remove_emptiness. 
-  Ltac expand_rels := try rewrite !seq_union_l; remove_emptiness; try rewrite !seq_union_r; try expand_sets_only. 
-  Ltac by_IH IH := red in IH; desc; vauto. 
-        
   Lemma step_12_label_ext_helper st1 st2 st3 tid new_label1 new_label21 new_label22 index1 index2
         (IND1: index1 >= eindex st1) (IND2: index2 >= eindex st2)
         (STEP11: step1 st1 st2 tid index1 new_label1)
