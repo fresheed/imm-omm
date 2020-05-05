@@ -283,6 +283,43 @@ Section BUILD_OMM_GRAPH.
     all: eapply same_rel_Transitive; eauto; symmetry; auto. 
   Qed. 
     
+  Lemma RWO_RESTR thread GIi (TRE: thread_restricted_execution GI thread GIi):
+    E GIi ∩₁RWO GIi ≡₁ E GIi ∩₁ ((Tid_ thread) ∩₁ (RWO GI)). 
+  Proof.
+  Admitted. 
+    (* unfold RWO. *)
+    (* arewrite (Tid_ thread ∩₁ (RW GI \₁ dom_rel (rmw GI)) ≡₁ ((Tid_ thread ∩₁ (RW GI)) \₁ (Tid_ thread ∩₁ dom_rel (rmw GI)))). *)
+    (* { split; try basic_solver. *)
+    (*   red. ins. red in H. desc. red in H0. desc.  *)
+    (*   red. unfold set_inter. splits; vauto. tauto. } *)
+    (* arewrite (Tid_ thread ∩₁ dom_rel (rmw GI) ≡₁ dom_rel (rmw GIi)). *)
+    (* { destruct TRE. rewrite tr_rmw. split; try basic_solver. *)
+    (*   red. ins. red in H. desc. red in H0. desc.  *)
+    (*   red. exists y. apply seq_eqv_lr. splits; auto. *)
+    (*   apply (wf_rmwt WFI) in H0. congruence. } *)
+    (* repeat rewrite set_inter_minus_r. apply set_equiv_minus; [| basic_solver]. *)
+    
+  Lemma restr_graph G tid: exists Gi, thread_restricted_execution G tid Gi.
+  Proof.
+    set (Gi :=   {| acts := filterP (fun e => Events.tid e = tid) (acts G);
+                    lab := lab G;
+                    rmw := ⦗Tid_ tid⦘ ⨾ rmw G ⨾ ⦗Tid_ tid⦘;
+                    data :=  ⦗Tid_ tid⦘ ⨾ data G ⨾ ⦗Tid_ tid⦘;
+                    addr :=  ⦗Tid_ tid⦘ ⨾ addr G ⨾ ⦗Tid_ tid⦘;
+                    ctrl :=  ⦗Tid_ tid⦘ ⨾ ctrl G ⨾ ⦗Tid_ tid⦘;
+                    rmw_dep :=  ⦗Tid_ tid⦘ ⨾ rmw_dep G ⨾ ⦗Tid_ tid⦘;
+                    rf := ∅₂;
+                    co := ∅₂;
+                 |}). 
+    exists Gi.
+    split.
+    all: subst Gi; try unfold acts_set; simpl; auto. 
+    simpl. apply set_equiv_exp_iff. ins.
+    red. split.
+    - ins. apply in_filterP_iff in H. desc.  red. split; auto.
+    - ins. apply in_filterP_iff. red in H. desc. split; vauto.
+  Qed. 
+          
   
   Lemma thread_execs_helper: exists GO,
       ⟪ E_STRUCT: forall e : actid, E GO e -> is_init e \/ IdentMap.In (tid e) ProgO ⟫/\
@@ -334,6 +371,90 @@ Section BUILD_OMM_GRAPH.
                     rmw_dep := GOi_rel rmw_dep;
                     rf := restr_rel (RWO GI) (rf GI);
                     co := co GI |}).
+    assert (inter_subset_helper_ext: forall {A: Type} (S S1 S2: A -> Prop),
+               (forall x (Sx: S x), S1 x <-> S2 x) <-> S ∩₁ S1 ≡₁ S ∩₁ S2).
+    { ins. split; [apply inter_subset_helper| ].
+      ins. unfold set_inter in H. red in H. unfold set_subset in H. desc.
+      split.
+      { ins. specialize_full H; vauto. desc. auto. } 
+      ins. specialize_full H0; vauto. desc. auto. }
+
+    assert (forall r a b (IN_SB: r ⊆ sb GI) (DOM_R: r ≡ ⦗R GI⦘ ⨾ r),
+               r a b -> ~ is_init a /\ ~ is_init b) as REL_NINIT. 
+    { intros r a b. ins. rewrite (same_relation_exp DOM_R) in H.
+      apply seq_eqv_l in H. desc.
+      split.
+      { eapply read_or_fence_is_not_init; eauto. }
+      apply IN_SB in H0. apply no_sb_to_init in H0.
+      apply seq_eqv_r in H0. desc. auto. }
+
+    assert (data GO ≡ restr_rel (RWO GI) (data GI)) as FOO.
+    { subst GO. simpl. unfold GOi_rel.
+      split.
+      { apply inclusion_bunion_l. ins. destruct x as [thread POi PIi GIi].
+        red in H. desc. unfold hlpr_GO. simpl in *.
+        rewrite (wf_dataE WFI), <- restr_relE, restr_restr.
+        red. ins. desc. cdes SBL'.
+        rewrite (same_relation_exp RESTR_DATA) in H0.
+        red in H0. desc.
+        destruct RESTR'. rewrite (same_relation_exp tr_data) in H0.
+        apply seq_eqv_lr in H0. desc.
+        rewrite (same_relation_exp (wf_dataE WFI)) in H3. apply seq_eqv_lr in H3. desc.
+        specialize (@inter_subset_helper_ext _ (E GIi) (RWO GIi) (Tid_ thread ∩₁ RWO GI)).
+        red. unfold set_inter. splits; auto; splits; auto.
+        all: apply inter_subset_helper_ext; vauto;
+          [apply RWO_RESTR; vauto | apply tr_acts_set; red; split; auto]. }
+      red. ins. red.
+      red in H. desc.
+      apply (wf_dataE WFI) in H. apply seq_eqv_lr in H. desc.  
+      pose proof (REL_NINIT _ x y (data_in_sb WFI) (seq_eqv_lr_l (wf_dataD WFI)) H2) as [NINITx NINITy]. 
+      destruct x; [vauto| ]. destruct y; [vauto| ].
+      assert (thread0 = thread).
+      { apply (data_in_sb WFI) in H2. apply sb_tid_init in H2. des; vauto. }
+      subst thread0. 
+      assert (IdentMap.In thread ProgI).
+      { cdes ExecI. specialize (ExecI0 _ H). des; vauto. }
+      assert (exists PIi, Some PIi = IdentMap.find thread ProgI) as [PIi THREADI].
+      { apply find_iff_in. red in Compiled. destruct Compiled. auto. }
+      assert (exists POi, Some POi = IdentMap.find thread ProgO) as [POi THREADO].
+      { apply find_iff_in. cdes Compiled. apply SAME_THREADS. auto. }
+      pose proof (restr_graph GI thread) as [GIi TRE]. 
+      assert (is_thread_compiled POi PIi) as COMP.
+      { cdes Compiled. eapply THREADS_COMPILED; eauto. }
+      exists ({| htid := thread; hPO := POi; hPI := PIi; hSGI := GIi |}).
+      splits; vauto.
+      forward eapply thread_execs as [GOi FOO]; eauto.
+      { apply program_execution_equiv in ExecI. cdes ExecI. eapply ExecI1; eauto. }
+      exists GOi. splits; vauto. desc. cdes FOO0.
+      rewrite (same_relation_exp RESTR_DATA).
+      pose proof (RWO_RESTR TRE) as RWO_RESTR.
+      specialize (@inter_subset_helper_ext _ (E GIi) (RWO GIi) (Tid_ thread ∩₁ RWO GI)).
+      destruct TRE. 
+      red. splits.
+      2, 3: apply (proj2 inter_subset_helper_ext); auto; [apply tr_acts_set; red; splits; auto | red; splits; auto].
+      rewrite (same_relation_exp tr_data). apply seq_eqv_lr. simpl.
+      splits; auto. }
+      
+
+      rewrite INTER
+        
+
+      foobar_reuse_subsequent_proofs.
+        red. unfold set_inter. splits; auto.
+        rewrite (set_equiv_exp RWO_RESTR) in H1.
+
+    assert (data GO ⊆ bunion (fun thread => IdentMap.In thread ProgO) (fun thread => Tid_ thread × Tid_ thread)) as GO_EXISTS_HELPER. 
+    { subst GO. simpl. unfold GOi_rel. apply inclusion_bunion_l.
+      ins. destruct x as [thread POi PIi GIi].
+      destruct H. simpl in *. desc.
+      red. ins. desc. red in H0. desc. simpl in *.
+      red. exists thread. split.
+      { cdes Compiled. apply SAME_THREADS, find_iff_in. eauto. }
+      cdes SBL'. rewrite (same_relation_exp RESTR_DATA) in H1.
+      red in H1. desc.
+      destruct RESTR'. rewrite (same_relation_exp tr_data) in H1.
+      apply seq_eqv_lr in H1. desc. vauto. }
+    
     assert (forall e (E_ACT: In e GO_actsset), exists thread index GOi,
                  e = ThreadEvent thread index /\
                  GOi_prop thread GOi) as E_GO_STRUCT.
