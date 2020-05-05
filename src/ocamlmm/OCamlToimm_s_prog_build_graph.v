@@ -422,7 +422,9 @@ Section BUILD_OMM_GRAPH.
           Othread_execution_sim tid POi GOi /\ same_behavior_local GOi GIi ⟫ /\
       ⟪DATA_SIM: data GO ≡ restr_rel (RWO GI) (data GI) ⟫ /\
       ⟪CTRL_SIM: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI) ⟫ /\ 
-      ⟪ADDR_SIM: addr GO ≡ restr_rel (RWO GI) (addr GI) ⟫. 
+      ⟪ADDR_SIM: addr GO ≡ restr_rel (RWO GI) (addr GI) ⟫ /\
+      ⟪NO_RMW: rmw GO ≡ ∅₂ ⟫ /\
+      ⟪NO_RMWDEP: rmw_dep GO ≡ ∅₂ ⟫. 
   Proof.
     set (all_acts := set_bunion
                        hlpr_restr
@@ -458,8 +460,7 @@ Section BUILD_OMM_GRAPH.
                     ctrl := GOi_rel ctrl;
                     rmw_dep := GOi_rel rmw_dep;
                     rf := restr_rel (RWO GI) (rf GI);
-                    co := co GI |}).
-
+                    co := co GI |}).     
     
   assert (forall e (E_ACT: In e GO_actsset), exists thread index GOi,
                  e = ThreadEvent thread index /\
@@ -479,6 +480,14 @@ Section BUILD_OMM_GRAPH.
     splits; eauto. red. do 2 eexists. splits; vauto. }
   
   exists GO. splits.
+  11: { subst GO. simpl. split; [| basic_solver].
+        apply inclusion_bunion_l. intros thread _. 
+        unfold restr_rel. red. ins. desc.
+        cdes H. cdes SBL'. apply RESTR_RMWDEP in H0. auto. }
+  10: { subst GO. simpl. split; [| basic_solver].
+        apply inclusion_bunion_l. intros thread _. 
+        unfold restr_rel. red. ins. desc.
+        cdes H. cdes SBL'. apply RESTR_RMW in H0. auto. }
   9: { apply (@REL_GLOBAL_RESTR GO addr); vauto.
        { ins. cdes H. auto. }
        { ins. destruct H. auto. }
