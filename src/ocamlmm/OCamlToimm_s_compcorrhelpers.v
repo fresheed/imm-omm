@@ -11,7 +11,7 @@ Require Import OCaml.
 Require Import OCamlToimm_s.
 Require Import OCamlToimm_s_prog.
 Require Import OCamlToimm_s_prog_compilation.
-Require Import OCamlToimm_s_prog_pair_step. 
+Require Import OCamlToimm_s_prog_pair_step.
 Require Import OCamlToimm_s_prog_bounded_properties. 
 Require Import OCamlToimm_s_steps.
 Require Import Utils.
@@ -530,19 +530,19 @@ Section CompCorrHelpers.
         { generalize NO_SB. basic_solver. }
         rewrite SB_EXT in *. clear SB_EXT. 
         splits.
-        all: unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        all: unfold_clear_updated; expand_rels; simplify_updated_sets.
         2: by_IH IHn_steps. 
         all: basic_solver. }
       splits.
-      { unfold_clear_updated st. expand_rels. simplify_updated_sets.
+      { unfold_clear_updated. expand_rels. simplify_updated_sets.
         rewrite SB_RMW_HELPER; eauto. remove_emptiness.
         by_IH IHn_steps. }
-      { unfold_clear_updated st. expand_rels. simplify_updated_sets.
+      { unfold_clear_updated. expand_rels. simplify_updated_sets.
         by_IH IHn_steps. }
-      { unfold_clear_updated st. expand_rels. simplify_updated_sets.
+      { unfold_clear_updated. expand_rels. simplify_updated_sets.
         rewrite codom_union. apply set_subset_union_r. left. 
         by_IH IHn_steps. }
-      { unfold_clear_updated st. expand_rels. simplify_updated_sets.
+      { unfold_clear_updated. expand_rels. simplify_updated_sets.
         rewrite codom_union. apply set_subset_union_r. left.
         by_IH IHn_steps. } }
     { apply (same_relation_exp (@seqA _ _ _ _)) in BLOCK_STEP0.
@@ -594,19 +594,19 @@ Section CompCorrHelpers.
         splits. all: try rewrite IMM_SB.
         { rewrite E_EXT, RMW_EXT. 
           rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)). rewrite NO_E.
-          unfold_clear_updated st; expand_rels; simplify_updated_sets.          
+          unfold_clear_updated; expand_rels; simplify_updated_sets.          
           basic_solver 10. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        { unfold_clear_updated; expand_rels; simplify_updated_sets.
           by_IH IHn_steps. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        { unfold_clear_updated; expand_rels; simplify_updated_sets.
           basic_solver 10. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        { unfold_clear_updated; expand_rels; simplify_updated_sets.
           basic_solver. }
       } 
       
       splits.
       { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         assert (forall x d, singl_rel x (ThreadEvent tid (eindex st_prev + d)) ⨾ rmw (G st_prev) ≡ ∅₂).
         { ins. rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)).
           rewrite singl_rel_restr. rewrite !seqA. rewrite <- seqA with (r2 := ⦗E (G st_prev)⦘).
@@ -618,17 +618,17 @@ Section CompCorrHelpers.
         rewrite !seqA. rewrite <- seqA with (r1 := ⦗eq (ThreadEvent tid (eindex st_prev))⦘).
         rewrite <- id_inter. simplify_updated_sets.
         by_IH IHn_steps. }
-      { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+      { unfold_clear_updated; expand_rels; simplify_updated_sets.
         by_IH IHn_steps. }
       { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         apply set_subset_union_l. split; [| basic_solver 10]. 
         rewrite id_union. expand_rels.
         repeat rewrite codom_union. 
         repeat (apply set_subset_union_r; left).
         by_IH IHn_steps. }
       { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         rewrite id_union. expand_rels.
         repeat rewrite codom_union. 
         repeat (apply set_subset_union_r; left).
@@ -683,24 +683,24 @@ Section CompCorrHelpers.
         splits. all: try rewrite IMM_SB.
         { rewrite E_EXT, RMW_EXT. 
           rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)). rewrite NO_E.
-          unfold_clear_updated st; expand_rels; simplify_updated_sets.          
+          unfold_clear_updated; expand_rels; simplify_updated_sets.          
           basic_solver 10. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        { unfold_clear_updated; expand_rels; simplify_updated_sets.
           rewrite wft_rmwE at 2; eauto. fold (acts_set (G st_prev)).
           rewrite !seqA. repeat seq_rewrite <- id_inter.
-          unfold_clear_updated st; expand_rels; simplify_updated_sets.
+          unfold_clear_updated; expand_rels; simplify_updated_sets.
           repeat rewrite id_inter. rewrite !seqA.
           unfold acts_set. seq_rewrite <- wft_rmwE; eauto. 
           by_IH IHn_steps. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        { unfold_clear_updated; expand_rels; simplify_updated_sets.
           basic_solver 10. }
-        { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        { unfold_clear_updated; expand_rels; simplify_updated_sets.
           basic_solver 10. }
       } 
       
       splits.
       { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         rewrite set_interA with (s'' := eq (ThreadEvent tid (eindex st_prev + 1))). simplify_updated_sets. 
         rewrite singl_rel_restr. rewrite singl_rel_restr with (y := (ThreadEvent tid (eindex st_prev + 1))). 
         rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)).
@@ -715,20 +715,20 @@ Section CompCorrHelpers.
           seq_rewrite <- id_inter. simplify_updated_sets. basic_solver. }
         remove_emptiness. unfold acts_set. rewrite <- wft_rmwE; eauto.
         by_IH IHn_steps. }
-      { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+      { unfold_clear_updated; expand_rels; simplify_updated_sets.
         rewrite wft_rmwE at 2; eauto. fold (acts_set (G st_prev)).
         rewrite !seqA. repeat seq_rewrite <- id_inter.
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         subst ev ev'. simplify_updated_sets. repeat rewrite id_inter.
         rewrite !seqA.
         unfold acts_set. seq_rewrite <- wft_rmwE; eauto. 
         by_IH IHn_steps. }
       { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         rewrite unionA, codom_union. apply set_subset_union_r. left.
         by_IH IHn_steps. }
       { subst ev ev'. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         rewrite set_interA with (s'' := eq (ThreadEvent tid (eindex st_prev + 1))). simplify_updated_sets. 
         rewrite id_union. apply set_subset_union_l. split.
         { expand_rels.
@@ -807,9 +807,9 @@ Section CompCorrHelpers.
           rewrite E_EXT, RMW_EXT. 
           rewrite wft_rmwE; eauto. fold (acts_set (G st_prev)). rewrite NO_E.
           rewrite eqv_empty. remove_emptiness. 
-          unfold_clear_updated st. expand_rels. simplify_updated_sets.          
+          unfold_clear_updated. expand_rels. simplify_updated_sets.          
           basic_solver 10. }
-        { unfold_clear_updated st. remove_emptiness.
+        { unfold_clear_updated. remove_emptiness.
           rewrite set_unionA. expand_rels.
           arewrite (⦗Sc (G st_prev) ∪₁ (eq ev' ∪₁ eq ev'')⦘
                       ⨾ rmw (G st_prev) ⨾ ⦗Sc (G st_prev) ∪₁ (eq ev' ∪₁ eq ev'')⦘ ≡ rmw (G st_prev)).
@@ -826,10 +826,10 @@ Section CompCorrHelpers.
           expand_sets_only. subst ev ev' ev''. simplify_updated_sets.
           rewrite unique_restr; basic_solver. }
         { subst ev ev' ev''. rewrite UINDEX. 
-          unfold_clear_updated st; expand_rels; simplify_updated_sets.
+          unfold_clear_updated; expand_rels; simplify_updated_sets.
            basic_solver 10. }
         { subst ev ev' ev''. rewrite UINDEX.
-          unfold_clear_updated st; expand_rels; simplify_updated_sets.
+          unfold_clear_updated; expand_rels; simplify_updated_sets.
           basic_solver 10. }
       }
       assert (forall st_, immediate (sb (G st_)) ≡ ⦗E (G st_)⦘ ⨾ immediate (sb (G st_)) ⨾ ⦗E (G st_)⦘) as SB_IMM_E.
@@ -853,7 +853,7 @@ Section CompCorrHelpers.
           rewrite !seqA. repeat seq_rewrite <- id_inter. simplify_updated_sets.
           unfold acts_set. seq_rewrite <- wft_rmwE; eauto.
           rewrite SB_IMM_E. rewrite !seqA. seq_rewrite <- id_inter.
-          unfold_clear_updated st. expand_sets_only. simplify_updated_sets.
+          unfold_clear_updated. expand_sets_only. simplify_updated_sets.
           rewrite id_inter, seqA. seq_rewrite <- SB_IMM_E.
           rewrite <- set_interA. by_IH IHn_steps. }
         rewrite SB_EXT. expand_rels.
@@ -861,12 +861,12 @@ Section CompCorrHelpers.
         rewrite !seqA. repeat seq_rewrite <- id_inter. simplify_updated_sets.
         rewrite SB_IMM_E. rewrite !seqA. repeat seq_rewrite <- id_inter. simplify_updated_sets.
         rewrite <- singl_rel_restr.
-        unfold_clear_updated st. expand_sets_only. simplify_updated_sets.
+        unfold_clear_updated. expand_sets_only. simplify_updated_sets.
         basic_solver 10. }
-      { unfold_clear_updated st; expand_rels; simplify_updated_sets.
+      { unfold_clear_updated; expand_rels; simplify_updated_sets.
         rewrite wft_rmwE at 2; eauto. fold (acts_set (G st_prev)).
         rewrite !seqA. repeat seq_rewrite <- id_inter.
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         subst ev ev' ev''. simplify_updated_sets. repeat rewrite id_inter.
         rewrite !seqA. unfold acts_set. seq_rewrite <- wft_rmwE; eauto.
         apply union_more; [by_IH IHn_steps| ].
@@ -874,12 +874,12 @@ Section CompCorrHelpers.
         rewrite UINDEX. expand_rels. simplify_updated_sets.
         basic_solver. }
       { subst ev ev' ev''. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         rewrite unionA.
         do 2 (rewrite codom_union; apply set_subset_union_r; left). 
         by_IH IHn_steps. }
       { subst ev ev' ev''. rewrite UINDEX in *. 
-        unfold_clear_updated st; expand_rels; simplify_updated_sets.
+        unfold_clear_updated; expand_rels; simplify_updated_sets.
         rewrite !set_interA. simplify_updated_sets.
         rewrite !unionA, codom_union. apply set_subset_union. 
         { rewrite id_union. expand_rels. rewrite codom_union.

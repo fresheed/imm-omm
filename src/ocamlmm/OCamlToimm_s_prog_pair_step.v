@@ -25,6 +25,41 @@ From PromisingLib Require Import Basic Loc.
 Require Import Basics. 
 Set Implicit Arguments.
 
+  Lemma comm_helper tid index S:
+    eq (ThreadEvent tid index) ∩₁ S ≡₁ S ∩₁ eq (ThreadEvent tid index).
+  Proof. by ins; apply set_interC. Qed. 
+        
+  Lemma RESTR_EXPAND  {A: Type} (S1 S2: A -> Prop) (r: relation A):
+    restr_rel (S1 ∪₁ S2) r ≡ ⦗S1⦘ ⨾ r ⨾ ⦗S1⦘ ∪ ⦗S1⦘ ⨾ r ⨾ ⦗S2⦘ ∪ ⦗S2⦘ ⨾ r ⨾ ⦗S1⦘ ∪ ⦗S2⦘ ⨾ r ⨾ ⦗S2⦘.
+  Proof.  by (ins; basic_solver 10). Qed.
+
+  Ltac discr_new_body := rewrite label_set_bound_inter; [| by eauto | by omega | by (eauto with label_ext) | by vauto].
+  Ltac discr_new := discr_new_body || (rewrite comm_helper; discr_new_body). 
+  Ltac discr_E_body := rewrite E_bound_inter; [| by eauto | by omega]. 
+  Ltac discr_E := discr_E_body || (rewrite comm_helper; discr_E_body).
+  Ltac discr_RWO_body := rewrite RWO_bound_inter; [| by eauto | by omega].
+  Ltac discr_RWO := discr_RWO_body || (rewrite comm_helper; discr_RWO_body).
+  Ltac discr_events := rewrite diff_events_empty; [| by omega].
+  Ltac same_events := rewrite set_interK.
+
+  Ltac simplify_updated_sets := repeat (discr_new || discr_E || discr_RWO || discr_events || same_events); remove_emptiness.
+
+  Ltac unfold_clear_updated :=
+    repeat
+      match goal with
+      | H1: ?S1 ≡₁ ?S2 ∪₁ ?S', H2: ?S2 ≡₁ ?S'' ∪₁ ?S''' |- _
+        => rewrite H2 in H1; try rewrite H1; clear H1
+      | H1: ?R1 ≡ ?R2 ∪ ?R', H2: ?R2 ≡ ?R'' ∪ ?R''' |- _
+        => rewrite H2 in H1; try rewrite H1; clear H1
+      | H: ?eset ≡₁ ?eset' |- _ => try rewrite H; clear H
+      | H: ?erel ≡ ?erel' |- _ => try rewrite H; clear H
+      end.
+  
+  Ltac expand_sets_only := try rewrite !set_inter_union_r; remove_emptiness; try rewrite !set_inter_union_l; remove_emptiness. 
+  Ltac expand_rels := try rewrite !seq_union_l; remove_emptiness; try rewrite !seq_union_r; try expand_sets_only. 
+  Ltac by_IH IH := red in IH; desc; vauto. 
+
+
 Section PairStep.
   Notation "'E' G" := G.(acts_set) (at level 1).
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
@@ -229,16 +264,7 @@ Section PairStep.
     eapply COMPILED_NONEMPTY_weak. eapply itbc_implies_itbcw. eauto.  
   Qed.
 
-  Definition mm_similar_states_ext sto bsti :=
-    is_thread_block_compiled (instrs sto) (binstrs bsti) /\
-    pc sto = bpc bsti /\
-    same_behavior_local_ext (G sto) (bG bsti) /\
-    (forall reg (NEXC: reg <> exchange_reg), regf sto reg = bregf bsti reg) /\
-    (forall reg (NEXC: reg <> exchange_reg), depf sto reg ≡₁ bdepf bsti reg ∩₁ RWO (bG bsti)) /\
-    ectrl sto ≡₁ bectrl bsti ∩₁ RWO (bG bsti) /\
-    eindex sto = beindex bsti.
-  
-  Lemma INSTR_LEXPR_HELPER sto bsti (MM_SIM: mm_similar_states_ext sto bsti)
+  Lemma INSTR_LEXPR_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
         sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) lexpr (EXPR_OF: lexpr_of lexpr instr):
     RegFile.eval_lexpr (regf sto) lexpr = RegFile.eval_lexpr (regf sti) lexpr.
   Proof. 
@@ -250,7 +276,7 @@ Section PairStep.
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed. 
 
-  Lemma INSTR_EXPR_HELPER sto bsti (MM_SIM: mm_similar_states_ext sto bsti)
+  Lemma INSTR_EXPR_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
         sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) expr (EXPR_OF: expr_of expr instr):
     RegFile.eval_expr (regf sto) expr = RegFile.eval_expr (regf sti) expr.
   Proof. 
@@ -262,7 +288,7 @@ Section PairStep.
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed.
   
-  Lemma INSTR_LEXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states_ext sto bsti)
+  Lemma INSTR_LEXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
         sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) lexpr (EXPR_OF: lexpr_of lexpr instr):
     DepsFile.lexpr_deps (depf sto) lexpr ≡₁ DepsFile.lexpr_deps (depf sti) lexpr ∩₁ (RWO (bG bsti)).
   Proof. 
@@ -275,7 +301,7 @@ Section PairStep.
     eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
   Qed.
   
-  Lemma INSTR_EXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states_ext sto bsti)
+  Lemma INSTR_EXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
         sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) expr (EXPR_OF: expr_of expr instr):
     DepsFile.expr_deps (depf sto) expr ≡₁ DepsFile.expr_deps (depf sti) expr ∩₁ RWO (bG bsti).
   Proof. 
@@ -432,56 +458,7 @@ Section PairStep.
      apply IHBPI; auto.
    Qed. 
 
-   Lemma sbl_ext_stronger GO GI
-         (SBL_EXT: same_behavior_local_ext GO GI):
-     same_behavior_local GO GI.
-   Proof.
-     red in SBL_EXT. desc. red. splits; auto.
-   Qed.
-   Hint Resolve sbl_ext_stronger. 
-     
-   (* Lemma mm_sim_ext_stronger sto bsti *)
-   (*       (MM_SIM_EXT: mm_similar_states_ext sto bsti): *)
-   (*   mm_similar_states sto bsti. *)
-   (* Proof. *)
-   (*   red in MM_SIM_EXT. red. desc. splits; vauto. auto.  *)
-   (* Qed. *)
-   (* Hint Resolve mm_sim_ext_stronger.  *)
    
-  Lemma comm_helper tid index S:
-    eq (ThreadEvent tid index) ∩₁ S ≡₁ S ∩₁ eq (ThreadEvent tid index).
-  Proof. by ins; apply set_interC. Qed. 
-        
-  Lemma RESTR_EXPAND  {A: Type} (S1 S2: A -> Prop) (r: relation A):
-    restr_rel (S1 ∪₁ S2) r ≡ ⦗S1⦘ ⨾ r ⨾ ⦗S1⦘ ∪ ⦗S1⦘ ⨾ r ⨾ ⦗S2⦘ ∪ ⦗S2⦘ ⨾ r ⨾ ⦗S1⦘ ∪ ⦗S2⦘ ⨾ r ⨾ ⦗S2⦘.
-  Proof.  by (ins; basic_solver 10). Qed.
-
-  Ltac discr_new_body := rewrite label_set_bound_inter; [| by eauto | by omega | by (eauto with label_ext) | by vauto].
-  Ltac discr_new := discr_new_body || (rewrite comm_helper; discr_new_body). 
-  Ltac discr_E_body := rewrite E_bound_inter; [| by eauto | by omega]. 
-  Ltac discr_E := discr_E_body || (rewrite comm_helper; discr_E_body).
-  Ltac discr_RWO_body := rewrite RWO_bound_inter; [| by eauto | by omega].
-  Ltac discr_RWO := discr_RWO_body || (rewrite comm_helper; discr_RWO_body).
-  Ltac discr_events := rewrite diff_events_empty; [| by omega].
-  Ltac same_events := rewrite set_interK.
-
-  Ltac simplify_updated_sets := repeat (discr_new || discr_E || discr_RWO || discr_events || same_events); remove_emptiness.
-
-  Ltac unfold_clear_updated :=
-    repeat
-      match goal with
-      | H1: ?S1 ≡₁ ?S2 ∪₁ ?S', H2: ?S2 ≡₁ ?S'' ∪₁ ?S''' |- _
-        => rewrite H2 in H1; try rewrite H1; clear H1
-      | H1: ?R1 ≡ ?R2 ∪ ?R', H2: ?R2 ≡ ?R'' ∪ ?R''' |- _
-        => rewrite H2 in H1; try rewrite H1; clear H1
-      | H: ?eset ≡₁ ?eset' |- _ => try rewrite H; clear H
-      | H: ?erel ≡ ?erel' |- _ => try rewrite H; clear H
-      end.
-  
-  Ltac expand_sets_only := try rewrite !set_inter_union_r; remove_emptiness; try rewrite !set_inter_union_l; remove_emptiness. 
-  Ltac expand_rels := try rewrite !seq_union_l; remove_emptiness; try rewrite !seq_union_r; try expand_sets_only. 
-  Ltac by_IH IH := red in IH; desc; vauto. 
-
   Lemma ectrl_bound_inter st tid ind
         (WFT: wf_thread_state tid st) (IND: ind >= eindex st):
      ectrl st ∩₁ eq (ThreadEvent tid ind) ≡₁ ∅.
@@ -578,11 +555,11 @@ Section PairStep.
   Notation "'sti'" := (bst2st bsti) (at level 1). 
   Notation "'sti''" := (bst2st bsti') (at level 1). 
     
-  Lemma pair_step sto (MM_SIM: mm_similar_states_ext sto bsti)
+  Lemma pair_step sto (MM_SIM: mm_similar_states sto bsti)
         tid (OSEQ_STEP: omm_block_step tid bsti bsti')
         (BPC'_BOUND: bpc bsti' <= length (binstrs bsti))
         (BLOCK_REACH: (block_step tid)＊ (binit (binstrs bsti)) bsti):
-    exists sto', Ostep tid sto sto' /\ mm_similar_states_ext sto' bsti'.
+    exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
   Proof.
     pose proof (block_step_nonterminal (bs_extract OSEQ_STEP)) as BST_NONTERM.
     assert (is_thread_block_compiled (instrs sto) (binstrs bsti)) as ITBC by (red in MM_SIM; desc; auto).

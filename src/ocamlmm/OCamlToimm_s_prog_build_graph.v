@@ -213,7 +213,6 @@ Section BUILD_OMM_GRAPH.
         (INTRA_E: intra_E GI1):
     graphs_sim_weak GO1 GO2.
   Proof.
-    apply sbl_ext_TMP in SBL. apply sbl_ext_TMP in SBL'.
     red in SIM, SBL, SBL'. desc.
     assert (E GI1 ∩₁ RWO GI1 ≡₁ E GI1 ∩₁ RWO GI2) as E_RWO.
     { unfold RWO. rewrite <- SIM1. repeat rewrite set_inter_minus_r.
@@ -236,7 +235,9 @@ Section BUILD_OMM_GRAPH.
       rewrite SAME_LAB, SAME_LAB0; auto.
       apply SIM0. rewrite (set_equiv_exp RESTR_EVENTS0) in H.
       red in H. desc. auto. }
-    all: red in INTRA_E; desc; intuition. 
+    all: red in INTRA_E; desc; intuition.
+    { rewrite RESTR_RMW, RESTR_RMW0. auto. }
+    rewrite RESTR_RMWDEP0, RESTR_RMWDEP. auto. 
   Qed. 
 
   Lemma wf_tre_intra_E G thread (WF: Wf G) Gi
@@ -259,9 +260,6 @@ Section BUILD_OMM_GRAPH.
   Lemma sbl_sim GO1 GO2 G (SBL1: same_behavior_local GO1 G) (SBL2: graphs_sim_weak GO1 GO2):
     same_behavior_local GO2 G.
   Proof.
-    apply sbl_ext_TMP in SBL1.
-    cut (same_behavior_local_ext GO2 G).
-    { ins. red in H. desc. vauto. }
     red in SBL1. red in SBL2. desc.
     assert (forall (r1 r2: execution -> relation actid) R3 (EQ: r1 GO1 ≡ r2 GO2) (TGT: r1 GO1 ≡ R3), r2 GO2 ≡ R3) as TRANS by basic_solver.
     red. splits.
@@ -350,7 +348,8 @@ Section BUILD_OMM_GRAPH.
       destruct e.
       { subst. exfalso. apply programs_without_tid_init.
         apply find_iff_in. simpl in THREADI'. vauto. }
-      simpl in EGOi1. subst. do 3 eexists; eauto. split; eauto. vauto. }
+      simpl in EGOi1. subst thread'. do 2 eexists. exists GOi.
+      splits; eauto. red. do 2 eexists. splits; vauto. }
 
     exists GO. splits.
     { subst GO. unfold acts_set. simpl. ins.
@@ -386,16 +385,14 @@ Section BUILD_OMM_GRAPH.
     { apply program_execution_equiv in ExecI. destruct ExecI.
       apply H0; auto. }
     pose proof (thread_execs COMP EXECIi) as [SGO [OEXEC SBL]]. desc.
-    apply sbl_ext_TMP in SBL. 
     cut (graphs_sim_weak SGO GOi).
     { ins. split.
       { red. red in OEXEC. desc.
         exists s. splits; vauto. }
-      eapply sbl_sim; vauto.
-      red in SBL. desc. vauto. }
+      eapply sbl_sim; vauto. }
     assert (forall rel
               (RWO_RESTR_IF_SBL: forall Go Gi,
-                  same_behavior_local_ext Go Gi ->
+                  same_behavior_local Go Gi ->
                   rel Go ≡ restr_rel (RWO Gi) (rel Gi))
               (TID_RESTR_IF_TRE: forall G G' tid,
                   thread_restricted_execution G tid G' ->
@@ -424,7 +421,7 @@ Section BUILD_OMM_GRAPH.
       { ins. red in H. destruct H as [[thread' POi' PIi' GIi'] [HLPR_RESTR BAR]].
         apply seq_eqv_lr in BAR. destruct BAR as [TIDx [BAR TIDy]].
         destruct BAR as [GOi' [[OEXEC' SBL'] REL'xy]].
-        red in SBL'. apply sbl_ext_TMP in SBL'. 
+        red in SBL'. 
         red in HLPR_RESTR. desc. simpl in *.
         cut (graphs_sim_weak SGO GOi').
         { ins. red in H.
@@ -436,7 +433,6 @@ Section BUILD_OMM_GRAPH.
         { ins.
           red in SBL'. desc. 
           eapply sbl_sim_rect; vauto.
-          { red in SBL. desc. vauto. }
           eapply wf_tre_intra_E; vauto. }
         eapply tre_sim_weak; vauto. 
         replace thread' with (tid x) in *; [congruence| ]. 
@@ -471,7 +467,6 @@ Section BUILD_OMM_GRAPH.
       2: { ins. red. exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}).
            splits; vauto.
            exists SGO. splits; vauto.
-           { red in SBL. desc. vauto. }
            red in SBL. desc.
            rewrite (set_equiv_exp RESTR_EVENTS) in H.
            red in H. desc.
@@ -508,7 +503,21 @@ Section BUILD_OMM_GRAPH.
       subst GO. simpl in *.
       destruct RESTR0. apply tr_lab0.
       rewrite (set_equiv_exp RESTR_EVENTS) in ESGOx. red in ESGOx. desc. auto. }
-    all: by apply INTRA_REL_HELPER; vauto; ins; destruct H; desc; vauto.
+    all: try (by apply INTRA_REL_HELPER; vauto; ins; destruct H; desc; vauto).
+    { apply INTRA_REL_HELPER.
+      { ins. red in H. desc. rewrite RESTR_RMW.
+        rewrite restr_relE. arewrite (rmw Gi ≡ rmw Gi ⨾ ⦗codom_rel (rmw Gi)⦘) by basic_solver.
+        rewrite <- id_inter. unfold RWO. basic_solver. }
+      { ins. destruct H. auto. }
+      { subst GO. auto. }
+      ins. cdes H. auto. }
+    red in SBL. desc. rewrite RESTR_RMWDEP. destruct RESTR.
+    rewrite tr_rmw_dep. subst GO. simpl. unfold GOi_rel.
+    split; [basic_solver| ]. rewrite seq_bunion_l, seq_bunion_r.
+    apply inclusion_bunion_l. ins. red. ins.
+    apply seq_eqv_lr in H0. desc. subst. red in H1. desc.
+    destruct x. simpl in *. red in H. desc. simpl in *.
+    red in SBL'. desc. rewrite (same_relation_exp RESTR_RMWDEP0) in H3. auto.
   Qed. 
 
 

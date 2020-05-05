@@ -476,9 +476,17 @@ Section OCaml_IMM_Correspondence.
   Admitted.  
 
 
-  Definition same_behavior_local (GO GI: execution) :=
+  (* Definition same_behavior_local (GO GI: execution) := *)
+  (*   ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\ *)
+  (*   ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫.  *)    
+  Definition same_behavior_local GO GI :=
     ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\
-    ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫. 
+    ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫ /\
+    ⟪ RESTR_RMW: rmw GO ≡ ∅₂⟫ /\
+    ⟪ RESTR_DATA: data GO ≡ restr_rel (RWO GI) (data GI)⟫ /\
+    ⟪ RESTR_CTRL: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI)⟫ /\ 
+    ⟪ RESTR_ADDR: addr GO ≡ restr_rel (RWO GI) (addr GI)⟫ /\ 
+    ⟪ RESTR_RMWDEP: rmw_dep GO ≡ ∅₂⟫. 
 
   Definition same_behavior (GO GI: execution) :=
     ⟪SAME_LOCAL: same_behavior_local GO GI ⟫ /\
@@ -496,14 +504,24 @@ Section OCaml_IMM_Correspondence.
   (*   sto.(ectrl) = bsti.(bectrl) /\ *)
   (*   sto.(eindex) = bsti.(beindex). *)
 
-  Definition mm_similar_states (sto: state) (bsti: block_state) :=
-    is_thread_block_compiled sto.(instrs) bsti.(binstrs)  /\
-    sto.(pc) = bsti.(bpc) /\
-    same_behavior_local sto.(G) bsti.(bG) /\
-    (forall reg (NOT_EXC: reg <> exchange_reg), sto.(regf) reg = bsti.(bregf) reg) /\
-    (forall reg (NOT_EXC: reg <> exchange_reg), sto.(depf) reg = bsti.(bdepf) reg) /\
-    sto.(ectrl) = bsti.(bectrl) /\
-    sto.(eindex) = bsti.(beindex).
+  (* Definition mm_similar_states (sto: state) (bsti: block_state) := *)
+  (*   is_thread_block_compiled sto.(instrs) bsti.(binstrs)  /\ *)
+  (*   sto.(pc) = bsti.(bpc) /\ *)
+  (*   same_behavior_local sto.(G) bsti.(bG) /\ *)
+  (*   (forall reg (NOT_EXC: reg <> exchange_reg), sto.(regf) reg = bsti.(bregf) reg) /\ *)
+  (*   (forall reg (NOT_EXC: reg <> exchange_reg), sto.(depf) reg = bsti.(bdepf) reg) /\ *)
+  (*   sto.(ectrl) = bsti.(bectrl) /\ *)
+  (*   sto.(eindex) = bsti.(beindex). *)
+
+  Definition mm_similar_states sto bsti :=
+    is_thread_block_compiled (instrs sto) (binstrs bsti) /\
+    pc sto = bpc bsti /\
+    same_behavior_local (G sto) (bG bsti) /\
+    (forall reg (NEXC: reg <> exchange_reg), regf sto reg = bregf bsti reg) /\
+    (forall reg (NEXC: reg <> exchange_reg), depf sto reg ≡₁ bdepf bsti reg ∩₁ RWO (bG bsti)) /\
+    ectrl sto ≡₁ bectrl bsti ∩₁ RWO (bG bsti) /\
+    eindex sto = beindex bsti.
+  
 
   Definition omm_block_step (tid : thread_id) (bst1 bst2: block_state) :=
     ⟪ BLOCK_STEP: exists block, block_step_helper block tid bst1 bst2 ⟫ /\
@@ -625,19 +643,10 @@ Section CorrectedDefinitions.
     Oprogram_execution_corrected OPROG G <-> Oprogram_execution OPROG G.
   Proof. Admitted.
 
-    
-  Definition same_behavior_local_ext GO GI :=
-    ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\
-    ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫ /\
-    ⟪ RESTR_RMW: rmw GO ≡ ∅₂⟫ /\
-    ⟪ RESTR_DATA: data GO ≡ restr_rel (RWO GI) (data GI)⟫ /\
-    ⟪ RESTR_CTRL: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI)⟫ /\ 
-    ⟪ RESTR_ADDR: addr GO ≡ restr_rel (RWO GI) (addr GI)⟫ /\ 
-    ⟪ RESTR_RMWDEP: rmw_dep GO ≡ ∅₂⟫. 
   
-  Lemma sbl_ext_TMP GOi GIi (SBL: same_behavior_local GOi GIi):
-    same_behavior_local_ext GOi GIi.
-  Proof. Admitted.
+  (* Lemma sbl_ext_TMP GOi GIi (SBL: same_behavior_local GOi GIi): *)
+  (*   same_behavior_local_ext GOi GIi. *)
+  (* Proof. Admitted. *)
 
   
 End CorrectedDefinitions.   

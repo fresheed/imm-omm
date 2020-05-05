@@ -111,6 +111,8 @@ Lemma init_mm_same: forall PO BPI (COMP: is_thread_block_compiled PO BPI),
     mm_similar_states (init PO) (binit BPI).
 Proof.
   ins. red. simpl. splits; auto.
+  3: { basic_solver. }
+  2: { ins. simpl. unfold DepsFile.init. simpl. basic_solver. }
   unfold init_execution. red. simpl. basic_solver. 
 Qed.
 
