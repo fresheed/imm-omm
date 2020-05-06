@@ -450,10 +450,10 @@ Section CompCorrHelpers.
   Lemma compilation_injective PO1 PO2 BPI (COMP1: is_thread_block_compiled PO1 BPI) (COMP2: is_thread_block_compiled PO2 BPI):
     PO1 = PO2.
   Proof. Admitted. 
-
+  
   Lemma GI_1thread_omm_premises_block bst tid PO 
         (COMP: is_thread_block_compiled PO (binstrs bst)) 
-        (BLOCK_STEPS: (omm_block_step tid)＊ (binit (binstrs bst)) bst):
+        (BLOCK_STEPS: (omm_block_step_PO PO tid)＊ (binit (binstrs bst)) bst):
     omm_premises_hold (bG bst).
   Proof.
     apply crt_num_steps in BLOCK_STEPS. destruct BLOCK_STEPS as [n_steps BLOCK_STEPS].
@@ -466,8 +466,6 @@ Section CompCorrHelpers.
     specialize (IHn_steps bst_prev).
     specialize_full IHn_steps; [congruence| congruence |]. 
     red in STEP_NEXT. desc. 
-    assert (PO0 = PO); [| subst PO0]. 
-    { eapply compilation_injective; eauto. congruence. }
     red in BLOCK_STEP. desc.
     remember (bpc bst_prev) as b. remember (bst2st bst_prev) as st_prev.
     assert (exists oinstr, is_instruction_compiled oinstr block) as [oinstr COMP_BLOCK].
@@ -479,7 +477,7 @@ Section CompCorrHelpers.
     assert (forall i instr (BLOCK_I: Some instr = nth_error block i) instr' (OTHER: Some instr' = nth_error (instrs st_prev) (pc st_prev + i)) (NEQ: instr <> instr'), False).
     { ins. specialize (BLOCK_CONTENTS _ _ BLOCK_I). congruence. }
     assert (exists k, (step tid) ^^ k (init (instrs st_prev)) st_prev) as [k REACH].
-    { apply crt_num_steps. subst st_prev. apply ommblocks_imply_steps.
+    { apply crt_num_steps. subst st_prev. apply ommblocks_imply_steps with (PO := PO).
       apply crt_num_steps. eexists. rewrite BINSTRS_SAME0. eauto. }
     assert (forall st', (step tid) st_prev st' -> (step tid) ^^ (k + 1) (init (instrs st')) st') as REACH'. 
     { ins. replace (instrs st') with (instrs st_prev).
@@ -843,7 +841,7 @@ Section CompCorrHelpers.
       splits.
       { subst ev ev' ev''. rewrite UINDEX in *.
         rewrite E_EXT, W_EXT, SC_EXT at 1. 
-        remove_emptiness. expand_sets_only. simplify_updated_sets. Show. 
+        remove_emptiness. expand_sets_only. simplify_updated_sets. 
         repeat rewrite set_interA. simplify_updated_sets.
         rewrite RMW_EXT. expand_rels. rewrite codom_union.
         apply set_equiv_union.
@@ -918,7 +916,7 @@ Section CompCorrHelpers.
     forward eapply (@steps_imply_ommblocks bst_fin) as BLOCK_STEPS; eauto.
     { simpl. rewrite <- COMP0, <- BST. eauto. }
     replace Gi with (bG bst_fin).
-    eapply GI_1thread_omm_premises_block; eauto. 
+    eapply GI_1thread_omm_premises_block; eauto.    
   Qed. 
 
 End CompCorrHelpers.

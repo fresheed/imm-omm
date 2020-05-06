@@ -1029,16 +1029,17 @@ Proof.
       rewrite H5. apply state_record_equality.
 Qed. 
 
+
 (* had to define it separately since otherwise Coq doesn't understand what P is *)
-Definition StepProp n := forall st1 st2 tid (STEPS: (step tid) ^^ n st1 st2)
+Definition StepProp n := forall st1 st2 tid PO (STEPS: (step tid) ^^ n st1 st2)
                            (REACH: (step tid)＊ (init (instrs st1)) st1)
                            bst1 (BST1: st1 = bst2st bst1)
                            bst2 (BST2: st2 = bst2st bst2)
                            (BOUND1: bpc bst1 <= length (binstrs bst1))
                            (BOUND2: bpc bst2 <= length (binstrs bst2))
-                           (COMP: exists PO, is_thread_block_compiled PO (binstrs bst1))
+                           (COMP: is_thread_block_compiled PO (binstrs bst1))
                            (SAME_BINSTRS: binstrs bst1 = binstrs bst2),
-    (omm_block_step tid)＊ bst1 bst2.
+    (omm_block_step_PO PO tid)＊ bst1 bst2.
 
 Lemma oseq_between_acb: forall n, StepProp n.
 Proof.
@@ -1056,7 +1057,7 @@ Proof.
       eapply transitive_rt; eauto.
       apply crt_num_steps. eauto. }
     apply ACB_IF_BST. exists bst2. splits; vauto. congruence. }
-  assert (bst2st bst1 = bst2st bst2 -> (omm_block_step tid)＊ bst1 bst2) as WHEN_SAME_BST. 
+  assert (bst2st bst1 = bst2st bst2 -> (omm_block_step_PO PO tid)＊ bst1 bst2) as WHEN_SAME_BST. 
   { intros SAME_BST2ST. 
     replace bst2 with bst1; [apply rt_refl| ].
     rewrite blockstate_record_equality.
@@ -1102,7 +1103,7 @@ Proof.
     specialize (BST_IF_ACB ACB'). destruct BST_IF_ACB as [bst' [BST' [SAME_BINSTRS' BPC']]]. 
     forward eapply IH as IH_; eauto.
     { red in SAME_BINSTRS'. rewrite SAME_BINSTRS'. auto. }
-    { exists PO. congruence. }
+    { Unshelve. 2: exact PO. congruence. }
     { congruence. }
     apply clos_trans_in_rt. apply t_step_rt. exists bst'. split; auto. 
     red. splits; vauto. 
@@ -1115,10 +1116,10 @@ Qed.
 
 Definition is_block_terminal bst := bpc bst >= length (binstrs bst). 
 
-Lemma steps_imply_ommblocks bfin (BPC_LIM: bpc bfin <= length (binstrs bfin)) tid 
-      (COMP: exists PO, is_thread_block_compiled PO (binstrs bfin)):
+Lemma steps_imply_ommblocks bfin PO (BPC_LIM: bpc bfin <= length (binstrs bfin)) tid 
+      (COMP: is_thread_block_compiled PO (binstrs bfin)):
   let fin := (bst2st bfin) in 
-  (step tid)＊ (init (instrs fin)) fin -> (omm_block_step tid)＊ (binit (binstrs bfin)) bfin.
+  (step tid)＊ (init (instrs fin)) fin -> (omm_block_step_PO PO tid)＊ (binit (binstrs bfin)) bfin.
 Proof.
   intros fin STEPS. apply crt_num_steps in STEPS as [n STEPS].
   eapply oseq_between_acb; eauto.
@@ -1126,9 +1127,9 @@ Proof.
   simpl. apply rt_refl. 
 Qed. 
 
-Lemma ommblocks_imply_steps bfin tid:
+Lemma ommblocks_imply_steps bfin tid PO:
   let fin := (bst2st bfin) in 
-  (omm_block_step tid)＊ (binit (binstrs bfin)) bfin -> (step tid)＊ (init (instrs fin)) fin.
+  (omm_block_step_PO PO tid)＊ (binit (binstrs bfin)) bfin -> (step tid)＊ (init (instrs fin)) fin.
 Proof.
   intros fin STEPS. apply crt_num_steps in STEPS as [n STEPS].
   generalize dependent bfin. induction n.

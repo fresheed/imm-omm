@@ -65,18 +65,18 @@ Section BUILD_OMM_GRAPH.
     
     assert (is_block_terminal bsti_fin) as BLOCK_TERM. 
     { red. destruct (dec_ge (bpc bsti_fin) (length (binstrs bsti_fin))); auto. }
-    assert (exists n_osteps, (omm_block_step tid) ^^ n_osteps (binit BPI) bsti_fin) as [n_osteps OMM_STEPS]. 
+    assert (exists n_osteps, (omm_block_step_PO PO tid) ^^ n_osteps (binit BPI) bsti_fin) as [n_osteps OMM_STEPS]. 
     { apply crt_num_steps.
-      forward eapply (@steps_imply_ommblocks bsti_fin _ tid); eauto.
-      { exists PO. red in COMP. desc. auto. }
+      forward eapply (@steps_imply_ommblocks bsti_fin PO _ tid); eauto.
+      { red in COMP. desc. simpl. auto. }
       Unshelve. 2: simpl; omega. 
       rewrite <- BST. apply crt_num_steps.
       rewrite <- SAME_INSTRS. eauto. }
     
     assert (BY_STEPS:
               forall i bsti_i (INDEX: i <= n_osteps)
-                (STEPS_TO: (omm_block_step tid)^^i (binit BPI) bsti_i)
-                (STEPS_FROM: (omm_block_step tid)^^(n_osteps - i) bsti_i bsti_fin),
+                (STEPS_TO: (omm_block_step_PO PO tid)^^i (binit BPI) bsti_i)
+                (STEPS_FROM: (omm_block_step_PO PO tid)^^(n_osteps - i) bsti_i bsti_fin),
                  exists sto_i,
                  (Ostep tid)^^i (init PO) sto_i /\
                  mm_similar_states sto_i bsti_i /\
@@ -96,20 +96,20 @@ Section BUILD_OMM_GRAPH.
         { apply (@steps_split _ _ _ 1 (n_osteps - S i)); [omega| ].
           eexists. split; eauto. simpl. basic_solver. }
 
-        forward eapply (@clos_refl_trans_mori _ (omm_block_step tid) (block_step tid)).
-        { red. ins. apply bs_extract. auto. }
+        forward eapply (@clos_refl_trans_mori _ (omm_block_step_PO PO tid) (block_step tid)).
+        { red. ins. eapply bs_extract; eauto. }
         intros OB_B.
         assert (bpc bsti_i <= length (binstrs bsti_i')) as BPC_BOUND.
         { replace (binstrs bsti_i') with (binstrs bsti_i).
           2: { red in STEPS_FROM'. desc. auto. }
           destruct (gt_0_eq (n_osteps - S i)) as [GT | FIN].
           2: { rewrite <- FIN in STEPS_FROM.
-               apply (steps0 (omm_block_step tid)) in STEPS_FROM.
+               apply (steps0 (omm_block_step_PO PO tid)) in STEPS_FROM.
                subst bsti_i. auto. }
           apply Nat.lt_le_incl. apply nth_error_Some, OPT_VAL. 
           apply steps_sub with (m := 1) in STEPS_FROM; [| omega].
           destruct STEPS_FROM as [bst_next STEP_NEXT].
-          apply (same_relation_exp (pow_unit (omm_block_step tid))) in STEP_NEXT. 
+          apply (same_relation_exp (pow_unit (omm_block_step_PO PO tid))) in STEP_NEXT. 
           red in STEP_NEXT. desc. red in BLOCK_STEP. desc. eauto. }          
         assert (bpc bsti_i' <= length (binstrs bsti_i')).
         { red in MM_SIM'. desc. rewrite <- MM_SIM'0.
@@ -119,7 +119,7 @@ Section BUILD_OMM_GRAPH.
           replace PO with (instrs (init PO)) by vauto.
           symmetry. apply omm_steps_same_instrs. exists tid. apply <- crt_num_steps. eauto. }
         assert (SAME_BINSTRS': BPI = binstrs bsti_i').
-        { assert (forall bst BPI_ n, (omm_block_step tid) ^^ n (binit BPI_) bst -> BPI_ = binstrs bst).
+        { assert (forall bst BPI_ n, (omm_block_step_PO PO tid) ^^ n (binit BPI_) bst -> BPI_ = binstrs bst).
           { ins. generalize dependent bst. induction n. 
             { ins. red in H0. desc. unfold binit in H0. subst bst. auto. }
             ins. red in H0. desc. specialize (IHn _ H0). cdes H1. congruence. }
@@ -133,7 +133,7 @@ Section BUILD_OMM_GRAPH.
           (* apply t_step_rt. exists bsti_i. split. *)
           (* { apply bs_extract. auto. } *)
           (* apply OB_B. apply crt_num_steps. eexists. eauto. *) }
-
+        
         forward eapply (pair_step MM_SIM' STEPS_FROM') as [sto [OSTEP MM_SIM]]; eauto. 
         { apply OB_B. apply crt_num_steps. exists i.
           replace (binstrs bsti_i') with BPI; auto. }

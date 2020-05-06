@@ -531,7 +531,12 @@ Section OCaml_IMM_Correspondence.
     intuition. congruence.
   Qed.
 
-  Lemma bs_extract bst bst' tid (OMM_BLOCK_STEP: omm_block_step tid bst bst'):
+Definition omm_block_step_PO PO (tid : thread_id) (bst1 bst2: block_state) :=
+    ⟪ BLOCK_STEP: exists block, block_step_helper block tid bst1 bst2 ⟫ /\
+    ⟪ BINSTRS_SAME: binstrs bst1 = binstrs bst2 ⟫ /\
+    ⟪ COMPILED: is_thread_block_compiled PO (binstrs bst1) ⟫. 
+  
+  Lemma bs_extract bst bst' tid PO (OMM_BLOCK_STEP: omm_block_step_PO PO tid bst bst'):
     block_step tid bst bst'.
   Proof. red in OMM_BLOCK_STEP; desc. red in BLOCK_STEP. desc. vauto. Qed.
 

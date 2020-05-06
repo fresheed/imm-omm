@@ -556,7 +556,7 @@ Section PairStep.
   Notation "'sti''" := (bst2st bsti') (at level 1). 
     
   Lemma pair_step sto (MM_SIM: mm_similar_states sto bsti)
-        tid (OSEQ_STEP: omm_block_step tid bsti bsti')
+        tid PO (OSEQ_STEP: omm_block_step_PO PO tid bsti bsti')
         (BPC'_BOUND: bpc bsti' <= length (binstrs bsti))
         (BLOCK_REACH: (block_step tid)＊ (binit (binstrs bsti)) bsti):
     exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
@@ -574,13 +574,13 @@ Section PairStep.
       apply crt_num_steps. eauto. } 
     assert (forall i block_i, Some block_i = nth_error block i -> Some block_i = nth_error (instrs sti) (pc sti + i)) as BLOCK_CONTENTS. 
     { ins. forward eapply (@near_pc block_i block i H bsti); eauto. }
-    assert (forall (LEN1: length block = 1) (OBS: omm_block_step tid bsti bsti'),
+    assert (forall (LEN1: length block = 1) (OBS: omm_block_step_PO PO tid bsti bsti'),
                step tid sti sti') as STEP1. 
     { ins. red in OSEQ_STEP. desc. red in BLOCK_STEP. desc.
       rewrite <- BLOCK in AT_BLOCK. inversion AT_BLOCK. subst. simpl in *.
       rewrite LEN1 in BLOCK_STEP0. 
       apply (same_relation_exp (seq_id_l (step tid))). auto. }
-    assert (forall (LEN2: length block = 2) (OBS: omm_block_step tid bsti bsti'),
+    assert (forall (LEN2: length block = 2) (OBS: omm_block_step_PO PO tid bsti bsti'),
                exists sti'', step tid sti sti'' /\ step tid sti'' sti') as STEP2. 
     { ins. red in OSEQ_STEP. desc. red in BLOCK_STEP. desc.
       rewrite <- BLOCK in AT_BLOCK. inversion AT_BLOCK. subst. simpl in *.
