@@ -522,31 +522,31 @@ Section PairStep.
                            repeat seq_rewrite id_inter;
                            rewrite !seqA; seq_rewrite <- DOM.
 
-  Lemma progs_positions PO bsti BPI0
+  Lemma progs_positions PO BPI0 BPI b
     (COMPILED: Forall2 is_instruction_compiled PO BPI0)
-    (CORRECTED: Forall2 (block_corrected BPI0) BPI0 (binstrs bsti))
-    (IN_PROG: bpc bsti < length (binstrs bsti)):
+    (CORRECTED: Forall2 (block_corrected BPI0) BPI0 BPI)
+    (IN_PROG: b < length BPI):
     exists oinstr block block0, 
-      ⟪OINSTR: Some oinstr = nth_error PO (bpc bsti) ⟫/\
-      ⟪BLOCK: Some block = nth_error (binstrs bsti) (bpc bsti) ⟫/\
-      ⟪BLOCK0: Some block0 = nth_error BPI0 (bpc bsti) ⟫/\
+      ⟪OINSTR: Some oinstr = nth_error PO b ⟫/\
+      ⟪BLOCK: Some block = nth_error BPI b ⟫/\
+      ⟪BLOCK0: Some block0 = nth_error BPI0 b ⟫/\
       ⟪COMP: is_instruction_compiled oinstr block0 ⟫/\
       ⟪CORR: block_corrected BPI0 block0 block ⟫.
   Proof.
     apply nth_error_Some, OPT_VAL in IN_PROG. destruct IN_PROG as [block BLOCK].
-    assert (exists block0, Some block0 = nth_error BPI0 (bpc bsti)) as [block0 BLOCK0].
+    assert (exists block0, Some block0 = nth_error BPI0 b) as [block0 BLOCK0].
     { apply OPT_VAL. apply nth_error_Some.
-      replace (length BPI0) with (length (binstrs bsti)).
+      replace (length BPI0) with (length BPI).
       { apply nth_error_Some, OPT_VAL. eauto. }
       symmetry. eapply Forall2_length; eauto. } 
-    assert (exists oinstr, Some oinstr = nth_error PO (bpc bsti)) as [oinstr OINSTR]. 
+    assert (exists oinstr, Some oinstr = nth_error PO b) as [oinstr OINSTR]. 
     { apply OPT_VAL. apply nth_error_Some.        
       replace (length PO) with (length BPI0).
       { apply nth_error_Some, OPT_VAL. eauto. }
       symmetry. eapply Forall2_length; eauto. }
     repeat eexists; splits; eauto; eapply Forall2_index; eauto. 
   Qed.
-
+  
   Lemma SEQ_EQV_CROSS {A: Type} (S1 S2 S3 S4: A -> Prop):
     ⦗S1⦘ ⨾ (S2 × S3) ⨾ ⦗S4⦘ ≡ (S1 ∩₁ S2) × (S3 ∩₁ S4). 
   Proof. ins. basic_solver. Qed.
@@ -1109,13 +1109,10 @@ Section PairStep.
           cdes MM_SIM2. 
           rewrite (eval_expr_deps_same sto sti); eauto.
           { basic_solver. }
-          forward eapply exchange_reg_dedicated as DEDICATED. 
+          forward eapply exchange_reg_dedicated' as DEDICATED.  
           { vauto. }
           { Unshelve. 2: exact (Instr.update (Instr.exchange new_expr) Xpln Osc Osc exchange_reg loc_expr). eapply nth_error_In; eauto. }
-          simpl in DEDICATED. destruct new_expr.
-          - destruct val; simpl; tauto.
-          - simpl. destruct op0; simpl; tauto.
-          - simpl. destruct op1, op2; simpl; tauto. }
+          simpl in DEDICATED. desc. auto. }
         { expand_intra sto'' UG0 bsti sti. rewrite UINDEX, UG, UECTRL.
           simpl. replace_bg_rels bsti sti. remove_emptiness.
           expand_rels.
@@ -1264,13 +1261,10 @@ Section PairStep.
         cdes MM_SIM. 
         apply set_equiv_union; [| auto]. 
         apply eval_expr_deps_same; vauto.
-        forward eapply exchange_reg_dedicated as DEDICATED. 
+        forward eapply exchange_reg_dedicated' as DEDICATED. 
         { vauto. }
         { Unshelve. 2: exact (Instr.ifgoto expr (length (flatten (firstn n (binstrs bsti))))). eapply nth_error_In; eauto. }
-        simpl in DEDICATED. destruct expr.
-        - destruct val; simpl; tauto.
-        - simpl. destruct op0; simpl; tauto.
-        - simpl. destruct op1, op2; simpl; tauto. }
+        simpl in DEDICATED. desc. auto. }
       subst sto'. replace_bg_rels bsti' sti'. rewrite UINDEX. simpl.
       cdes MM_SIM. auto.  
   Qed. 

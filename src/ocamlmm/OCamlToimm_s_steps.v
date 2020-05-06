@@ -146,8 +146,92 @@ Definition oseq_step (tid : thread_id) sti1 sti2 :=
 Lemma is_terminal_new st: pc st >= length (instrs st) <-> is_terminal st.
 Proof. Admitted.
 
-Lemma is_terminal_pc_bounded st: is_terminal st <-> pc st = length (instrs st).
-Proof. Admitted. 
+Lemma same_struct_sym {A: Type} (ll: list (list A)): same_struct ll ll.
+Proof.
+  induction ll.
+  { vauto. }
+  econstructor; vauto.
+Qed. 
+
+Lemma igt_compiled_addr cond addr PO PI (IN_COMP: In (Instr.ifgoto cond addr) PI)
+      (COMP: is_thread_compiled PO PI):
+  addr <= length PI.
+Proof.
+  cdes COMP. cdes COMP0.
+  red in COMP1. desc. clear COMP COMP0. subst PI. 
+  replace (length (flatten BPI)) with (length (flatten BPI0)). 
+  2: { ins.
+       rewrite <- firstn_all with (l := BPI0).
+       rewrite <- firstn_all with (l := BPI).
+       replace (length BPI) with (length BPI0).
+       2: { eapply Forall2_length; eauto. }
+       apply SAME_STRUCT_PREF. eapply correction_same_struct; eauto. }
+  assert (exists BPI_corr, Forall2 (block_corrected BPI_corr) BPI0 BPI /\ same_struct BPI_corr BPI0) as CORR_ALT. 
+  { exists BPI0. splits; vauto. apply same_struct_sym. }
+  desc.
+  replace (length (flatten BPI0)) with (length (flatten BPI_corr)). 
+  2: { ins.
+       rewrite <- firstn_all with (l := BPI0).
+       rewrite <- firstn_all with (l := BPI_corr).
+       replace (length BPI_corr) with (length BPI0).
+       2: { symmetry. red in CORR_ALT0. eapply Forall2_length; eauto. }
+       apply SAME_STRUCT_PREF. auto. }
+  clear COMP3 CORR_ALT0. 
+  generalize dependent BPI. generalize dependent BPI0. induction PO.
+  { ins. inversion COMP1. subst. inversion CORR_ALT. subst. vauto. }
+  ins. inversion COMP1. subst. inversion CORR_ALT. subst.
+  simpl in IN_COMP. apply in_app_or in IN_COMP. des.
+  2: { specialize (IHPO l' H3 l'0 IN_COMP H5). auto. }
+  (* Ltac invert_nil := match goal with *)
+  (*                    | H:  *)
+  inversion H1; subst. 
+  { inversion H2. subst. inversion H7. subst. inversion H4. subst.
+    subst ld. simpl in IN_COMP. des; vauto. }
+  { subst. inversion H2. subst. inversion H7. subst. inversion H9. subst.
+    inversion H6. subst. inversion H4. subst.  
+    subst f st. simpl in IN_COMP. des; vauto. }
+  { subst. inversion H2. subst. inversion H7. subst. inversion H9. subst.
+    inversion H6. subst. inversion H4. subst.  
+    subst f ld. simpl in IN_COMP. des; vauto. }
+  { subst. inversion H2. subst. inversion H7. subst. inversion H9. subst.
+    inversion H6. subst. inversion H4. subst.  
+    subst f exc. simpl in IN_COMP. des; vauto. }
+  { subst. inversion H2. subst. inversion H7. subst. inversion H4. subst.
+    subst asn. simpl in IN_COMP. des; vauto. }
+  subst. inversion H2. subst. inversion H7. subst.
+  subst igt. inversion H4; vauto. 
+  simpl in IN_COMP. des; [| done].
+  inversion IN_COMP. subst.
+  subst addr1.
+  rewrite <- firstn_skipn with (l := BPI_corr) (n := n) at 2.
+  rewrite flatten_app, app_length. omega.
+Qed. 
+
+Lemma is_terminal_pc_bounded st tid PO PI (REACH: (step tid)＊ (init PI) st)
+      (COMP: is_thread_compiled PO PI):
+  is_terminal st <-> pc st = length (instrs st).
+Proof.
+  symmetry. eapply iff_trans; [| eapply is_terminal_new].
+  split; [omega| ]. 
+  apply crt_num_steps in REACH. desc. generalize dependent st. induction n.
+  { ins. red in REACH. desc. subst. simpl in *. omega. }
+  ins. red in REACH. desc.
+  do 2 (red in REACH0; desc).
+  assert (forall instr, Some instr = nth_error (instrs z) (pc z) ->
+                   pc st = pc z + 1 -> pc st = length (instrs st)) as NEXT_HELPER. 
+  { ins. assert (pc z < length (instrs st)).
+    { apply nth_error_Some, OPT_VAL. rewrite <- INSTRS. eauto. }
+    omega. }
+  inversion ISTEP0; try (by eapply NEXT_HELPER; eauto).
+  destruct (Const.eq_dec (RegFile.eval_expr (regf z) expr) 0).
+  { eapply NEXT_HELPER; eauto. }
+  forward eapply (@igt_compiled_addr expr shift PO (instrs z)) as BOUND.
+  { subst instr. eapply nth_error_In. eauto. }
+  { replace (instrs z) with PI; auto.
+    replace PI with (instrs (init PI)) by vauto.
+    apply steps_same_instrs. exists tid. apply crt_num_steps. eauto. }
+  rewrite INSTRS in BOUND. omega.
+Qed. 
 
 Definition bst_from_st st BPI b :=
   {|
@@ -723,7 +807,8 @@ Proof.
 Qed. 
 
 Lemma acb_iff_bst st BPI
-      (COMP: exists PO, is_thread_compiled_with PO (instrs st) BPI):
+      (COMP: exists PO, is_thread_compiled_with PO (instrs st) BPI)
+      (REACH: exists tid, (step tid)＊ (init (instrs st)) st):
   at_compilation_block st <-> exists bst, ⟪ST: st = bst2st bst⟫ /\
                                    ⟪BINSTRS: binstrs bst = BPI⟫ /\
                                    ⟪BPC: bpc bst <= length BPI⟫. 
@@ -733,7 +818,9 @@ Proof.
     red in ACB. des.
     2: { exists (bst_from_st st BPI (length BPI)). splits; auto. 
          unfold bst2st. simpl. rewrite firstn_all. rewrite <- COMP0.
-         apply is_terminal_pc_bounded in ACB. rewrite <- ACB.
+         forward eapply (@is_terminal_pc_bounded st tid PO (flatten BPI)) as TERM; vauto.
+         { congruence. }
+         apply TERM in ACB. rewrite <- ACB.
          apply state_record_equality. }
     red in ACB. desc. 
     forward eapply (@on_block_iff_bindex BPI block (pc st)) as [BLOCK_INDEX _]; vauto. 
@@ -746,7 +833,10 @@ Proof.
   intros. desc. red. red in COMP. desc.
   subst. 
   destruct (ge_dec (bpc bst) (length (binstrs bst))) as [TERM | NONTERM].
-  { right. apply is_terminal_pc_bounded. 
+  { right.
+    forward eapply (@is_terminal_pc_bounded (bst2st bst) tid PO (instrs (bst2st bst))) as TERM_EQ; vauto.
+    apply TERM_EQ. 
+    pose proof is_terminal_pc_bounded. 
     simpl.
     rewrite <- firstn_skipn with (n := bpc bst) (l := binstrs bst) at 2.
     rewrite skipn_all2; [| auto]. 
@@ -836,24 +926,30 @@ Proof.
 Qed.
 
 Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
+      (REACH: (step tid)＊ (init (instrs st1)) st1)
       (COMP: exists PO, is_thread_compiled PO (instrs st1)):
   at_compilation_block st2.
 Proof.
   red in OSEQ. desc.
   red in COMP. desc. 
   assert (exists bst1, st1 = bst2st bst1 /\ binstrs bst1 = BPI /\ bpc bst1 <= length BPI) as [bst1 [BST1 [BINSTRS1 BPC1]]].
-  { apply acb_iff_bst; eauto. red. eauto. }
+  { apply acb_iff_bst; vauto. }
   assert (Some block = nth_error (binstrs bst1) (bpc bst1)) as BLOCK. 
   { apply st_bst_prog_blocks; vauto.
     exists PO. red in COMP. desc. auto. }
   forward eapply steps_pc_change as PC2; eauto.
+  assert (instrs st2 = instrs st1) as SAME_INSTRS. 
+  { symmetry. apply steps_same_instrs. exists tid. apply crt_num_steps. eauto. }  
+  assert ((step tid)＊ (init (instrs st2)) st2) as REACH'.
+  { rewrite SAME_INSTRS. eapply rt_trans; eauto. apply crt_num_steps. eauto. }
+  
   assert (forall blc (STEPS: (step tid) ^^ (length blc) st1 st2)
             (BLC: Some blc = nth_error (binstrs bst1) (bpc bst1))
             (PC_PLUS: pc st2 = pc st1 + length blc),
              at_compilation_block st2) as NEXT_BLOCK. 
-  { ins. forward eapply acb_iff_bst as [_ ACB_IF_BST].  
-    { exists PO. rewrite <- (@steps_same_instrs st1 st2); eauto.
-      exists tid. apply crt_num_steps. eauto. }
+  { ins. forward eapply (@acb_iff_bst st2) as [_ ACB_IF_BST].
+    2: { eauto. }
+    { rewrite SAME_INSTRS. eauto. }
     apply ACB_IF_BST. 
     exists (bst_from_st st2 (binstrs bst1) (bpc bst1 + 1)).
     splits; auto.
@@ -919,6 +1015,7 @@ Proof.
       forward eapply acb_iff_bst as [_ ACB_IF_BST]. 
       { rewrite <- INSTRS. exists PO. simpl. red. splits; eauto. 
         vauto. }
+      { eauto.  }
       apply ACB_IF_BST. 
       exists (bst_from_st st2 (binstrs bst1) addr0). splits; auto.
       2: { simpl.
@@ -930,10 +1027,11 @@ Proof.
       replace (length (flatten (firstn addr0 (binstrs bst1)))) with (length (flatten (firstn addr0 BPI0))).
       2: { apply SAME_STRUCT_PREF. eapply correction_same_struct; eauto. } 
       rewrite H5. apply state_record_equality.
-Qed.   
+Qed. 
 
 (* had to define it separately since otherwise Coq doesn't understand what P is *)
 Definition StepProp n := forall st1 st2 tid (STEPS: (step tid) ^^ n st1 st2)
+                           (REACH: (step tid)＊ (init (instrs st1)) st1)
                            bst1 (BST1: st1 = bst2st bst1)
                            bst2 (BST2: st2 = bst2st bst2)
                            (BOUND1: bpc bst1 <= length (binstrs bst1))
@@ -953,6 +1051,10 @@ Proof.
   assert (at_compilation_block st2) as ACB2.
   { forward eapply (@acb_iff_bst st2) as [_ ACB_IF_BST]; eauto.
     { exists PO. red. split; eauto. rewrite SAME_BINSTRS. vauto. }
+    { exists tid. replace (instrs st2) with (instrs st1).
+      2: { subst. simpl. congruence. }
+      eapply transitive_rt; eauto.
+      apply crt_num_steps. eauto. }
     apply ACB_IF_BST. exists bst2. splits; vauto. congruence. }
   assert (bst2st bst1 = bst2st bst2 -> (omm_block_step tid)＊ bst1 bst2) as WHEN_SAME_BST. 
   { intros SAME_BST2ST. 
@@ -988,13 +1090,18 @@ Proof.
       red in OSEQ. desc. rewrite crt_num_steps. eexists. eauto. }
     assert (LEN': n - length block < n).
     { red in ACB1. desc. inversion COMP_BLOCK; subst; simpl in *; omega. }
-    forward eapply (@acb_iff_bst st' (binstrs bst1)) as [BST_IF_ACB _].
+    assert ((step tid)＊ (init (instrs st')) st') as REACH'.
+    {  replace (instrs st') with (instrs (bst2st bst1)).
+      2: { apply steps_same_instrs. exists tid. apply crt_num_steps. eauto. }
+      eapply transitive_rt; eauto.
+      apply crt_num_steps. eauto. }
+    forward eapply (@acb_iff_bst st' (binstrs bst1)) as [BST_IF_ACB _]; eauto. 
     { exists PO. red. split; auto.
       replace (instrs st') with (instrs (bst2st bst1)); auto.
       apply steps_same_instrs; eauto. exists tid. apply crt_num_steps. eauto. }
     specialize (BST_IF_ACB ACB'). destruct BST_IF_ACB as [bst' [BST' [SAME_BINSTRS' BPC']]]. 
     forward eapply IH as IH_; eauto.
-    { rewrite SAME_BINSTRS'. auto. }
+    { red in SAME_BINSTRS'. rewrite SAME_BINSTRS'. auto. }
     { exists PO. congruence. }
     { congruence. }
     apply clos_trans_in_rt. apply t_step_rt. exists bst'. split; auto. 
@@ -1015,7 +1122,8 @@ Lemma steps_imply_ommblocks bfin (BPC_LIM: bpc bfin <= length (binstrs bfin)) ti
 Proof.
   intros fin STEPS. apply crt_num_steps in STEPS as [n STEPS].
   eapply oseq_between_acb; eauto.
-  simpl. omega.
+  2: { simpl. omega. }
+  simpl. apply rt_refl. 
 Qed. 
 
 Lemma ommblocks_imply_steps bfin tid:

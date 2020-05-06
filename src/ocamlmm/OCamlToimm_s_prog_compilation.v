@@ -80,17 +80,6 @@ Section OCaml_IMM_Compilation.
     red in COMP. red. desc. eauto.
   Qed. 
 
-  Definition is_compiled (ProgO: Prog.Prog.t) (ProgI: Prog.Prog.t) :=
-    ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id ProgO <-> IdentMap.In t_id ProgI ⟫ /\
-    ⟪ THREADS_COMPILED: forall thread PO PI (TO: Some PO = IdentMap.find thread ProgO)
-                          (TI: Some PI = IdentMap.find thread ProgI),
-        is_thread_compiled PO PI ⟫.
-
-  Lemma compilation_addresses_restricted PO BPI (COMP: is_thread_block_compiled PO BPI)
-        cond addr0 i (IN: Some (Instr.ifgoto cond addr0) = nth_error PO i):
-    addr0 <= length PO.
-  Proof. Admitted.     
-  
   Lemma Forall2_index {A B: Type} (l1: list A) (l2: list B) P
         (FORALL2: Forall2 P l1 l2)
         x y i (XI: Some x = nth_error l1 i) (YI: Some y = nth_error l2 i):
@@ -121,6 +110,18 @@ Section OCaml_IMM_Compilation.
     apply IHl1. auto.
   Qed. 
       
+  Definition is_compiled (ProgO: Prog.Prog.t) (ProgI: Prog.Prog.t) :=
+    ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id ProgO <-> IdentMap.In t_id ProgI ⟫ /\
+    ⟪ THREADS_COMPILED: forall thread PO PI (TO: Some PO = IdentMap.find thread ProgO)
+                          (TI: Some PI = IdentMap.find thread ProgI),
+        is_thread_compiled PO PI ⟫.
+
+  Lemma compilation_addresses_restricted PO BPI (COMP: is_thread_block_compiled PO BPI)
+        cond addr0 i (IN: Some (Instr.ifgoto cond addr0) = nth_error PO i):
+    addr0 <= length PO.
+  Proof.
+  Admitted.     
+  
   Lemma every_instruction_compiled PO BPI (COMP: is_thread_block_compiled PO BPI)
         i instr block (INSTR: Some instr = nth_error PO i)
         (BLOCK: Some block = nth_error BPI i):
@@ -213,15 +214,6 @@ Section OCaml_IMM_Compilation.
     | Instr.fence _ => []
     | Instr.ifgoto expr _ => expr_regs expr
     end.
-
-  Lemma exchange_reg_dedicated PI (COMP: exists PO, is_thread_compiled PO PI)
-        instr (INSTR: In instr PI):
-    ~ In exchange_reg (instr_regs instr) <->
-    ~ match instr with
-      | Instr.update (Instr.exchange expr) _ _ _ reg lexpr => reg = exchange_reg /\ ~ In exchange_reg (lexpr_regs lexpr) /\ ~ In exchange_reg (expr_regs expr)
-      | _ => False
-      end. 
-  Proof. Admitted.
 
   Lemma exchange_reg_dedicated' PI (COMP: exists PO, is_thread_compiled PO PI)
         instr (INSTR: In instr PI):
@@ -468,12 +460,12 @@ Section OCaml_IMM_Correspondence.
       bdepf := DepsFile.init;
       bectrl := ∅ |}.
 
-    (* Definition same_binstrs *)
-  Lemma SAME_BINSTRS bst bst' tid (BLOCK_STEP: block_step tid bst bst'):
-    binstrs bst = binstrs bst'.
-  Proof.
-    (* not true in general because of non-injective flatten *)
-  Admitted.  
+  (*   (* Definition same_binstrs *) *)
+  (* Lemma SAME_BINSTRS bst bst' tid (BLOCK_STEP: block_step tid bst bst'): *)
+  (*   binstrs bst = binstrs bst'. *)
+  (* Proof. *)
+  (*   (* not true in general because of non-injective flatten *) *)
+  (* Admitted.   *)
 
 
   (* Definition same_behavior_local (GO GI: execution) := *)

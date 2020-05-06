@@ -284,20 +284,26 @@ Section BUILD_OMM_GRAPH.
   Qed. 
     
   Lemma RWO_RESTR thread GIi (TRE: thread_restricted_execution GI thread GIi):
-    E GIi ∩₁RWO GIi ≡₁ E GIi ∩₁ ((Tid_ thread) ∩₁ (RWO GI)). 
+    E GIi ∩₁ RWO GIi ≡₁ E GIi ∩₁ ((Tid_ thread) ∩₁ (RWO GI)). 
   Proof.
-  Admitted. 
-    (* unfold RWO. *)
-    (* arewrite (Tid_ thread ∩₁ (RW GI \₁ dom_rel (rmw GI)) ≡₁ ((Tid_ thread ∩₁ (RW GI)) \₁ (Tid_ thread ∩₁ dom_rel (rmw GI)))). *)
-    (* { split; try basic_solver. *)
-    (*   red. ins. red in H. desc. red in H0. desc.  *)
-    (*   red. unfold set_inter. splits; vauto. tauto. } *)
-    (* arewrite (Tid_ thread ∩₁ dom_rel (rmw GI) ≡₁ dom_rel (rmw GIi)). *)
-    (* { destruct TRE. rewrite tr_rmw. split; try basic_solver. *)
-    (*   red. ins. red in H. desc. red in H0. desc.  *)
-    (*   red. exists y. apply seq_eqv_lr. splits; auto. *)
-    (*   apply (wf_rmwt WFI) in H0. congruence. } *)
-    (* repeat rewrite set_inter_minus_r. apply set_equiv_minus; [| basic_solver]. *)
+    unfold RWO.
+    arewrite (Tid_ thread ∩₁ (RW GI \₁ dom_rel (rmw GI)) ≡₁ ((Tid_ thread ∩₁ (RW GI)) \₁ (Tid_ thread ∩₁ dom_rel (rmw GI)))).
+    { split; try basic_solver.
+      red. ins. red in H. desc. red in H0. desc.
+      red. unfold set_inter. splits; vauto. tauto. }
+    arewrite (Tid_ thread ∩₁ dom_rel (rmw GI) ≡₁ dom_rel (rmw GIi)).
+    { destruct TRE. rewrite tr_rmw. split; try basic_solver.
+      red. ins. red in H. desc. red in H0. desc.
+      red. exists y. apply seq_eqv_lr. splits; auto.
+      apply (wf_rmwt WFI) in H0. congruence. }
+    repeat rewrite set_inter_minus_r. apply set_equiv_minus; [| basic_solver].
+    rewrite <- set_interA.
+    arewrite (E GIi ∩₁ Tid_ thread ≡₁ E GIi).
+    { destruct TRE. rewrite tr_acts_set. basic_solver. }
+    apply inter_subset_helper. ins.
+    unfold is_r, is_w, set_union. destruct TRE.
+    rewrite tr_lab; auto.
+  Qed. 
     
   Lemma restr_graph G tid: exists Gi, thread_restricted_execution G tid Gi.
   Proof.
