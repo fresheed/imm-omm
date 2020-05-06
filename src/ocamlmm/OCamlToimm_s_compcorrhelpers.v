@@ -912,7 +912,7 @@ Section CompCorrHelpers.
       2: { apply eq_trans with (y := instrs (init PI)); auto.
            symmetry. apply steps_same_instrs. eauto. }
       unfold bst2st. simpl. rewrite firstn_all.
-      red in TERM. apply is_terminal_pc_bounded in TERM. 
+      red in TERM. rewrite (@is_terminal_pc_bounded st_fin tid PO (flatten BPI)) in TERM; [| rewrite <- COMP0; auto | vauto]. 
       rewrite <- COMP0 in *.
       rewrite <- TERM. apply state_record_equality. }
     forward eapply (@steps_imply_ommblocks bst_fin) as BLOCK_STEPS; eauto.

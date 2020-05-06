@@ -57,7 +57,8 @@ Section BUILD_OMM_GRAPH.
       red in COMP. desc.
       rewrite <- COMP0.
       rewrite SAME_INSTRS.
-      apply is_terminal_pc_bounded in TERMINAL. 
+      rewrite (@is_terminal_pc_bounded sti_fin tid PO PI) in TERMINAL; vauto.
+      2: { apply crt_num_steps. eauto. }
       rewrite <- TERMINAL; auto.
       (* TODO: why so complicated? *)      
       apply state_record_equality. } 
@@ -118,13 +119,20 @@ Section BUILD_OMM_GRAPH.
           replace PO with (instrs (init PO)) by vauto.
           symmetry. apply omm_steps_same_instrs. exists tid. apply <- crt_num_steps. eauto. }
         assert (SAME_BINSTRS': BPI = binstrs bsti_i').
-        { replace BPI with (binstrs bsti_fin); auto. symmetry. 
-          apply (@inclusion_t_ind _ (block_step tid) (fun x y => binstrs x = binstrs y)).
-          { red. ins. eapply SAME_BINSTRS. eauto. }
-          { red. ins. congruence. }
-          apply t_step_rt. exists bsti_i. split.
-          { apply bs_extract. auto. }
-          apply OB_B. apply crt_num_steps. eexists. eauto. }
+        { assert (forall bst BPI_ n, (omm_block_step tid) ^^ n (binit BPI_) bst -> BPI_ = binstrs bst).
+          { ins. generalize dependent bst. induction n. 
+            { ins. red in H0. desc. unfold binit in H0. subst bst. auto. }
+            ins. red in H0. desc. specialize (IHn _ H0). cdes H1. congruence. }
+          eapply H0; eauto. 
+          (* cdes STEPS_FROM'. rewrite BINSTRS_SAME.   *)
+
+          (* replace BPI with (binstrs bsti_fin); auto. symmetry.  *)
+          (* apply (@inclusion_t_ind _ (block_step tid) (fun x y => binstrs x = binstrs y)). *)
+          (* { red. ins. eapply SAME_BINSTRS. eauto. } *)
+          (* { red. ins. congruence. } *)
+          (* apply t_step_rt. exists bsti_i. split. *)
+          (* { apply bs_extract. auto. } *)
+          (* apply OB_B. apply crt_num_steps. eexists. eauto. *) }
 
         forward eapply (pair_step MM_SIM' STEPS_FROM') as [sto [OSTEP MM_SIM]]; eauto. 
         { apply OB_B. apply crt_num_steps. exists i.
