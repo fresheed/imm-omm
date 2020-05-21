@@ -173,11 +173,6 @@ Section OCaml_IMM_Compilation.
       symmetry. eapply IHn. eauto.
   Qed.
 
-  (* Lemma ifgoto_corr PO PI corr (CORR: is_corrector corr PO PI): *)
-  (*     forall cond adr (IN_PROG: In (Instr.ifgoto cond adr) PI), *)
-  (*     In adr corr. *)
-  (* Proof. Admitted. *)
-
   Definition value_regs value :=
     match value with
     | Value.const _ => []
@@ -433,17 +428,6 @@ Section OCaml_IMM_Correspondence.
       bdepf := DepsFile.init;
       bectrl := ∅ |}.
 
-  (*   (* Definition same_binstrs *) *)
-  (* Lemma SAME_BINSTRS bst bst' tid (BLOCK_STEP: block_step tid bst bst'): *)
-  (*   binstrs bst = binstrs bst'. *)
-  (* Proof. *)
-  (*   (* not true in general because of non-injective flatten *) *)
-  (* Admitted.   *)
-
-
-  (* Definition same_behavior_local (GO GI: execution) := *)
-  (*   ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\ *)
-  (*   ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫.  *)    
   Definition same_behavior_local GO GI :=
     ⟪ RESTR_EVENTS: E GO ≡₁ E GI ∩₁ RWO GI ⟫ /\
     ⟪ SAME_LAB: forall x (EGOx: E GO x), lab GO x = lab GI x ⟫ /\
@@ -459,24 +443,6 @@ Section OCaml_IMM_Correspondence.
     ⟪RESTR_RF: GO.(rf) ≡ restr_rel (RWO GI) GI.(rf) ⟫ /\
     ⟪SAME_INIT: E GO ∩₁ is_init ≡₁ E GI ∩₁ is_init ⟫ /\
     ⟪SAME_INIT_LAB: forall l, lab GO (InitEvent l) = lab GI (InitEvent l) ⟫. 
-
-  (* Definition mm_similar_states (sto: state) (bsti: block_state) := *)
-  (*   is_thread_block_compiled sto.(instrs) bsti.(binstrs)  /\ *)
-  (*   sto.(pc) = bsti.(bpc) /\ *)
-  (*   same_behavior_local sto.(G) bsti.(bG) /\ *)
-  (*   sto.(regf) = bsti.(bregf) /\ *)
-  (*   sto.(depf) = bsti.(bdepf) /\ *)
-  (*   sto.(ectrl) = bsti.(bectrl) /\ *)
-  (*   sto.(eindex) = bsti.(beindex). *)
-
-  (* Definition mm_similar_states (sto: state) (bsti: block_state) := *)
-  (*   is_thread_block_compiled sto.(instrs) bsti.(binstrs)  /\ *)
-  (*   sto.(pc) = bsti.(bpc) /\ *)
-  (*   same_behavior_local sto.(G) bsti.(bG) /\ *)
-  (*   (forall reg (NOT_EXC: reg <> exchange_reg), sto.(regf) reg = bsti.(bregf) reg) /\ *)
-  (*   (forall reg (NOT_EXC: reg <> exchange_reg), sto.(depf) reg = bsti.(bdepf) reg) /\ *)
-  (*   sto.(ectrl) = bsti.(bectrl) /\ *)
-  (*   sto.(eindex) = bsti.(beindex). *)
 
   Definition mm_similar_states sto bsti :=
     is_thread_block_compiled (instrs sto) (binstrs bsti) /\
@@ -574,14 +540,6 @@ Section CorrectedDefinitions.
 
   Notation "'E' G" := G.(acts_set) (at level 1).
 
-  (* Definition program_execution_corrected (prog : Prog.t) G := *)
-  (*   (forall e : actid, E G e -> is_init e \/ IdentMap.In (tid e) prog) /\ *)
-  (*   (forall (thread : IdentMap.key) (PIi : list Instr.t) *)
-  (*      (THREAD: Some PIi = IdentMap.find thread prog) *)
-  (*      Gi (THREAD_EXEC: thread_restricted_execution G thread Gi), *)
-  (*       thread_execution thread PIi Gi). *)
-
-
   Definition graphs_sim_weak (G1 G2: execution) :=
     E G1 ≡₁ E G2 /\
     (forall x, E G1 x -> lab G1 x = lab G2 x) /\
@@ -590,33 +548,6 @@ Section CorrectedDefinitions.
     addr G1 ≡ addr G2 /\
     ctrl G1 ≡ ctrl G2 /\
     rmw_dep G1 ≡ rmw_dep G2.    
-
-  (* Definition Othread_execution_sim tid instrs G_ := *)
-  (*   exists s, *)
-  (*     ⟪ STEPS : (Ostep tid)＊ (init instrs) s ⟫ /\ *)
-  (*     ⟪ TERMINAL : is_terminal s ⟫ /\ *)
-  (*     ⟪ PEQ : graphs_sim_weak s.(G) G_ ⟫. *)
-
-  (* Definition Oprogram_execution_corrected prog (OPROG: OCamlProgram prog) G := *)
-  (*   (forall e (IN: G.(acts_set) e), is_init e \/ IdentMap.In (tid e) prog) /\ *)
-  (*   (forall (thread : IdentMap.key) (POi : list Instr.t) *)
-  (*      (THREAD: Some POi = IdentMap.find thread prog) *)
-  (*      Gi (THREAD_EXEC: thread_restricted_execution G thread Gi), *)
-  (*       (* Othread_execution thread POi Gi). *) *)
-  (*       Othread_execution_sim thread POi Gi). *)
-  
-  (* Lemma program_execution_equiv (prog : Prog.t) G: *)
-  (*   program_execution_corrected prog G <-> program_execution prog G. *)
-  (* Proof. Admitted. *)
-
-  (* Lemma Oprogram_execution_equiv prog G (OPROG: OCamlProgram prog): *)
-  (*   Oprogram_execution_corrected OPROG G <-> Oprogram_execution OPROG G. *)
-  (* Proof. Admitted. *)
-
-  
-  (* Lemma sbl_ext_TMP GOi GIi (SBL: same_behavior_local GOi GIi): *)
-  (*   same_behavior_local_ext GOi GIi. *)
-  (* Proof. Admitted. *)
 
   
 End CorrectedDefinitions.   

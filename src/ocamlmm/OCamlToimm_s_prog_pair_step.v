@@ -13,7 +13,8 @@ Require Import OCaml.
 Require Import OCamlToimm_s.
 Require Import OCamlToimm_s_prog. 
 Require Import OCamlToimm_s_prog_compilation. 
-Require Import OCamlToimm_s_prog_bounded_properties. 
+Require Import OCamlToimm_s_prog_bounded_properties.
+Require Import ListHelpersTemp.
 Require Import Utils.
 Require Import ClosuresProperties. 
 Require Import Prog.
@@ -332,24 +333,12 @@ Section PairStep.
     eauto.
   Qed. 
 
-  Lemma skipn_app n : forall {A: Type} (l1 l2: list A),
-      skipn n (l1 ++ l2) = (skipn n l1) ++ (skipn (n - length l1) l2).
-  Proof. Admitted.
-  
-  Lemma skipn_firstn_comm : forall {A: Type} m n (l: list A),
-      skipn m (firstn n l) = firstn (n - m) (skipn m l).
-  Proof. Admitted.
-
   Lemma skipn_firstn_nil {A: Type} (l: list A) i:
     skipn i (firstn i l) = [].
   Proof.
     generalize dependent l. induction i; vauto. ins. destruct l; auto.
   Qed. 
     
-  Lemma firstn_skipn_comm : forall {A: Type} m n (l: list A),
-      firstn m (skipn n l) = skipn n (firstn (n + m) l).
-  Proof. Admitted. 
-
   Lemma ll_index_shift {A: Type} (ll: list (list A)) i j
          block (ITH: Some block = nth_error ll i) (NE: Forall (fun l => l <> []) ll)
          (J_BOUND: j <= length ll)
@@ -403,46 +392,6 @@ Section PairStep.
      (* ??? Proof General successfully goes there but Qed fails *)
      (* Qed.  *)     
    Admitted.
-
-   (* Lemma compilation_injective PO PO' BPI (COMP: is_thread_block_compiled PO BPI) *)
-   (*       (COMP': is_thread_block_compiled PO' BPI): PO = PO'. *)
-   (* Proof. *)
-   (*   generalize dependent PO. generalize dependent PO'. *)
-   (*   induction BPI as [| block BPI_].  *)
-   (*   { ins. *)
-   (*     apply compilation_same_length in COMP.  *)
-   (*     apply compilation_same_length in COMP'. *)
-   (*     simpl in *. destruct PO; destruct PO'; vauto. } *)
-   (*   ins. *)
-   (*   (* destruct PO as [| oinstr PO_]. *) *)
-   (*   (* { apply compilation_same_length in COMP. vauto. } *) *)
-   (*   (* destruct PO' as [| oinstr' PO'_]. *) *)
-   (*   (* { apply compilation_same_length in COMP'. vauto. } *) *)
-     
-   (*   inversion COMP as [BPI0 [CMP CORR]]. inversion COMP' as [BPI0' [CMP' CORR']]. desc. *)
-   (*   inversion CMP as [| oinstr block0 PO_ BPI0_]; subst.  *)
-   (*   { apply compilation_same_length in COMP. vauto. } *)
-   (*   inversion H; subst; vauto.  *)
-     
-   (*   inversion CORR as [| block0 BPI0_]. subst. *)
-   (*   inversion CORR' as [| block0' BPI0_']. subst. *)
-   (*   assert (block0 = block0'). *)
-   (*   { red in H.  *)
-
-   (*   inversion CORR'. subst. *)
-     
-   (*   f_equal. *)
-   (*   { inversion COMP as [BPI0 [COMP0 CORR]]. *)
-   (*     inversion COMP0. subst.  *)
-   (*     inversion COMP' as [BPI0' [COMP0' CORR']].  *)
-   (*     inversion COMP0'. subst.  *)
-     
-     
-   (*   inversion CMP. subst. inversion CMP'. subst. *)
-   (*   f_equal. *)
-   (*   {  *)
-
-   (*     apply IHBPI.  *)
      
    Lemma correction_same_struct BPI0 BPI ref
          (CORR: Forall2 (block_corrected ref) BPI0 BPI):

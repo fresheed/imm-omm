@@ -43,41 +43,12 @@ Section OCamlMM_TO_IMM_S_PROG.
   Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
   Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1). 
 
-  (* Lemma same_beh_implies_similar_rels GO GI (SB: same_behavior GO GI): *)
-  (*   ⟪ SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘⟫ /\ *)
-  (*   (* ⟪ SC': Sc GO ≡₁ Sc GI ⟫ /\ *) *)
-  (*   ⟪ SC': Sc GO ≡₁ RWO GI ∩₁ Sc GI ⟫ /\ *)
-  (*   ⟪ FR': fr GO ≡ ⦗set_compl (dom_rel (rmw GI))⦘ ⨾ fr GI ⟫. *)
-  (* Proof. *)
-  (*   red in SB. des. red in SAME_LOCAL. desc. *)
-  (*   splits. *)
-  (*   { unfold Execution.sb. *)
-  (*     rewrite !seqA. do 2 seq_rewrite <- id_inter. *)
-  (*     rewrite set_interC.       *)
-  (*     rewrite <- RESTR_EVENTS. auto. } *)
-  (*   { admit. } *)
-  (*   admit.  *)
-  (* (*   red in SB. desc. red in SAME_LOCAL. desc.  *) *)
-  (* (*   assert (SB': sb GO ≡ ⦗RW GI \₁ dom_rel (rmw GI)⦘ ⨾ sb GI ⨾ ⦗RW GI \₁ dom_rel (rmw GI)⦘). *) *)
-  (* (*   { unfold Execution.sb.         *) *)
-  (* (*     rewrite !seqA. do 2 seq_rewrite <- id_inter. *) *)
-  (* (*     rewrite set_interC.  *) *)
-  (* (*     rewrite RESTR_EVENTS.  *) *)
-  (* (*     basic_solver. } *) *)
-  (* (*   splits; auto.  *) *)
-  (* (*   { rewrite SAME_LAB. auto. } *) *)
-  (* (*   { unfold fr. rewrite SAME_CO. rewrite <- seqA. apply seq_more; [| basic_solver]. *) *)
-  (* (*     rewrite EXT_RF.  basic_solver. } *) *)
-  (*   (* Qed.  *) *)
-  (* Admitted.  *)
 
   Lemma same_beh_implies_similar_intrarels GO GI (SB: same_behavior GO GI):
     ⟪DATA_SIM: data GO ≡ restr_rel (RWO GI) (data GI) ⟫ /\
     ⟪CTRL_SIM: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI) ⟫ /\ 
     ⟪ADDR_SIM: addr GO ≡ restr_rel (RWO GI) (addr GI) ⟫ /\
     ⟪SB_SIM: sb GO ≡ restr_rel (RWO GI) (sb GI) ⟫.
-    (* ⟪NO_RMW: rmw GO ≡ ∅₂ ⟫ /\ *)
-    (* ⟪NO_RMWDEP: rmw_dep GO ≡ ∅₂ ⟫. *)
   Proof.
     cdes SB. cdes SAME_LOCAL. splits; auto. 
     unfold sb. rewrite RESTR_EVENTS. basic_solver. 
@@ -1151,62 +1122,6 @@ Section CompilationCorrectness.
     all: eapply same_rel_Transitive; eauto.
   Qed. 
         
-  
-  (* Lemma sbl_helper tid POi PIi GO GOi GIi SGO *)
-  (*       (THREAD: Some POi = IdentMap.find tid ProgO) *)
-  (*       (THREADI : Some PIi = IdentMap.find tid ProgI) *)
-  (*       (COMP: is_thread_compiled POi PIi) *)
-  (*       (RESTR: thread_restricted_execution GO tid GOi) *)
-  (*       (RESTR0: thread_restricted_execution GI tid GIi) *)
-  (*       (EXECIi: thread_execution tid PIi GIi) *)
-  (*       (H: Othread_execution tid POi SGO) *)
-  (*       (H0: same_behavior_local SGO GIi): *)
-  (*   same_behavior_local GOi GIi. *)
-  (* Proof. *)
-  (*     red. splits. *)
-  (*     { pose proof H0 as SBL. destruct RESTR. *)
-  (*       red in H0. desc. rewrite <- RESTR_EVENTS.  *)
-  (*       rewrite tr_acts_set. subst GO. unfold acts_set. simpl. *)
-  (*       arewrite ((fun x : actid => In x (GO_actsset ++ GO_initset)) ∩₁ Tid_ tid ≡₁ ((fun x : actid => In x (GO_actsset))  ∩₁ Tid_ tid)) by admit. *)
-  (*       arewrite ((fun x : actid => In x GO_actsset) ≡₁ all_acts). *)
-  (*       { apply set_equiv_exp_iff. ins. symmetry. vauto. } *)
-  (*       unfold all_acts.  *)
-  (*       rewrite <- set_bunion_inter_compat_r. *)
-  (*       unfold set_inter. *)
-  (*       arewrite ((⋃₁x ∈ hlpr_restr, *)
-  (*   fun x0 : actid => *)
-  (*   (exists GOi0 : execution, hlpr_GO GOi0 x /\ E GOi0 x0) /\ *)
-  (*   Events.tid x0 = tid) ≡₁ (⋃₁x ∈ hlpr_restr, *)
-  (*   fun x0 : actid => *)
-  (*   (exists GOi0 : execution, hlpr_GO GOi0 x /\ E GOi0 x0 /\ *)
-  (*                        Events.tid x0 = tid))) by basic_solver 100.  *)
-  (*       apply set_equiv_exp_iff. ins. red. split. *)
-  (*       2: { ins. red. exists ({| htid := tid; hPO := POi; hPI := PIi; hSGI := GIi |}). *)
-  (*            splits; vauto. *)
-  (*            exists SGO. splits; vauto. *)
-  (*            admit. } *)
-  (*       { ins. cut (E SGO x); [ins; vauto| ]. *)
-  (*         red in H0. desc. subst. *)
-  (*         destruct y. red in H0. red in H1. desc. simpl in *. *)
-  (*         destruct x. *)
-  (*         { simpl in *. exfalso. *)
-  (*           apply programs_without_tid_init. apply find_iff_in. vauto. } *)
-  (*         simpl in *. *)
-  (*         assert (htid0 = thread). *)
-  (*         { red in H3. desc. rewrite (set_equiv_exp RESTR_EVENTS0) in H2. *)
-  (*           red in H2. desc. *)
-  (*           destruct H5. rewrite (set_equiv_exp tr_acts_set0) in H2. *)
-  (*           red in H2. desc. vauto. } *)
-  (*         subst htid0. assert (hPI0 = PIi /\ hPO0 = POi) by (split; congruence). *)
-  (*         desc. subst hPI0 hPO0. clear H4 H0. *)
-  (*         cut (graphs_sim_weak SGO GOi0). *)
-  (*         { ins. red in H0. desc. apply H0. auto. } *)
-  (*         cut (graphs_sim_weak GIi hSGI0). *)
-  (*         { ins. eapply sbl_sim_rect; vauto. *)
-  (*           eapply wf_tre_intra_E; vauto. } *)
-  (*         eapply tre_sim_weak; vauto. } } *)
-  
-
   Lemma into_restr G e (Ee: E G e):
     is_init e \/
     (exists tid Gi ind,
@@ -1228,14 +1143,6 @@ Section CompilationCorrectness.
     destruct TRE. apply (set_equiv_exp tr_acts_set) in Gie.
     red in Gie. desc. auto.
   Qed.
-
-  (* Lemma sbl_thread_local GO: *)
-  (*   (forall tid Pi (THREAD: Some Pi = IdentMap.find tid ProgI) *)
-  (*      Gi (THREAD_Gi: thread_restricted_execution GI tid Gi) *)
-  (*      Go (THREAD_Go: thread_restricted_execution GO tid Go), *)
-  (*       same_behavior_local Go Gi) -> same_behavior_local GO GI.  *)
-  (* Proof. *)
-  (*   intros LOCAL. red.  *)
     
   Lemma GO_exists: exists GO,
       Oprogram_execution OCamlProgO GO /\
