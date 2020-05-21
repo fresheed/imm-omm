@@ -433,11 +433,77 @@ Section CompilationCorrectness.
     red. ins. pose proof (ST _ _ H) as SAME. red in SAME. 
     red. exists (tid x). split; auto. red. splits; auto.
   Qed.
+
+  Lemma sim_graphs_omm G1 G2 (SIM: graphs_sim_weak G1 G2)
+        (RMW_E2: rmw G2 ≡ restr_rel (E G2) (rmw G2))
+        (OMM1: omm_premises_hold G1):
+    omm_premises_hold G2.
+  Proof.
+    cdes OMM1. cdes SIM.
+    assert (forall {A: Type} (S1 S2 S1' S2': relation A)
+              (EQ1: S1 ≡ S1') (EQ2: S2 ≡ S2') (EQ': S1' ≡ S2'),
+               S1 ≡ S2) as EQV_HELPER.
+    { ins. by rewrite EQ1, EQ2. }
+    assert (forall {A: Type} (S1 S2 S1' S2': A -> Prop)
+              (EQ1: S1 ≡₁ S1') (EQ2: S2 ≡₁ S2') (EQ': S1' ≡₁ S2'),
+               S1 ≡₁ S2) as SET_EQV_HELPER.
+    { ins. by rewrite EQ1, EQ2. }
+    assert (forall {A: Type} (S1 S2 S1' S2': A -> Prop)
+              (EQ1: S1 ≡₁ S1') (EQ2: S2 ≡₁ S2') (EQ': S1' ⊆₁ S2'),
+               S1 ⊆₁ S2) as SET_INCL_HELPER.
+    { ins. by rewrite EQ1, EQ2. }
+    assert (sb G1 ≡ sb G2) as SB_EQ.
+    { unfold sb. cdes SIM. rewrite SIM0. auto. }
+    assert (forall S r G, ⦗S⦘ ⨾ immediate (sb G) ⨾ r ≡ ⦗E G ∩₁ S⦘ ⨾ immediate (sb G) ⨾ r) as IMM_E_HELPER.
+    { ins. split; [| basic_solver].
+      rewrite <- !seqA. apply seq_mori; [| basic_solver].
+      rewrite set_interC, id_inter, seqA. apply seq_mori; [basic_solver| ].
+      unfold sb. basic_solver 10. }
+    Ltac by_same_lab SIM0 SIM1 :=
+      rewrite <- SIM0; apply inter_subset_helper; ins;
+      unfold is_orlx_w, is_only_rlx, is_w, is_r, is_sc, is_f_acqrel, is_f_acq, is_f, is_acqrel, is_acq, Events.mod, set_inter;
+      by rewrite SIM1.
+    red. splits.
+    { eapply (SET_EQV_HELPER _ _ _ _ _ _ _ WSCFACQRMW).
+      Unshelve.
+      { rewrite !set_interA. by_same_lab SIM0 SIM1. }
+      apply codom_rel_more.
+      rewrite IMM_E_HELPER with (G := G1). rewrite IMM_E_HELPER.
+      rewrite <- SB_EQ, <- SIM2.
+      apply seq_more; [| basic_solver]. apply eqv_rel_more.
+      by_same_lab SIM0 SIM1. }
+    { eapply (EQV_HELPER _ _ _ _ _ _ _ RMWSC).
+      Unshelve.
+      { by symmetry. }
+      rewrite SIM2. rewrite RMW_E2.
+      rewrite <- !restr_relE.
+      rewrite !restr_restr. apply restr_rel_more; [| basic_solver].
+      by_same_lab SIM0 SIM1. }
+    { eapply (SET_INCL_HELPER _ _ _ _ _ _ _ WRLXF).
+      Unshelve. 
+      { by_same_lab SIM0 SIM1. }
+      apply codom_rel_more.
+      rewrite <- (seq_id_r (immediate (sb G1))), <- (seq_id_r (immediate (sb G2))). 
+      rewrite IMM_E_HELPER with (G := G1). rewrite IMM_E_HELPER.
+      rewrite <- SB_EQ. 
+      apply seq_more; [| basic_solver]. apply eqv_rel_more.
+      by_same_lab SIM0 SIM1. }
+    { eapply (SET_INCL_HELPER _ _ _ _ _ _ _ RSCF).
+      Unshelve. 
+      { rewrite !set_interA. by_same_lab SIM0 SIM1. }
+      apply codom_rel_more.
+      rewrite <- (seq_id_r (immediate (sb G1))), <- (seq_id_r (immediate (sb G2))). 
+      rewrite IMM_E_HELPER with (G := G1). rewrite IMM_E_HELPER.
+      rewrite <- SB_EQ. 
+      apply seq_more; [| basic_solver]. apply eqv_rel_more.
+      by_same_lab SIM0 SIM1. }
+  Qed.
   
   Lemma omm_premises_thread_local:
-      (forall tid Pi (THREAD: Some Pi = IdentMap.find tid ProgI)
-       Gi (THREAD_Gi: thread_restricted_execution GI tid Gi),
-        omm_premises_hold Gi) -> omm_premises_hold GI.
+    (forall tid Pi (THREAD: Some Pi = IdentMap.find tid ProgI),
+        exists Gi, thread_restricted_execution GI tid Gi /\
+              omm_premises_hold Gi)
+    -> omm_premises_hold GI.
   Proof.
     intros THREADS_OMM. red in ExecI. destruct ExecI as [E_STRUCT RESTRS].
     red. 
@@ -474,7 +540,20 @@ Section CompilationCorrectness.
     { ins. unfold sb. basic_solver. }
     assert (forall G, immediate (sb G) ≡  immediate (sb G) ⨾ ⦗E G⦘) as SB_E. 
     { ins. unfold sb. basic_solver. }
-      
+    assert (forall GIi thread PIi (TREi: thread_restricted_execution GI thread GIi)
+              (THREADI: Some PIi = IdentMap.find thread ProgI),
+               omm_premises_hold GIi) as OMM_GIi.
+    { ins. specialize (THREADS_OMM _ _ THREADI). desc.
+      pose proof (tre_sim_weak THREADS_OMM TREi).
+      assert (rmw GIi ≡ restr_rel (E GIi) (rmw GIi)).
+      { destruct TREi. rewrite tr_rmw.
+        rewrite <- restr_relE. rewrite restr_restr.
+        rewrite tr_acts_set. rewrite set_interC, set_interA, set_interK.
+        rewrite <- restr_restr. apply restr_rel_more; [basic_solver| ].
+        rewrite restr_relE. apply wf_rmwE; eauto. } 
+        
+      eapply sim_graphs_omm; eauto. } 
+
     splits.
     { rewrite (seq_eqv_lr_r (wf_rmwE WFI)). repeat rewrite <- seqA with (r3 := ⦗E GI⦘).
       rewrite codom_eqv1.
@@ -484,13 +563,13 @@ Section CompilationCorrectness.
       intros thread THREAD. des.
       { assert (exists PI, Some PI = IdentMap.find thread ProgI) as [PI THREADI].
         { apply find_iff_in. auto. }
-        specialize (RESTRS _ _ THREADI). destruct RESTRS as [GIi [TEi TREi]]. 
-        specialize (THREADS_OMM _ _ THREADI _ TREi). 
+        specialize (RESTRS _ _ THREADI). destruct RESTRS as [GIi [TEi TREi]].
+        specialize (OMM_GIi _ _ _ TREi THREADI). 
         destruct TREi.
         rewrite CODOM_MOVE_HELPER.
         rewrite set_interC with (s := Tid_ thread). rewrite <- tr_acts_set.
         rewrite set_interA. apply INTER_HELPER. rewrite <- set_interA.
-        red in THREADS_OMM. desc. generalize WSCFACQRMW. apply same_relation_goal.
+        red in OMM_GIi. desc. generalize WSCFACQRMW. apply same_relation_goal.
         { rewrite !set_interA. apply inter_subset_helper. ins.
           unfold set_inter, is_w, is_sc, Events.mod.
           rewrite tr_lab; vauto. }
@@ -545,7 +624,9 @@ Section CompilationCorrectness.
            destruct (E_STRUCT _ H0); destruct x; vauto. }
       apply find_iff_in in THREAD. destruct THREAD as [PI THREADI].
       specialize_full RESTRS; eauto. destruct RESTRS as [GIi [TEi TREi]].      
-      specialize_full THREADS_OMM; eauto. red in THREADS_OMM. desc.
+      specialize_full THREADS_OMM; eauto.
+      specialize (OMM_GIi _ _ _ TREi THREADI).
+      red in OMM_GIi. desc.
       rewrite <- restr_relE, restr_restr.
       arewrite (E GI ∩₁ Tid_ thread ∩₁ Sc GI ≡₁ E GI ∩₁ Tid_ thread ∩₁ Sc GIi).
       { destruct TREi. rewrite <- tr_acts_set.
@@ -564,13 +645,14 @@ Section CompilationCorrectness.
       { assert (exists PI, Some PI = IdentMap.find thread ProgI) as [PI THREADI].
         { apply find_iff_in. auto. }
         specialize (RESTRS _ _ THREADI). destruct RESTRS as [GIi [TEi TREi]]. 
-        specialize (THREADS_OMM _ _ THREADI _ TREi). 
+        specialize (OMM_GIi _ _ _ TREi THREADI). 
+        (* specialize (THREADS_OMM _ _ THREADI _ TREi).  *)
         destruct TREi.
         rewrite CODOM_MOVE_HELPER.
         rewrite set_interC with (s := Tid_ thread). rewrite <- tr_acts_set.
         rewrite <- set_interK with (s := E GIi) at 1. 
         rewrite set_interA. apply set_subset_inter; [basic_solver| ].  
-        red in THREADS_OMM. desc. generalize WRLXF. apply inclusion_goal.
+        red in OMM_GIi. desc. generalize WRLXF. apply inclusion_goal.
         { apply inter_subset_helper. ins.
           unfold is_orlx_w, is_w, is_only_rlx, Events.mod.
           rewrite tr_lab; vauto. }
@@ -606,13 +688,14 @@ Section CompilationCorrectness.
       { assert (exists PI, Some PI = IdentMap.find thread ProgI) as [PI THREADI].
         { apply find_iff_in. auto. }
         specialize (RESTRS _ _ THREADI). destruct RESTRS as [GIi [TEi TREi]]. 
-        specialize (THREADS_OMM _ _ THREADI _ TREi). 
+        specialize (OMM_GIi _ _ _ TREi THREADI). 
+        (* specialize (THREADS_OMM _ _ THREADI _ TREi).  *)
         destruct TREi.
         rewrite CODOM_MOVE_HELPER.
         rewrite set_interC with (s := Tid_ thread). rewrite <- tr_acts_set.
         rewrite <- set_interK with (s := E GIi) at 1. 
         do 2 rewrite set_interA. apply set_subset_inter; [basic_solver| ].  
-        red in THREADS_OMM. desc. generalize RSCF. apply inclusion_goal.
+        red in OMM_GIi. desc. generalize RSCF. apply inclusion_goal.
         { rewrite set_interA. apply inter_subset_helper. ins.
           unfold set_inter, is_r, is_sc, Events.mod.
           rewrite tr_lab; vauto. }
@@ -645,14 +728,15 @@ Section CompilationCorrectness.
   Proof.
     apply omm_premises_thread_local.
     ins.
-    apply program_execution_equiv in ExecI. red in ExecI.
     (* bug? desf hangs here *)
     destruct ExecI as [EVENTS THREAD_EXEC]. clear ExecI.
     red in Compiled. destruct Compiled as [SAME_KEYS THREADS_COMP]. 
     assert (exists POi, is_thread_compiled POi Pi) as [POi POi_COMP].
     { assert (exists POi, Some POi = IdentMap.find tid ProgO) as [POi POi_THREAD]. 
       { apply find_iff_in. apply SAME_KEYS. apply find_iff_in. eauto. }
-      exists POi. eapply THREADS_COMP; eauto. } 
+      exists POi. eapply THREADS_COMP; eauto. }
+    forward eapply THREAD_EXEC; eauto. 
+    ins. desc. exists pe. split; auto. 
     eapply GI_1thread_omm_premises; eauto.
   Qed. 
     
@@ -1054,13 +1138,6 @@ Section CompilationCorrectness.
     1, 2: arewrite ((fun a : actid => is_f (lab GI) a) ∩₁ Acq GI ≡₁ fun a : actid => is_f_acq (lab GI) a) by unfold set_inter, is_f_acq; basic_solver.
   Qed.
 
-  Lemma IdentMap_explicit {A B: Type} (P: IdentMap.key -> A -> Prop) (orig: IdentMap.t B):
-    (exists (imap: IdentMap.t A),
-        same_keys imap orig
-        /\ forall key value (KEY: Some value = IdentMap.find key imap), P key value)
-    <-> forall key (KEY: IdentMap.In key orig), exists value, P key value. 
-  Proof. Admitted. 
-    
   Lemma gsw_trans G1 G2 G3 (SIM1: graphs_sim_weak G1 G2)
         (SIM2: graphs_sim_weak G2 G3):
     graphs_sim_weak G1 G3.
@@ -1161,7 +1238,7 @@ Section CompilationCorrectness.
   (*   intros LOCAL. red.  *)
     
   Lemma GO_exists: exists GO,
-      Oprogram_execution_corrected OCamlProgO GO /\
+      Oprogram_execution OCamlProgO GO /\
       same_behavior GO GI. 
   Proof.
     pose proof thread_execs_helper as T_E_H.
@@ -1170,32 +1247,30 @@ Section CompilationCorrectness.
     exists GO.    
     split.  
     { red. split; auto. 
-      ins. specialize (RESTR_SIM _ _ THREAD Gi THREAD_EXEC).
-      pose proof (restr_graph GI thread) as [GIi RESTRI]. 
-      desc. specialize (RESTR_SIM GIi RESTRI). desc. auto. }
+      ins. symmetry in INTHREAD. 
+      specialize (RESTR_SIM _ _ INTHREAD). desc. 
+      desc. exists GOi. split; auto. }
     red. splits; auto.
     2: { rewrite SAME_CO. auto. }
     2: { ins. destruct WFI. congruence. }
     red. splits; auto.   
-    2: { ins. pose proof EGOx as EGOx_. apply into_restr in EGOx.
-         destruct EGOx.
+    2: { ins. (* pose proof EGOx as EGOx_. *)
+         specialize (E_STRUCT _ EGOx). des.  
          { destruct x; vauto. destruct WFI. congruence. }
-         desc. subst. rename Gi into GOi. 
-         replace (lab GO (ThreadEvent tid ind)) with (lab GOi (ThreadEvent tid ind)).
-         2: { destruct TRE. intuition. }
-         specialize (E_STRUCT (ThreadEvent tid ind) EGOx_).
-         destruct E_STRUCT; vauto. 
-         simpl in H.
-         apply find_iff_in in H. destruct H as [POi THREADO]. 
-         specialize (RESTR_SIM tid POi THREADO _ TRE).
-         pose proof (restr_graph GI tid). desc.
-         specialize (RESTR_SIM Gi H). desc.
-         replace (lab GI (ThreadEvent tid ind)) with (lab Gi (ThreadEvent tid ind)).
-         2: { destruct H. apply tr_lab.
-              destruct RESTR_SIM0. red in H.
-              apply (set_equiv_exp H) in EGi.
-              red in EGi. desc. auto. }
-         red in RESTR_SIM0. desc. apply SAME_LAB. auto. }
+         destruct x.
+         { destruct WFI. congruence. }
+         simpl in *. apply find_iff_in in E_STRUCT. destruct E_STRUCT as [POi THREADO]. 
+         specialize (RESTR_SIM _ _ THREADO). destruct RESTR_SIM as [GIi [GOi [TREo [TREi [OEXEC SBL]]]]].
+         assert (E GOi (ThreadEvent thread index)) as EGOix.
+         { destruct TREo. apply  tr_acts_set. split; auto. }
+         replace (lab GO (ThreadEvent thread index)) with (lab GOi (ThreadEvent thread index)).
+         2: { destruct TREo. auto. }
+         replace (lab GI _) with (lab GIi (ThreadEvent thread index)).
+         2: { destruct TREi. apply tr_lab.
+              apply tr_acts_set. split; auto. 
+              cdes SBL. apply RESTR_EVENTS in EGOix. red in EGOix. desc.
+              apply tr_acts_set in EGOix. red in EGOix. desc. auto. }
+         cdes SBL. desc. apply SAME_LAB. auto. }
       assert (forall S, S ≡₁ S ∩₁ (fun a : actid => is_init a) ∪₁ S ∩₁ (fun a : actid => ~ is_init a)) as INIT_SPLIT.
       { ins. rewrite <- set_inter_union_r.
         arewrite ((fun a : actid => is_init a) ∪₁ (fun a : actid => ~ is_init a) ≡₁ fun e => True).
@@ -1215,63 +1290,52 @@ Section CompilationCorrectness.
     apply set_equiv_exp_iff. ins.
     red. split.
     { intros [EGOx NINITx]. red.
-      pose proof (into_restr _ _ EGOx). 
-      destruct H; vauto.       
-      desc. rename Gi into GOi.
       specialize (E_STRUCT x EGOx). destruct E_STRUCT; vauto.
-      simpl in H. apply find_iff_in in H. destruct H as [PO THREADO]. 
-      assert (exists GIi, thread_restricted_execution GI tid GIi) by apply restr_graph. desc.  
-      forward eapply RESTR_SIM as [OTHREADEXEC SAME_BEHL]; eauto.
-      split; vauto. split.  
-      { eapply E_restr_iff; eauto.
-        red in SAME_BEHL. desc. 
-        apply (set_equiv_exp RESTR_EVENTS) in EGi.
-        red in EGi. desc. auto. }
-      red in SAME_BEHL. desc.
-      apply (set_equiv_exp RESTR_EVENTS) in EGi.
-      desc. red in EGi. desc. red in EGi0. desc. auto.       
-      red. red in EGi0. desc. split.
-      { replace (RW GI (ThreadEvent tid ind)) with (RW GIi (ThreadEvent tid ind)); auto. 
-        destruct H. unfold is_r, is_w, set_union. 
-        rewrite tr_lab; auto. }
-      cut (~ dom_rel (rmw GIi) (ThreadEvent tid ind)); vauto. 
-      red. ins. red in H0. 
-      forward eapply H0; auto.  
-      unfold dom_rel. unfold dom_rel in H1. desc. exists y.
-      destruct H. apply (same_relation_exp tr_rmw).
-      apply seq_eqv_lr. splits; auto.
-      apply (hahn_inclusion_exp (rmw_in_sb WFI)) in H1.
-      apply sb_tid_init in H1. simpl in H1. destruct H1; vauto. }
-    ins. red in H. desc. split; auto. 
-    destruct x; vauto. 
-    pose proof (restr_graph GO thread) as [GOi TRE]. 
-    eapply E_restr_iff; eauto.     
-    { assert (exists PIi, Some PIi = IdentMap.find thread ProgI).
-      { apply find_iff_in.
-        red in ExecI. destruct ExecI as [IMM_EVENTS _].
-        specialize (IMM_EVENTS (ThreadEvent thread index)). specialize_full IMM_EVENTS.
-        { red in H. desc. auto. }
-        des; vauto. }
-      assert (exists POi, Some POi = IdentMap.find thread ProgO) as [POi THREADO]. 
-      { apply find_iff_in. red in Compiled. destruct Compiled.
-        apply H2. apply find_iff_in. auto. }
-      assert (exists GIi, thread_restricted_execution GI thread GIi) as [GIi TREI] by apply restr_graph.      
-      forward eapply RESTR_SIM as [OEXEC SAME_BEHL]; eauto.
-      destruct SAME_BEHL. apply (set_equiv_exp H2).
-      pose proof TREI as TREI_. destruct TREI. 
-      assert (E GIi (ThreadEvent thread index)) as EGIi. 
-      { red in H. desc. 
-        apply (@E_restr_iff _ _ _ _ TREI_); auto. }
-      red. split; auto.       
-      red. red in H0. desc. split. 
-      { red in H. desc.
+      destruct x; vauto. simpl in *. apply find_iff_in in H. destruct H as [POi THREADO]. 
+      specialize (RESTR_SIM _ _ THREADO). destruct RESTR_SIM as [GIi [GOi [TREo [TREi [OEXEC SBL]]]]].
+      assert (E GOi (ThreadEvent thread index)) as EGOix.
+      { destruct TREo. apply tr_acts_set. vauto. }
+      assert (E GIi (ThreadEvent thread index)) as EGIix.
+      { cdes SBL. apply RESTR_EVENTS in EGOix. red in EGOix. desc. auto. }
+      split; vauto. split.
+      { eapply E_restr_iff; eauto. }        
+      (* apply (set_equiv_exp RESTR_EVENTS) in EGOix.  *)
+      cdes SBL. apply RESTR_EVENTS in EGOix. red in EGOix. desc.
+      do 2 red in EGOix0. desc.  
+      red. split.
+      { cdes TREi. 
+        replace (RW GI _) with (RW GIi (ThreadEvent thread index)); vauto. 
         unfold is_r, is_w, set_union.
-        rewrite tr_lab; auto.  
-        do 2 red in H3. desc. red in H3. unfold is_r, is_w in H3. 
-        des; auto. }
-      red in H. desc. do 2 red in H3. desc. 
-      red. ins. apply H4. 
-      red in H5. desc. apply (same_relation_exp tr_rmw) in H5. apply seq_eqv_lr in H5. desc. subst. vauto. }
+        destruct TREi. rewrite tr_lab; auto. }
+      red. ins. apply EGOix1.
+      destruct TREi.
+      apply (dom_rel_more tr_rmw).
+      apply dom_eqv1. split; auto.
+      red in H. desc.
+      red. exists y. apply seq_eqv_r. split; auto. 
+      apply (hahn_inclusion_exp (rmw_in_sb WFI)) in H.
+      apply sb_tid_init in H. simpl in H. destruct H; vauto. }
+    ins. red in H. desc. split; auto. 
+    destruct x; vauto.
+    red in H. desc.
+    red in ExecI. destruct ExecI as [IMM_EVENTS _].
+    specialize (IMM_EVENTS _ H). des; vauto. simpl in IMM_EVENTS.
+    apply find_iff_in in IMM_EVENTS. destruct IMM_EVENTS as [PIi THREADI]. 
+    assert (exists POi, Some POi = IdentMap.find thread ProgO) as [POi THREADO]. 
+    { apply find_iff_in. red in Compiled. destruct Compiled.
+      apply H2. apply find_iff_in. eauto. }
+    specialize (RESTR_SIM _ _ THREADO). destruct RESTR_SIM as [GIi [GOi [TREo [TREi [OEXEC SBL]]]]].
+    eapply E_restr_iff; eauto.
+    assert (E GIi (ThreadEvent thread index)) as EGIi. 
+    { destruct TREi. apply tr_acts_set. split; auto. }
+    cdes SBL. apply RESTR_EVENTS. split; auto.
+    do 2 red in H1. desc.  
+    red. split. 
+    { unfold is_r, is_w, set_union.
+      destruct TREi. rewrite tr_lab; auto. }
+    red. ins. apply H2.
+    destruct TREi. apply (dom_rel_more tr_rmw) in H3.
+    generalize H3. basic_solver. 
   Qed. 
 
   Lemma graph_switch GO (SB: same_behavior GO GI) (OMM_I: ocaml_consistent GI)
@@ -1418,7 +1482,6 @@ Section CompilationCorrectness.
     pose proof GO_exists as [GO [OMM_EXEC SAME_BEH]].
     exists GO.
     pose proof (Wf_subgraph SAME_BEH WFI) as WFO.
-    apply Oprogram_execution_equiv in OMM_EXEC. 
     splits; auto.    
     apply graph_switch; auto.
     apply (imm_implies_omm). 

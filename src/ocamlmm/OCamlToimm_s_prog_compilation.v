@@ -574,12 +574,12 @@ Section CorrectedDefinitions.
 
   Notation "'E' G" := G.(acts_set) (at level 1).
 
-  Definition program_execution_corrected (prog : Prog.t) G :=
-    (forall e : actid, E G e -> is_init e \/ IdentMap.In (tid e) prog) /\
-    (forall (thread : IdentMap.key) (PIi : list Instr.t)
-       (THREAD: Some PIi = IdentMap.find thread prog)
-       Gi (THREAD_EXEC: thread_restricted_execution G thread Gi),
-        thread_execution thread PIi Gi).
+  (* Definition program_execution_corrected (prog : Prog.t) G := *)
+  (*   (forall e : actid, E G e -> is_init e \/ IdentMap.In (tid e) prog) /\ *)
+  (*   (forall (thread : IdentMap.key) (PIi : list Instr.t) *)
+  (*      (THREAD: Some PIi = IdentMap.find thread prog) *)
+  (*      Gi (THREAD_EXEC: thread_restricted_execution G thread Gi), *)
+  (*       thread_execution thread PIi Gi). *)
 
 
   Definition graphs_sim_weak (G1 G2: execution) :=
@@ -591,27 +591,27 @@ Section CorrectedDefinitions.
     ctrl G1 ≡ ctrl G2 /\
     rmw_dep G1 ≡ rmw_dep G2.    
 
-  Definition Othread_execution_sim tid instrs G_ :=
-    exists s,
-      ⟪ STEPS : (Ostep tid)＊ (init instrs) s ⟫ /\
-      ⟪ TERMINAL : is_terminal s ⟫ /\
-      ⟪ PEQ : graphs_sim_weak s.(G) G_ ⟫.
+  (* Definition Othread_execution_sim tid instrs G_ := *)
+  (*   exists s, *)
+  (*     ⟪ STEPS : (Ostep tid)＊ (init instrs) s ⟫ /\ *)
+  (*     ⟪ TERMINAL : is_terminal s ⟫ /\ *)
+  (*     ⟪ PEQ : graphs_sim_weak s.(G) G_ ⟫. *)
 
-  Definition Oprogram_execution_corrected prog (OPROG: OCamlProgram prog) G :=
-    (forall e (IN: G.(acts_set) e), is_init e \/ IdentMap.In (tid e) prog) /\
-    (forall (thread : IdentMap.key) (POi : list Instr.t)
-       (THREAD: Some POi = IdentMap.find thread prog)
-       Gi (THREAD_EXEC: thread_restricted_execution G thread Gi),
-        (* Othread_execution thread POi Gi). *)
-        Othread_execution_sim thread POi Gi).
+  (* Definition Oprogram_execution_corrected prog (OPROG: OCamlProgram prog) G := *)
+  (*   (forall e (IN: G.(acts_set) e), is_init e \/ IdentMap.In (tid e) prog) /\ *)
+  (*   (forall (thread : IdentMap.key) (POi : list Instr.t) *)
+  (*      (THREAD: Some POi = IdentMap.find thread prog) *)
+  (*      Gi (THREAD_EXEC: thread_restricted_execution G thread Gi), *)
+  (*       (* Othread_execution thread POi Gi). *) *)
+  (*       Othread_execution_sim thread POi Gi). *)
   
-  Lemma program_execution_equiv (prog : Prog.t) G:
-    program_execution_corrected prog G <-> program_execution prog G.
-  Proof. Admitted.
+  (* Lemma program_execution_equiv (prog : Prog.t) G: *)
+  (*   program_execution_corrected prog G <-> program_execution prog G. *)
+  (* Proof. Admitted. *)
 
-  Lemma Oprogram_execution_equiv prog G (OPROG: OCamlProgram prog):
-    Oprogram_execution_corrected OPROG G <-> Oprogram_execution OPROG G.
-  Proof. Admitted.
+  (* Lemma Oprogram_execution_equiv prog G (OPROG: OCamlProgram prog): *)
+  (*   Oprogram_execution_corrected OPROG G <-> Oprogram_execution OPROG G. *)
+  (* Proof. Admitted. *)
 
   
   (* Lemma sbl_ext_TMP GOi GIi (SBL: same_behavior_local GOi GIi): *)
