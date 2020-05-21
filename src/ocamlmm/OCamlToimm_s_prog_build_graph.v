@@ -7,7 +7,6 @@ Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
-Require Import imm_common.
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
@@ -156,18 +155,17 @@ Section BUILD_OMM_GRAPH.
     splits.
     { red. exists sto_fin. splits; auto. 
       { apply crt_num_steps. vauto. }
-      apply is_terminal_new.
       replace (length (instrs sto_fin)) with (length (binstrs bsti_fin)).
       2: { symmetry. apply compilation_same_length. rewrite <- SAME_OINSTRS.
            subst bsti_fin. simpl. red in COMP. desc. auto. }
       replace (pc sto_fin) with (bpc bsti_fin).
       2: { red in MM_SIM. desc. auto. }
-      apply BLOCK_TERM. }
+      red. red in BLOCK_TERM. cdes MM_SIM.
+      red in MM_SIM0. erewrite compilation_same_length; eauto.
+      congruence. }
     { red in MM_SIM. desc.
       replace SGI with (bG bsti_fin); auto. }
   Qed.
-
-
 
   Variable ProgO ProgI: Prog.Prog.t.
   Hypothesis Compiled: is_compiled ProgO ProgI.

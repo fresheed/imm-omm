@@ -406,17 +406,25 @@ Qed.
 Lemma sb_r_sc_sync (WF: Wf G):
   ⦗E \₁ F⦘ ⨾  sb ⨾ ⦗R⦘ ⨾ ⦗Sc⦘ ⊆ sb ⨾ ⦗F ∩₁ Acq⦘ ⨾ sb ⨾ ⦗R⦘ ⨾ ⦗Sc⦘.
 Proof using RSCF WRLXF WSCFACQRMW.
-  rewrite <- id_inter. rewrite <- (seq_eqvK (R ∩₁ Sc)). rewrite RSCF at 1.
-  unfolder. intros e r [A [C [[f' [f U]] V]]]. desf.
-  exists f. splits; auto.
-  assert (e <> f) as NEQfe. 
+  rewrite <- id_inter. rewrite <- (seq_eqvK (R ∩₁ Sc)).
+  arewrite (sb ⨾ ⦗R ∩₁ Sc⦘ ≡ sb ⨾ ⦗E ∩₁ R ∩₁ Sc⦘).
+  { unfold Execution.sb. basic_solver. } 
+  rewrite RSCF at 1.
+  unfolder.
+  intros e r [A [C [[f' [f U]] V]]].
+  desf.
+  exists f.
+  assert (E r) as Er.
+  { apply seq_eqv_lr in C. by desc. } 
+  splits; auto.
+  assert (e <> f) as NEQfe.
   { red. type_solver. }
   assert (~is_init f) as NINITf.
-  { generalize (@read_or_fence_is_not_init G WF f). type_solver. }  
+  { generalize (@read_or_fence_is_not_init G WF f). type_solver. }
   pose (sb_semi_total_r WF NINITf NEQfe C U0) as SB.
   destruct SB; auto.
-  exfalso. specialize (U1 e). auto. 
-Qed. 
+  exfalso. specialize (U1 e). auto.
+Qed.
   
 Lemma sb_rf_sc_sc (WF : Wf G) : (* TODO *)
   sb ⨾ rf ⨾ ⦗Sc⦘ ⊆ sb ⨾ ⦗Sc⦘ ⨾ rf ⨾ ⦗Sc⦘.

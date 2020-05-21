@@ -7,7 +7,6 @@ Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
-Require Import imm_common.
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
@@ -766,7 +765,7 @@ Section CompilationCorrectness.
       In l (instr_locs instr) /\
       (Some (Events.mod (lab (G st)) (ThreadEvent thread ind)) = instr_mode instr).
 
-  Lemma ordr_ordw_eq instr cas reg lexpr ordr ordw xmod (INSTR: instr = Instr.update cas xmod ordr ordw reg lexpr) Pi (COMP: exists PO, is_thread_compiled PO Pi) (IN: In instr Pi):
+  Lemma ordr_ordw_eq instr cas reg rex lexpr ordr ordw xmod (INSTR: instr = Instr.update cas rex xmod ordr ordw reg lexpr) Pi (COMP: exists PO, is_thread_compiled PO Pi) (IN: In instr Pi):
     ordr = ordw.
   Proof.
     desc. red in COMP. desc. red in COMP. desc. subst Pi.
@@ -950,7 +949,7 @@ Section CompilationCorrectness.
           unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
           rewrite updo in LOC; [| intros C; inversion C; omega].
           rewrite upds in LOC. inversion LOC. subst.
-          destruct loc_expr; vauto. simpl.
+          destruct lexpr; vauto. simpl.
           destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
         simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
         rewrite updo; [| intros C; inversion C; omega].
@@ -963,7 +962,7 @@ Section CompilationCorrectness.
         { move LOC at bottom. move UG at bottom. 
           unfold loc in LOC. rewrite UG in LOC. simpl in LOC.
           rewrite upds in LOC. inversion LOC. subst.
-          destruct loc_expr; vauto. simpl.
+          destruct lexpr; vauto. simpl.
           destruct (Const.eq_dec (RegFile.eval_value (regf st_prev) r) Const.zero); vauto. }
         simpl. f_equal. unfold Events.mod. rewrite UG. unfold add. simpl.
         rewrite upds. auto. } } 
@@ -1295,7 +1294,7 @@ Section CompilationCorrectness.
       apply union_mori; [rewrite SB'; basic_solver | ].
       destruct WFO. rewrite wf_coE, wf_rfE at 1.
       repeat rewrite <- restr_relE.
-      rewrite union_restr, restr_restr.
+      rewrite <- restr_union, restr_restr.
       arewrite (E GO ∩₁ Sc GO ≡₁ E GO ∩₁ Sc GI).
       { (* TODO: generalize with ..._SIM *)
         apply set_equiv_exp_iff.
@@ -1381,7 +1380,7 @@ Section CompilationCorrectness.
     { unfold fre. rewrite SB', FR'. fold (RWO GI).
       apply inclusion_minus_l.
       rewrite fri_union_fre at 1.
-      rewrite <- union_restr.
+      rewrite restr_union.
       apply union_mori.
       { rewrite <- restr_relE.
         apply restr_rel_mori; [basic_solver| ].

@@ -6,7 +6,7 @@ Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
-Require Import imm_common.
+(* Require Import imm_common. *)
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import Prog.
@@ -108,14 +108,14 @@ Section OCaml_Program.
   Definition instr_mode instr :=
     match instr with
     | Instr.load mode _ _ | Instr.store mode _ _ | Instr.fence mode => Some mode
-    | Instr.update _ _ mode_r mode_w _ _ => Some mode_r (* assume that mode_r = mode_w *)
+    | Instr.update _ _ _ mode_r mode_w _ _ => Some mode_r (* assume that mode_r = mode_w *)
     | _ => None
     end. 
 
   Definition instr_locs instr :=
     match instr with
     | Instr.load _ _ lxpr | Instr.store _ lxpr _
-    | Instr.update _ _ _ _ _ lxpr => match lxpr with
+    | Instr.update _ _ _ _ _ _ lxpr => match lxpr with
                                   | Instr.lexpr_loc l => [l]
                                   | Instr.lexpr_choice _ l1 l2 => [l1;  l2]
                                   end

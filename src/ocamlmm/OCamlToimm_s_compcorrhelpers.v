@@ -4,7 +4,6 @@ Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
-Require Import imm_common.
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
@@ -756,10 +755,10 @@ Section CompCorrHelpers.
       assert (instr0 = exc). 
       { cut (Some instr0 = Some exc); [ins; vauto| ].
         rewrite ISTEP1. vauto. }
-      subst instr0. inversion H1. subst new_expr xmod ordr ordw reg loc_expr loc0.
+      subst instr0. inversion H1. subst expr_new xmod ordr ordw reg lexpr rexmod. 
       remember (Afence Oacq) as lbl. 
-      remember (Aload true Osc (RegFile.eval_lexpr (regf st_prev') loc) old_value) as lbl'.
-      remember (Astore Xpln Osc (RegFile.eval_lexpr (regf st_prev') loc) new_value) as lbl''. 
+      remember (Aload true Osc (RegFile.eval_lexpr (regf st_prev') loc) val0) as lbl'.
+      remember (Astore Xpln Osc (RegFile.eval_lexpr (regf st_prev') loc) nval) as lbl''. 
       rename st into st_. remember (bst2st bst) as st.
       replace (init (flatten (binstrs bst_prev))) with (init (instrs st_prev)) in * by vauto. 
       red.
@@ -769,7 +768,7 @@ Section CompCorrHelpers.
       { red. splits; eauto. red. eexists. red. splits.
         { congruence. }
         exists exc. splits; eauto. rewrite INSTR'. f_equal; vauto. } 
-      rewrite Heqlbl, Heqlbl', Heqlbl'' in LBL_EXT. simpl in LBL_EXT. desc. 
+      rewrite Heqlbl(* , Heqlbl', Heqlbl'' *) in LBL_EXT. simpl in LBL_EXT. desc. 
       remember (ThreadEvent tid (eindex st_prev)) as ev.
       remember (ThreadEvent tid (eindex st_prev')) as ev'. 
       remember (ThreadEvent tid (eindex st_prev' + 1)) as ev''.

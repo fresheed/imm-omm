@@ -7,7 +7,6 @@ Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
-Require Import imm_common.
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
@@ -1022,25 +1021,25 @@ Section PairStep.
       set (sto'' :=
              {| instrs := instrs sto;
                 pc := pc sto + 1;
-                G := add (G sto) tid (eindex sto + 2) (Astore Xpln Osc (RegFile.eval_lexpr (regf sto) loc_expr)
-                 (RegFile.eval_expr (regf sto) new_expr))
-                         (DepsFile.expr_deps (depf sto) new_expr)
-                         (DepsFile.lexpr_deps (depf sto) loc_expr) 
+                G := add (G sto) tid (eindex sto + 2) (Astore Xpln Osc (RegFile.eval_lexpr (regf sto) lexpr)
+                 (RegFile.eval_expr (regf sto) expr_new))
+                         (DepsFile.expr_deps (depf sto) expr_new)
+                         (DepsFile.lexpr_deps (depf sto) lexpr) 
                          (ectrl sto) ∅;
                 eindex := eindex sto + 3;
                 regf := regf sto;
                 depf := depf sto; (* TODO: deal with changed depf after rmw *)
                 ectrl := ectrl sto |}).
-      assert (Some (Instr.update (Instr.exchange new_expr) Xpln Osc Osc
-                         exchange_reg loc_expr) = nth_error (instrs sti) (pc sti + 1)) as ST_POS.
+      assert (Some (Instr.update (Instr.exchange expr_new) false Xpln Osc Osc
+                         exchange_reg lexpr) = nth_error (instrs sti) (pc sti + 1)) as ST_POS.
       { rewrite BLOCK_CONTENTS1. f_equal. auto. } 
       exists sto''. splits.
-      { red. exists [(Astore Xpln Osc (RegFile.eval_lexpr (regf sto) loc_expr)
-             (RegFile.eval_expr (regf sto) new_expr))].
+      { red. exists [(Astore Xpln Osc (RegFile.eval_lexpr (regf sto) lexpr)
+             (RegFile.eval_expr (regf sto) expr_new))].
         red. splits; [subst; simpl; auto| ].
-        exists (Instr.store Osc loc_expr new_expr). exists 2. splits.
+        exists (Instr.store Osc lexpr expr_new). exists 2. splits.
         { replace (pc sto) with (bpc bsti); [auto| cdes MM_SIM; vauto]. }
-        pose proof (@Ostore tid [Astore Xpln Osc (RegFile.eval_lexpr (regf sto) loc_expr) (RegFile.eval_expr (regf sto) new_expr)] sto sto'' st 2 Osc loc_expr new_expr (RegFile.eval_lexpr (regf sto) loc_expr) (RegFile.eval_expr (regf sto) new_expr) Xpln) as OMM_STEP. 
+        pose proof (@Ostore tid [Astore Xpln Osc (RegFile.eval_lexpr (regf sto) lexpr) (RegFile.eval_expr (regf sto) expr_new)] sto sto'' st 2 Osc lexpr expr_new (RegFile.eval_lexpr (regf sto) lexpr) (RegFile.eval_expr (regf sto) expr_new) Xpln) as OMM_STEP. 
         specialize_full OMM_STEP; auto.
         subst sto''. simpl. omega. }
       forward eapply (@E_ADD_RMW (G sti_) (G sti')) as E_SPLITS1;
@@ -1051,18 +1050,18 @@ Section PairStep.
       forward eapply (@RWO_ADD sti sti_) as RWO_SPLITS; eauto.
       forward eapply (@E_ADD (G sto) (G sto'')) as EGO''; [repeat eexists; eauto| ].
       cdes MM_SIM. 
-      pose proof INSTR_LEXPR_HELPER as LEXPR_SAME. specialize LEXPR_SAME with (instr := (Instr.update (Instr.exchange new_expr) Xpln Osc Osc exchange_reg loc_expr)). specialize_full LEXPR_SAME; vauto. 
-      pose proof INSTR_LEXPR_DEPS_HELPER as LEXPR_DEPS_SAME. specialize LEXPR_DEPS_SAME with (instr := (Instr.update (Instr.exchange new_expr) Xpln Osc Osc exchange_reg loc_expr)). specialize_full LEXPR_DEPS_SAME; vauto. 
-      assert (RegFile.eval_expr (regf sto) new_expr = RegFile.eval_expr (regf sti) new_expr) as EXPR_SAME.
+      pose proof INSTR_LEXPR_HELPER as LEXPR_SAME. specialize LEXPR_SAME with (instr := (Instr.update (Instr.exchange expr_new) false Xpln Osc Osc exchange_reg lexpr)). specialize_full LEXPR_SAME; vauto. 
+      pose proof INSTR_LEXPR_DEPS_HELPER as LEXPR_DEPS_SAME. specialize LEXPR_DEPS_SAME with (instr := (Instr.update (Instr.exchange expr_new) false Xpln Osc Osc exchange_reg lexpr)). specialize_full LEXPR_DEPS_SAME; vauto. 
+      assert (RegFile.eval_expr (regf sto) expr_new = RegFile.eval_expr (regf sti) expr_new) as EXPR_SAME.
       { eapply eval_rmw_expr; eauto. 
         { exists (instrs sto). red.
           unfold is_thread_compiled_with.
           eexists. eauto. }
         repeat eexists. eapply nth_error_In.
         replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto. }
-      (* pose proof INSTR_EXPR_HELPER as EXPR_SAME. specialize EXPR_SAME with (instr := (Instr.update (Instr.exchange new_expr) Xpln Osc Osc exchange_reg loc_expr)). *)
+      (* pose proof INSTR_EXPR_HELPER as EXPR_SAME. specialize EXPR_SAME with (instr := (Instr.update (Instr.exchange expr_new) Xpln Osc Osc exchange_reg lexpr)). *)
       (* specialize_full EXPR_SAME; vauto. *)
-      (* { Unshelve. 2: exact new_expr. simpl.  *)
+      (* { Unshelve. 2: exact expr_new. simpl.  *)
       simpl in RWO_SPLITS, RWO_SPLITS1.      
       red. splits.
       { subst sto''. simpl. congruence. }
@@ -1111,7 +1110,7 @@ Section PairStep.
           { basic_solver. }
           forward eapply exchange_reg_dedicated' as DEDICATED.  
           { vauto. }
-          { Unshelve. 2: exact (Instr.update (Instr.exchange new_expr) Xpln Osc Osc exchange_reg loc_expr). eapply nth_error_In; eauto. }
+          { Unshelve. 2: exact (Instr.update (Instr.exchange expr_new) false Xpln Osc Osc exchange_reg lexpr). eapply nth_error_In; eauto. }
           simpl in DEDICATED. desc. auto. }
         { expand_intra sto'' UG0 bsti sti. rewrite UINDEX, UG, UECTRL.
           simpl. replace_bg_rels bsti sti. remove_emptiness.
@@ -1179,7 +1178,7 @@ Section PairStep.
         specialize_full OMM_STEP; auto. }
       cdes MM_SIM. 
       (* pose proof INSTR_LEXPR_HELPER as LEXPR_SAME. specialize LEXPR_SAME with (instr := (Instr.assign reg expr)). specialize_full LEXPR_SAME; vauto.  *)
-      (* pose proof INSTR_LEXPR_DEPS_HELPER as LEXPR_DEPS_SAME. specialize LEXPR_DEPS_SAME with (instr := (Instr.update (Instr.exchange new_expr) Xpln Osc Osc exchange_reg loc_expr)). specialize_full LEXPR_DEPS_SAME; vauto.  *)
+      (* pose proof INSTR_LEXPR_DEPS_HELPER as LEXPR_DEPS_SAME. specialize LEXPR_DEPS_SAME with (instr := (Instr.update (Instr.exchange expr_new) Xpln Osc Osc exchange_reg lexpr)). specialize_full LEXPR_DEPS_SAME; vauto.  *)
       pose proof INSTR_EXPR_HELPER as EXPR_SAME. specialize EXPR_SAME with (instr := (Instr.assign reg expr)). specialize_full EXPR_SAME; vauto. 
       pose proof INSTR_EXPR_DEPS_HELPER as EXPR_DEPS_SAME. specialize EXPR_DEPS_SAME with (instr := (Instr.assign reg expr)). specialize_full EXPR_DEPS_SAME; vauto. 
       red. splits.

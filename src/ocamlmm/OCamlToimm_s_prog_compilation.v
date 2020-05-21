@@ -3,7 +3,6 @@ Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
-Require Import imm_common.
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCamlToimm_s_prog. 
@@ -37,7 +36,7 @@ Section OCaml_IMM_Compilation.
       is_instruction_compiled (ld) ([f; ld])
   | compiled_Wat loc val:
       let st := (Instr.store Osc loc val) in
-      let exc := (Instr.update (Instr.exchange val) Xpln Osc Osc exchange_reg loc) in
+      let exc := (Instr.update (Instr.exchange val) false Xpln Osc Osc exchange_reg loc) in
       let f := (Instr.fence Oacq) in
       is_instruction_compiled (st) ([f; exc])
   | compiled_assign lhs rhs:
@@ -210,7 +209,7 @@ Section OCaml_IMM_Compilation.
     | Instr.assign reg expr => reg :: expr_regs expr
     | Instr.load _ reg lexpr => reg :: lexpr_regs lexpr
     | Instr.store _ lexpr expr => lexpr_regs lexpr ++ expr_regs expr
-    | Instr.update rmw _ _ _ reg lexpr => reg :: rmw_regs rmw ++ lexpr_regs lexpr
+    | Instr.update rmw _ _ _ _ reg lexpr => reg :: rmw_regs rmw ++ lexpr_regs lexpr
     | Instr.fence _ => []
     | Instr.ifgoto expr _ => expr_regs expr
     end.
@@ -221,7 +220,7 @@ Section OCaml_IMM_Compilation.
     | Instr.assign reg expr => reg <> exchange_reg /\ ~ In exchange_reg (expr_regs expr)
     | Instr.load _ reg lexpr => reg <> exchange_reg /\ ~ In exchange_reg (lexpr_regs lexpr)
     | Instr.store _ lexpr expr => ~ In exchange_reg (expr_regs expr) /\ ~ In exchange_reg (lexpr_regs lexpr)
-    | Instr.update rmw _ _ _ reg lexpr => ~ In exchange_reg (rmw_regs rmw) /\ ~ In exchange_reg (lexpr_regs lexpr)
+    | Instr.update rmw _ _ _ _ reg lexpr => ~ In exchange_reg (rmw_regs rmw) /\ ~ In exchange_reg (lexpr_regs lexpr)
     | Instr.ifgoto expr _ => ~ In exchange_reg (expr_regs expr)
     | _ => True
     end.
@@ -231,7 +230,7 @@ Section OCaml_IMM_Compilation.
     match instr with
     | Instr.load _ _ lexpr' 
     | Instr.store _ lexpr' _ 
-    | Instr.update _ _ _ _ _ lexpr' => lexpr = lexpr'
+    | Instr.update _ _ _ _ _ _ lexpr' => lexpr = lexpr'
     | _ => False
     end.
     
@@ -313,7 +312,7 @@ Section OCaml_IMM_Compilation.
     
   Lemma eval_rmw_expr PI (COMP: exists PO, is_thread_compiled PO PI)
         st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
-        rmw (INSTR: exists x orr orw lhs loc, In (Instr.update rmw x orr orw lhs loc) PI)
+        rmw (INSTR: exists rex x orr orw lhs loc, In (Instr.update rmw rex x orr orw lhs loc) PI)
         expr (EXPR_OF: rmw_expr_of expr rmw):
     RegFile.eval_expr (regf st) expr = RegFile.eval_expr (regf st') expr.
   Proof.

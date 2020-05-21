@@ -7,7 +7,6 @@ Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
-Require Import imm_common.
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
@@ -143,9 +142,6 @@ Definition oseq_step (tid : thread_id) sti1 sti2 :=
   exists block, on_block sti1 block /\
            (step tid) ^^ (length block) sti1 sti2. 
 
-Lemma is_terminal_new st: pc st >= length (instrs st) <-> is_terminal st.
-Proof. Admitted.
-
 Lemma same_struct_sym {A: Type} (ll: list (list A)): same_struct ll ll.
 Proof.
   induction ll.
@@ -211,8 +207,8 @@ Lemma is_terminal_pc_bounded st tid PO PI (REACH: (step tid)＊ (init PI) st)
       (COMP: is_thread_compiled PO PI):
   is_terminal st <-> pc st = length (instrs st).
 Proof.
-  symmetry. eapply iff_trans; [| eapply is_terminal_new].
-  split; [omega| ]. 
+  unfold is_terminal. 
+  split; [|omega]. 
   apply crt_num_steps in REACH. desc. generalize dependent st. induction n.
   { ins. red in REACH. desc. subst. simpl in *. omega. }
   ins. red in REACH. desc.
@@ -545,7 +541,7 @@ Lemma block_mid pc PI block instr (BLOCK: on_block_pc pc PI block)
       (AT_PC1: Some instr = nth_error PI (pc + 1)):
   (exists loc expr, instr = Prog.Instr.store Orlx loc expr) \/
   (exists loc expr, instr = Prog.Instr.load Osc loc expr) \/
-  (exists expr loc, instr = Prog.Instr.update (Prog.Instr.exchange expr) Xpln Osc Osc exchange_reg loc).
+  (exists expr loc, instr = Prog.Instr.update (Prog.Instr.exchange expr) false Xpln Osc Osc exchange_reg loc).
 Proof.
   red in BLOCK. desc.
   inversion COMP_BLOCK.
@@ -705,7 +701,7 @@ Proof.
     { left. exists block0. red in H0.
       rewrite SAME_INSTRS in H0. 
       desc. red. splits; eauto. }
-    right. apply is_terminal_new in H0. congruence. }
+    right. red in H0. congruence. }
 
   eapply no_acb_between_pc; eauto.
   assert (length block = 2 -> exists md, Some (Instr.fence md) = nth_error (instrs st1) (pc st1)).
