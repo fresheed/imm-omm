@@ -817,7 +817,7 @@ Proof.
          forward eapply (@is_terminal_pc_bounded st tid PO (flatten BPI)) as TERM; vauto.
          { congruence. }
          apply TERM in ACB. rewrite <- ACB.
-         apply state_record_equality. }
+         by destruct st. }
     red in ACB. desc. 
     forward eapply (@on_block_iff_bindex BPI block (pc st)) as [BLOCK_INDEX _]; vauto. 
     { congruence. }
@@ -825,7 +825,7 @@ Proof.
     exists (bst_from_st st BPI b). splits; auto.
     2: { apply Nat.lt_le_incl. apply nth_error_Some, OPT_VAL. eauto. } 
     unfold bst2st, bst_from_st. simpl.
-    rewrite <- PC, <- COMP0. apply state_record_equality. }
+    rewrite <- PC, <- COMP0. by destruct st. }
   intros. desc. red. red in COMP. desc.
   subst. 
   destruct (ge_dec (bpc bst) (length (binstrs bst))) as [TERM | NONTERM].
@@ -966,7 +966,7 @@ Proof.
          red in COMP. desc. vauto. }
     subst st1. unfold bst2st in PC_PLUS. simpl in PC_PLUS. 
     rewrite <- PC_PLUS. 
-    apply state_record_equality. }
+    by destruct st2. }
   
   destruct PC2 as [PC2 | PC2]. 
   - eapply NEXT_BLOCK; eauto. 
@@ -1022,7 +1022,7 @@ Proof.
       replace (flatten (binstrs bst1)) with (instrs st2).
       replace (length (flatten (firstn addr0 (binstrs bst1)))) with (length (flatten (firstn addr0 BPI0))).
       2: { apply SAME_STRUCT_PREF. eapply correction_same_struct; eauto. } 
-      rewrite H5. apply state_record_equality.
+      rewrite H5. by destruct st2. 
 Qed. 
 
 
@@ -1056,12 +1056,11 @@ Proof.
   assert (bst2st bst1 = bst2st bst2 -> (omm_block_step_PO PO tid)＊ bst1 bst2) as WHEN_SAME_BST. 
   { intros SAME_BST2ST. 
     replace bst2 with bst1; [apply rt_refl| ].
-    rewrite blockstate_record_equality.
-    rewrite blockstate_record_equality with (bst := bst1).
+    destruct bst2. destruct bst1. 
     f_equal; vauto. 
-    rewrite <- SAME_BINSTRS in BOUND2. 
-    eapply (@NONEMPTY_PREF _ (binstrs bst1)); eauto.
-    2: congruence.
+    rewrite <- SAME_BINSTRS in BOUND2.
+    simpl in *. 
+    eapply (@NONEMPTY_PREF _ binstrs); vauto. 
     eapply COMPILED_NONEMPTY; eauto. }
   
   unfold at_compilation_block in ACB1. desf. 

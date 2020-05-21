@@ -911,7 +911,7 @@ Section CompCorrHelpers.
       unfold bst2st. simpl. rewrite firstn_all.
       red in TERM. rewrite (@is_terminal_pc_bounded st_fin tid PO (flatten BPI)) in TERM; [| rewrite <- COMP0; auto | vauto]. 
       rewrite <- COMP0 in *.
-      rewrite <- TERM. apply state_record_equality. }
+      rewrite <- TERM. by destruct st_fin. }
     forward eapply (@steps_imply_ommblocks bst_fin) as BLOCK_STEPS; eauto.
     { simpl. rewrite <- COMP0, <- BST. eauto. }
     replace Gi with (bG bst_fin).

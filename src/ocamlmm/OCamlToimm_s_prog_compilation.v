@@ -415,32 +415,6 @@ Section OCaml_IMM_Correspondence.
        ectrl := bectrl bst;      
     |}.
 
-  Lemma state_record_equality st:
-    st = {|
-      instrs := instrs st;
-      pc := pc st;
-      G := G st;
-      eindex := eindex st;
-      regf := regf st;
-      depf := depf st;
-      ectrl := ectrl st
-    |}.
-  Proof. 
-  Admitted. 
-    
-  Lemma blockstate_record_equality bst:
-    bst = {|
-      binstrs := binstrs bst;
-      bpc := bpc bst;
-      bG := bG bst;
-      beindex := beindex bst;
-      bregf := bregf bst;
-      bdepf := bdepf bst;
-      bectrl := bectrl bst
-    |}.
-  Proof. 
-  Admitted.    
-
   (* TODO: understand https://stackoverflow.com/questions/27322979/why-coq-doesnt-allow-inversion-destruct-etc-when-the-goal-is-a-type*)
   Definition block_step_helper block (tid : thread_id) bst1 bst2 :=
     ⟪ AT_BLOCK: Some block = nth_error (binstrs bst1) (bpc bst1) ⟫ /\

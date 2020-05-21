@@ -59,8 +59,7 @@ Section BUILD_OMM_GRAPH.
       rewrite (@is_terminal_pc_bounded sti_fin tid PO PI) in TERMINAL; vauto.
       2: { apply crt_num_steps. eauto. }
       rewrite <- TERMINAL; auto.
-      (* TODO: why so complicated? *)      
-      apply state_record_equality. } 
+      by destruct sti_fin. } 
     
     assert (is_block_terminal bsti_fin) as BLOCK_TERM. 
     { red. destruct (dec_ge (bpc bsti_fin) (length (binstrs bsti_fin))); auto. }
