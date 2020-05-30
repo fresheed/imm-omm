@@ -349,7 +349,8 @@ Section PairStep.
      { rewrite (firstn_ge_incl ll LE) in FLT_SHIFT.  
        rewrite flatten_app, length_app in FLT_SHIFT.
        cut (length block > 0); [ins; omega |]. 
-       eapply Forall_forall in NE; vauto.
+       apply (proj1 (Forall_forall (fun l => l <> []) ll)) with (x := block) in NE. 
+       { destruct block; vauto. simpl. omega. } 
        eapply nth_error_In. eauto. }
      apply not_le in GT.
      rewrite (@firstn_ge_incl _ ll i j) in FLT_SHIFT; [| omega].
@@ -358,7 +359,8 @@ Section PairStep.
        ins. desc. subst. destruct d; vauto. omega. }
      desc. subst.
      cut (d = 0); [ins; omega|].
-     destruct d; auto. 
+     destruct d; auto.
+     exfalso. 
      rewrite flatten_app, length_app in FLT_SHIFT.
      apply plus_reg_l in FLT_SHIFT.
      replace (i + S (S d)) with ((i + 1 + d) + 1) in FLT_SHIFT by omega.
@@ -389,9 +391,7 @@ Section PairStep.
      { ins. destruct block'; vauto. }
      apply H; auto.  
      eapply nth_error_In. eauto.
-     (* ??? Proof General successfully goes there but Qed fails *)
-     (* Qed.  *)     
-   Admitted.
+   Qed.
      
    Lemma correction_same_struct BPI0 BPI ref
          (CORR: Forall2 (block_corrected ref) BPI0 BPI):
