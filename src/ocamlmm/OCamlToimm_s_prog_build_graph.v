@@ -30,8 +30,10 @@ Set Implicit Arguments.
   
 Section BUILD_OMM_GRAPH.
 
-  Lemma thread_execs tid PO PI (COMP: is_thread_compiled PO PI)
-        SGI (ExI: thread_execution tid PI SGI):
+  Lemma thread_execs tid PO PI SGI
+        (COMP: is_thread_compiled PO PI)
+        (ExI: thread_execution tid PI SGI)
+        (OMM_CLARIFIED: omm_clarified PO):
     exists SGO, Othread_execution tid PO SGO /\
            same_behavior_local SGO SGI. 
   Proof.
@@ -65,7 +67,8 @@ Section BUILD_OMM_GRAPH.
     { red. destruct (dec_ge (bpc bsti_fin) (length (binstrs bsti_fin))); auto. }
     assert (exists n_osteps, (omm_block_step_PO PO tid) ^^ n_osteps (binit BPI) bsti_fin) as [n_osteps OMM_STEPS]. 
     { apply crt_num_steps.
-      forward eapply (@steps_imply_ommblocks bsti_fin PO _ tid); eauto.
+      forward eapply (@steps_imply_ommblocks bsti_fin PO tid _); eauto.
+      { by cdes OMM_CLARIFIED. }
       { red in COMP. desc. simpl. auto. }
       Unshelve. 2: simpl; omega. 
       rewrite <- BST. apply crt_num_steps.
@@ -107,7 +110,7 @@ Section BUILD_OMM_GRAPH.
           apply Nat.lt_le_incl. apply nth_error_Some, OPT_VAL. 
           apply steps_sub with (m := 1) in STEPS_FROM; [| omega].
           destruct STEPS_FROM as [bst_next STEP_NEXT].
-          apply (same_relation_exp (pow_unit (omm_block_step_PO PO tid))) in STEP_NEXT. 
+          apply (same_relation_exp (pow_1 (omm_block_step_PO PO tid))) in STEP_NEXT. 
           red in STEP_NEXT. desc. red in BLOCK_STEP. desc. eauto. }          
         assert (bpc bsti_i' <= length (binstrs bsti_i')).
         { red in MM_SIM'. desc. rewrite <- MM_SIM'0.
@@ -130,11 +133,16 @@ Section BUILD_OMM_GRAPH.
           (* { red. ins. congruence. } *)
           (* apply t_step_rt. exists bsti_i. split. *)
           (* { apply bs_extract. auto. } *)
-          (* apply OB_B. apply crt_num_steps. eexists. eauto. *) }
-        
-        forward eapply (pair_step MM_SIM' STEPS_FROM') as [sto [OSTEP MM_SIM]]; eauto. 
+        (* apply OB_B. apply crt_num_steps. eexists. eauto. *) }
+        assert (instrs sto' = PO) as STO_INSTRS. 
+        { replace PO with (instrs (init PO)); auto. symmetry. 
+          apply omm_steps_same_instrs. exists tid. apply crt_num_steps. eauto. }
+        pose proof (@pair_step sto' bsti_i' bsti_i tid MM_SIM'). specialize_full H0; auto. 
+        { congruence. }
+        { congruence. }
         { apply OB_B. apply crt_num_steps. exists i.
           replace (binstrs bsti_i') with BPI; auto. }
+        destruct H0 as [sto [OSTEP MM_SIM]]. 
         exists sto. splits; eauto.
         2: { red in MM_SIM. desc.
              replace (length PO) with (length (binstrs bsti_i')); [omega|].
@@ -169,6 +177,7 @@ Section BUILD_OMM_GRAPH.
   Variable ProgO ProgI: Prog.Prog.t.
   Hypothesis Compiled: is_compiled ProgO ProgI.
   Hypothesis OCamlProgO: OCamlProgram ProgO.
+  Hypothesis OMM_CLARIFIED: forall thread PO (THREAD: Some PO = IdentMap.find thread ProgO), omm_clarified PO.
   
   Variable GI: execution.
   Hypothesis WFI: Wf GI.
@@ -602,8 +611,9 @@ Section BUILD_OMM_GRAPH.
   { red in Compiled. destruct Compiled. red in H0. eapply H0; vauto. }
   assert (exists GIi, thread_execution tid PIi GIi /\ thread_restricted_execution GI tid GIi) as [GIi [EXECIi TREi]]. 
   { destruct ExecI. apply H0. auto. }
-  pose proof (thread_execs COMP EXECIi) as [SGO [OEXEC SBL]]. desc.
-  exists GIi. exists SGO. splits; vauto.
+  pose proof (thread_execs COMP EXECIi) as [SGO [OEXEC SBL]].
+  { eapply OMM_CLARIFIED; eauto. } 
+  desc. exists GIi. exists SGO. splits; vauto.
   
   assert (E SGO ≡₁ E GO ∩₁ Tid_ tid) as E_RESTR. 
   { subst GO. unfold acts_set at 2. simpl.

@@ -1,15 +1,19 @@
 Require Import Classical Peano_dec.
 From PromisingLib Require Import Basic Loc.
 From hahn Require Import Hahn.
+Require Import List.
 Set Implicit Arguments.
 
 
 Lemma inclusion_minus {A: Type} (s u m: A -> Prop):
   s ⊆₁ u \₁ m <-> s ⊆₁ u /\ s ∩₁ m ⊆₁ ∅.
 Proof.
-  (*link to similar lemma here*)
-Admitted. 
-
+  split; [| basic_solver].
+  ins. unfold set_minus in H. red in H. split.
+  { red. ins. specialize (H x H0). desc. auto. }
+  red. ins. red in H0. desc. specialize (H x H0). desc. vauto. 
+Qed. 
+  
 Lemma OPT_VAL: forall {A: Type} (opt: option A), opt <> None <-> exists o, Some o = opt.
 Proof. 
   intros. destruct opt eqn:v. 
@@ -200,4 +204,16 @@ Ltac remove_emptiness :=
           rewrite union_false_r || rewrite union_false_l ||
           rewrite inter_false_r || rewrite inter_false_l ||
           rewrite seq_false_r || rewrite seq_false_l || rewrite eqv_empty ||
-          rewrite cross_false_l || rewrite cross_false_r). 
+          rewrite cross_false_l || rewrite cross_false_r).
+
+Lemma first_end {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n):
+  firstn (n + 1) l = firstn n l ++ cons x nil.
+Proof.
+  ins. 
+  symmetry in NTH. apply nth_error_split in NTH as [l1 [l2 [CAT H]]].
+  rewrite <- H. pose proof (@firstn_app_2 A 1 l1 (x :: l2)).
+  rewrite CAT. simpl in H0. rewrite H0.
+  pose proof (@firstn_app_2 A 0 l1). simpl in H1. rewrite app_nil_r, NPeano.Nat.add_0_r in H1.
+  rewrite H1. auto. 
+Qed.
+      

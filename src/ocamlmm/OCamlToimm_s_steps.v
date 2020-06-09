@@ -11,10 +11,10 @@ Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
 Require Import OCamlToimm_s.
-Require Import OCamlToimm_s_prog. 
+Require Import OCamlToimm_s_prog.
+Require Import ListHelpers.
 Require Import OCamlToimm_s_prog_compilation. 
-Require Import OCamlToimm_s_prog_pair_step. 
-Require Import OCamlToimm_s_prog_bounded_properties.
+(* Require Import OCamlToimm_s_prog_bounded_properties. *)
 Require Import ListHelpersTemp.
 Require Import Utils.
 Require Import ClosuresProperties. 
@@ -28,59 +28,21 @@ Set Implicit Arguments.
 
 Section Steps.
 
-Notation "'E' G" := G.(acts_set) (at level 1).
-Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
-Notation "'R_ex' G" := (fun a => is_true (R_ex G.(lab) a)) (at level 1).
-Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
-Notation "'RW' G" := (R G ∪₁ W G) (at level 1).
-Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1).
-Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1).
-Notation "'ORlxW' G" := (fun a => is_true (is_orlx_w G.(lab) a)) (at level 1).
-Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
-Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
-Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1). 
-Notation "'hbo'" := (OCaml.hb). 
-Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
-Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
+(* Notation "'E' G" := G.(acts_set) (at level 1). *)
+(* Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1). *)
+(* Notation "'R_ex' G" := (fun a => is_true (R_ex G.(lab) a)) (at level 1). *)
+(* Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1). *)
+(* Notation "'RW' G" := (R G ∪₁ W G) (at level 1). *)
+(* Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1). *)
+(* Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1). *)
+(* Notation "'ORlxW' G" := (fun a => is_true (is_orlx_w G.(lab) a)) (at level 1). *)
+(* Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1).  *)
+(* Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1).  *)
+(* Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1).  *)
+(* Notation "'hbo'" := (OCaml.hb).  *)
+(* Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1). *)
+(* Notation "'Tid_' t" := (fun x => tid x = t) (at level 1). *)
 
-Record Wf_local (G: execution) :=
-  {  wf_index' : forall a b, 
-      (E G) a /\ (E G) b /\ a <> b /\ tid a = tid b /\ ~ is_init a -> index a <> index b;
-     wf_dataD' : G.(data) ≡ ⦗R G⦘ ⨾ G.(data) ⨾ ⦗W G⦘ ;
-     ctrl_sb' : G.(ctrl) ⨾ G.(sb) ⊆ G.(ctrl) ;
-     wf_addrD' : G.(addr) ≡ ⦗R G⦘ ⨾ G.(addr) ⨾ ⦗RW G⦘ ;
-     wf_ctrlD' : G.(ctrl) ≡ ⦗R G⦘ ⨾ G.(ctrl) ;
-     wf_rmwD' : G.(rmw) ≡ ⦗R_ex G⦘ ⨾ G.(rmw) ⨾ ⦗W G⦘ ;
-     wf_rmwl' : G.(rmw) ⊆ same_loc G ;
-     wf_rmwi' : G.(rmw) ⊆ immediate G.(sb) ;
-     wf_rmw_depD' : G.(rmw_dep) ≡ ⦗R G⦘ ⨾ G.(rmw_dep) ⨾ ⦗R_ex G⦘ ;
-     data_in_sb' : G.(data) ⊆ G.(sb) ;
-     addr_in_sb' : G.(addr) ⊆ G.(sb) ;
-     ctrl_in_sb' : G.(ctrl) ⊆ G.(sb) ;
-     rmw_dep_in_sb' : G.(rmw_dep) ⊆ G.(sb) ;
-  }. 
-
-Record Wf_global (G: execution) :=
-  {
-    wf_rfE' : G.(rf) ≡ ⦗E G⦘ ⨾ G.(rf) ⨾ ⦗E G⦘ ;
-    wf_rfD' : G.(rf) ≡ ⦗W G⦘ ⨾ G.(rf) ⨾ ⦗R G⦘ ;
-    wf_rfl' : G.(rf) ⊆ same_loc G;
-    wf_rfv' : funeq (val G.(lab)) G.(rf) ;
-    wf_rff' : functional G.(rf)⁻¹ ;
-    wf_coE' : G.(co) ≡ ⦗E G⦘ ⨾ G.(co) ⨾ ⦗E G⦘ ;
-    wf_coD' : G.(co) ≡ ⦗W G⦘ ⨾ G.(co) ⨾ ⦗W G⦘ ;
-    wf_col' : G.(co) ⊆ same_loc G;
-    co_trans' : transitive G.(co) ;
-    wf_co_total' : forall ol, is_total (E G ∩₁ W G ∩₁ (fun x => loc G.(lab) x = ol)) G.(co) ;
-    co_irr' : irreflexive G.(co) ;
-    wf_init' : forall l, (exists b, E G b /\ loc G.(lab) b = Some l) -> E G (InitEvent l) ;
-    wf_init_lab' : forall l, G.(lab) (InitEvent l) = Astore Xpln Opln l 0 ;       
-  }.
-
-(* TODO: update Coq version? *)
-(* this lemma is mentioned on https://coq.inria.fr/library/Coq.Lists.List.html *)
-Lemma skipn_all2 {A: Type} (l: list A) n: length l <= n -> skipn n l = [].
-Proof. Admitted. 
 
 Lemma sublist_items {A: Type} (whole: list A) start size result (SL: result = sublist whole start size) (FULL: length result = size):
   forall i (INDEX: i < size), nth_error result i = nth_error whole (start + i). 
@@ -116,6 +78,21 @@ Proof.
   unfold init_execution. red. simpl. basic_solver. 
 Qed.
 
+Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
+  instrs sti = instrs sti'.
+Proof.
+  destruct STEPS as [tid STEPS]. apply crt_num_steps in STEPS.
+  destruct STEPS as [n STEPS].
+  generalize dependent sti'.
+  induction n.
+  - intros sti' STEPS. simpl in STEPS. generalize STEPS. basic_solver 10.
+  - intros sti' STEPS.
+    rewrite step_prev in STEPS. destruct STEPS as [sti'' STEPS'']. desc.
+    replace (instrs sti) with (instrs sti'').
+    { red in STEPS''0. desf. red in STEPS''0. desf. }
+    symmetry. eapply IHn. eauto.
+Qed.
+
 Lemma omm_steps_same_instrs sto sto' (STEPS: exists tid, (Ostep tid)＊ sto sto'):
   instrs sto = instrs sto'.
 Proof.
@@ -143,13 +120,6 @@ Definition oseq_step (tid : thread_id) sti1 sti2 :=
   exists block, on_block sti1 block /\
            (step tid) ^^ (length block) sti1 sti2. 
 
-Lemma same_struct_sym {A: Type} (ll: list (list A)): same_struct ll ll.
-Proof.
-  induction ll.
-  { vauto. }
-  econstructor; vauto.
-Qed. 
-
 Lemma igt_compiled_addr cond addr PO PI (IN_COMP: In (Instr.ifgoto cond addr) PI)
       (COMP: is_thread_compiled PO PI):
   addr <= length PI.
@@ -164,7 +134,7 @@ Proof.
        2: { eapply Forall2_length; eauto. }
        apply SAME_STRUCT_PREF. eapply correction_same_struct; eauto. }
   assert (exists BPI_corr, Forall2 (block_corrected BPI_corr) BPI0 BPI /\ same_struct BPI_corr BPI0) as CORR_ALT. 
-  { exists BPI0. splits; vauto. apply same_struct_sym. }
+  { exists BPI0. splits; vauto. apply same_struct_refl. }
   desc.
   replace (length (flatten BPI0)) with (length (flatten BPI_corr)). 
   2: { ins.
@@ -252,50 +222,6 @@ Proof.
   simpl. apply le_n_S. auto.
 Qed. 
 
-(* Lemma start_block_deterministic {A: Type} P (MINPROP: min_prop P) *)
-(*       ll *)
-(*       (block' : list A) *)
-(*       (* l *) *)
-(*       (* (FLT : l = flatten (block' :: ll))         *) *)
-(*       (NE_LL : Forall (fun l : list A => l <> []) (block' :: ll)) *)
-(*       (P_LL : Forall P (block' :: ll)) *)
-(*       (block : list A) *)
-(*       (NE_B : block <> []) *)
-(*       (BLOCK_P : P block) *)
-(*       (BLOCK : block = firstn (length block) (flatten (block' :: ll))) *)
-(*       (BLOCK' : block' = firstn (length block') (block' ++ flatten ll)): *)
-(*   block = block'. *)
-(* Proof.  *)
-(*   assert (length block <= length (block' :: ll)) as LEN_B. *)
-(*   { (* rewrite <- FLT in BLOCK. *) *)
-(*     apply (@f_equal _ _ (@length _)) in BLOCK. *)
-(*     pose proof (firstn_length_leq (block' :: ll)(length block)). *)
-(*     simpl in *. omega. } *)
-(*   assert (length block' <= length l) as LEN_BLOCK'.  *)
-(*   { subst l. simpl. rewrite app_length. omega. } *)
-(*   destruct (lt_eq_lt_dec (length block) (length block')) as [[LT | EQ] | GT]. *)
-(*   2: { forward eapply (@firstn_ge_incl _ (block' :: ll)(length block) (length block')) as PREF; [omega| ]. *)
-(*        rewrite EQ in PREF at 2. rewrite skipn_firstn_nil in PREF. *)
-(*        rewrite app_nil_r in PREF. simpl in BLOCK. congruence. } *)
-(*   { forward eapply (@firstn_ge_incl _ (block' :: ll)(length block) (length block')) as PREF; [omega| ]. *)
-(*     exfalso. *)
-(*     subst l. simpl in *. rewrite <- BLOCK, <- BLOCK' in PREF. *)
-(*     inversion  P_LL. subst.  *)
-(*     red in MINPROP. specialize (MINPROP block' H1 block (skipn (length block) block')). *)
-(*     apply MINPROP; vauto. *)
-(*     apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF. *)
-(*     red. ins. apply NE_B. apply length_zero_iff_nil. *)
-(*     apply length_zero_iff_nil in H. omega. } *)
-(*   forward eapply (@firstn_ge_incl _ (block' :: ll)(length block') (length block)) as PREF; [omega| ]. *)
-(*   exfalso.  *)
-(*   subst l. simpl in *. rewrite <- BLOCK, <- BLOCK' in PREF. *)
-(*   inversion  P_LL. subst.  *)
-(*   red in MINPROP. specialize (MINPROP block BLOCK_P block' (skipn (length block') block)). *)
-(*   apply MINPROP; vauto. *)
-(*   apply (@f_equal _ _ (@length _)) in PREF. rewrite app_length in PREF. *)
-(*   red. ins. inversion NE_LL. subst. apply H4. *)
-(*   apply length_zero_iff_nil.  apply length_zero_iff_nil in H. omega. *)
-(* Qed.  *)
 
 Lemma start_block_deterministic
       (A : Type)
@@ -385,22 +311,6 @@ Proof.
   inversion COMP; subst.
   all: (inversion COMP'; subst; inversion H0; subst; auto).
 Qed. 
-
-Lemma Forall_index {A: Type} (l: list A) P:
-  Forall P l <-> forall x i (XI: Some x = nth_error l i), P x.
-Proof.
-  split.
-  { intros FORALL x i XI.
-    forward eapply (@Forall2_index _ _ l l (fun x _ => P x)); eauto. 
-    clear XI. generalize dependent l. intros l. induction l.
-    { ins. }
-    ins. inversion FORALL. subst. apply Forall2_cons; auto. }
-  ins. induction l; auto.    
-  apply Forall_cons. split.
-  { apply H with (i := 0). auto. }
-  apply IHl. ins.
-  apply H with (i := S i). simpl. auto. 
-Qed.
 
 Lemma ll_l_corr_helper BPI PI (FLT: PI = flatten BPI) block b
       (COMP: exists PO, is_thread_block_compiled PO BPI)
@@ -626,7 +536,7 @@ Proof.
       replace pc1 with (pc1 + 0) by omega.
       eapply sublist_items; eauto. }
     (* assert (NEXT_PC: pc st2 = pc st1 + 1). *)
-    (* { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
+    (* { apply (same_relation_exp (pow_1 (step tid))) in STEPS. *)
     (*   red in STEPS. desc. red in STEPS. desc. *)
     (*   inversion ISTEP0; auto. *)
     (*   rewrite II, <- AT_PC in ISTEP. discriminate. } *)
@@ -652,7 +562,7 @@ Proof.
       replace pc1 with (pc1 + 0) by omega.
       eapply sublist_items; eauto. }
     (* assert (NEXT_PC: pc st2 = pc st1 + 1). *)
-    (* { apply (same_relation_exp (pow_unit (step tid))) in STEPS. *)
+    (* { apply (same_relation_exp (pow_1 (step tid))) in STEPS. *)
     (*   red in STEPS. desc. red in STEPS. desc. *)
     (*   inversion ISTEP0; auto. *)
     (*   rewrite II, <- AT_PC in ISTEP. discriminate. } *)
@@ -722,7 +632,7 @@ Proof.
     eapply sublist_items; vauto. }
   inversion COMP_BLOCK; subst; simpl in *; try omega.
   all: replace n with 1 in * by omega.
-  all: apply (same_relation_exp (pow_unit (step tid))) in STEPS.
+  all: apply (same_relation_exp (pow_1 (step tid))) in STEPS.
   all: red in STEPS; desc; red in STEPS; desc.
   all: inversion ISTEP0; vauto.
   all: destruct H as [md FENCE]; auto.
@@ -843,16 +753,6 @@ Proof.
   exists block. apply st_bst_prog_blocks; eauto. 
 Qed. 
 
-Lemma ll_index_shift' {A: Type} (ll: list (list A)) i j
-      block (ITH: Some block = nth_error ll i) (NE: Forall (fun l => l <> []) ll)
-      (J_BOUND: j <= length ll)
-      (JI: j = i + 1):
-  length (flatten (firstn j ll)) = length (flatten (firstn i ll)) + length block.
-Proof.
-  subst. erewrite first_end; eauto.
-  rewrite flatten_app, length_app. simpl. rewrite app_nil_r. auto.
-Qed.       
-
 Definition non_igt instr :=
   ~ match instr with | Instr.ifgoto _ _ => True | _ => False end. 
 
@@ -922,9 +822,11 @@ Proof.
   all: forward eapply STEPS2_HELPER; vauto.
 Qed.
 
-Lemma oseq_continuos st1 st2 tid (OSEQ: (oseq_step tid) st1 st2)
+Lemma oseq_continuos st1 st2 tid PO
+      (OSEQ: (oseq_step tid) st1 st2)
       (REACH: (step tid)＊ (init (instrs st1)) st1)
-      (COMP: exists PO, is_thread_compiled PO (instrs st1)):
+      (GOTO_RESTR: goto_addresses_restricted PO)
+      (COMP: is_thread_compiled PO (instrs st1)):
   at_compilation_block st2.
 Proof.
   red in OSEQ. desc.
@@ -960,11 +862,12 @@ Proof.
          exists tid. apply crt_num_steps. eauto. }
     red in OSEQ. desc.
     clear dependent oinstr. (* to avoid confusion with actual initial oinstr *)
-    erewrite ll_index_shift'; eauto.
-    3: { cut (bpc bst1 < length (binstrs bst1)); [ins; omega|].
-         apply nth_error_Some, OPT_VAL. vauto. }
-    2: { eapply COMPILED_NONEMPTY. Unshelve. 2: exact PO.
-         red in COMP. desc. vauto. }
+    pose proof ll_index_shift. specialize H with (j := (bpc bst1 + 1)). specialize_full H; eauto. 
+    { eapply COMPILED_NONEMPTY. Unshelve. 2: exact PO.
+      red in COMP. desc. vauto. }
+    { cut (bpc bst1 < length (binstrs bst1)); [ins; omega|].
+      apply nth_error_Some, OPT_VAL. vauto. }
+    cdes H. rewrite H1; auto.  
     subst st1. unfold bst2st in PC_PLUS. simpl in PC_PLUS. 
     rewrite <- PC_PLUS. 
     by destruct st2. }
@@ -1018,7 +921,7 @@ Proof.
       2: { simpl.
            replace (length (binstrs bst1)) with (length PO).
            2: { apply compilation_same_length. vauto. }
-           eapply compilation_addresses_restricted; vauto. }
+           red in GOTO_RESTR. eapply GOTO_RESTR; eauto. }
       unfold bst2st. simpl.
       replace (flatten (binstrs bst1)) with (instrs st2).
       replace (length (flatten (firstn addr0 (binstrs bst1)))) with (length (flatten (firstn addr0 BPI0))).
@@ -1035,6 +938,7 @@ Definition StepProp n := forall st1 st2 tid PO (STEPS: (step tid) ^^ n st1 st2)
                            (BOUND1: bpc bst1 <= length (binstrs bst1))
                            (BOUND2: bpc bst2 <= length (binstrs bst2))
                            (COMP: is_thread_block_compiled PO (binstrs bst1))
+                           (GOTO_RESTR: goto_addresses_restricted PO)
                            (SAME_BINSTRS: binstrs bst1 = binstrs bst2),
     (omm_block_step_PO PO tid)＊ bst1 bst2.
 
@@ -1069,7 +973,7 @@ Proof.
        { apply WHEN_SAME_BST. apply steps0 in STEPS. auto. }
        forward eapply (@steps_sub _ (step tid) (S n) _ _ 1) as [st' STEP];
          [omega | eauto |].
-       apply (same_relation_exp (pow_unit (step tid))) in STEP.
+       apply (same_relation_exp (pow_1 (step tid))) in STEP.
        do 2 (red in STEP; desc). 
        cut (None = nth_error (instrs (bst2st bst1)) (pc (bst2st bst1))); [congruence| ].
        symmetry. apply nth_error_None. red in ACB1. omega. }
@@ -1099,7 +1003,7 @@ Proof.
     specialize (BST_IF_ACB ACB'). destruct BST_IF_ACB as [bst' [BST' [SAME_BINSTRS' BPC']]]. 
     forward eapply IH as IH_; eauto.
     { red in SAME_BINSTRS'. rewrite SAME_BINSTRS'. auto. }
-    { Unshelve. 2: exact PO. congruence. }
+    { congruence. }
     { congruence. }
     apply clos_trans_in_rt. apply t_step_rt. exists bst'. split; auto. 
     red. splits; vauto. 
@@ -1112,7 +1016,9 @@ Qed.
 
 Definition is_block_terminal bst := bpc bst >= length (binstrs bst). 
 
-Lemma steps_imply_ommblocks bfin PO (BPC_LIM: bpc bfin <= length (binstrs bfin)) tid 
+Lemma steps_imply_ommblocks bfin PO tid
+      (BPC_LIM: bpc bfin <= length (binstrs bfin))
+      (GOTO_RESTR: goto_addresses_restricted PO)
       (COMP: is_thread_block_compiled PO (binstrs bfin)):
   let fin := (bst2st bfin) in 
   (step tid)＊ (init (instrs fin)) fin -> (omm_block_step_PO PO tid)＊ (binit (binstrs bfin)) bfin.

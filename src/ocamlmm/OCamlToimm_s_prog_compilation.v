@@ -3,13 +3,11 @@ Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
-Require Import imm_s_hb.
-Require Import imm_s.
-Require Import OCamlToimm_s_prog. 
 Require Import ClosuresProperties. 
 Require Import Prog.
 Require Import Utils. 
 Require Import ProgToExecution.
+Require Import ListHelpers.
 Require Import ProgToExecutionProperties.
 From PromisingLib Require Import Basic Loc.
 Require Import Basics. 
@@ -18,9 +16,8 @@ Set Implicit Arguments.
 
 Section OCaml_IMM_Compilation.   
 
-  Definition exchange_reg: Reg.t.
-    vauto.
-  Admitted.
+  (* Reserve the first register to hold read values during exchange instructions *)
+  Definition exchange_reg: Reg.t := xH. 
 
   Inductive is_instruction_compiled: Prog.Instr.t -> list Prog.Instr.t -> Prop :=
   | compiled_Rna lhs loc:
@@ -67,6 +64,19 @@ Section OCaml_IMM_Compilation.
       Forall2 is_instruction_compiled PO BPI0 /\
       Forall2 (block_corrected BPI0') BPI0 BPI.
 
+   Lemma correction_same_struct BPI0 BPI ref
+         (CORR: Forall2 (block_corrected ref) BPI0 BPI):
+     same_struct BPI0 BPI.
+   Proof.
+     generalize dependent BPI0.
+     induction BPI.
+     { ins. inversion CORR. red. auto. }
+     ins. inversion CORR. subst.
+     red. apply Forall2_cons.
+     { red in H2. eapply Forall2_length; eauto. }
+     apply IHBPI; auto.
+   Qed. 
+
   Definition is_thread_compiled_with PO PI BPI :=
     is_thread_block_compiled PO BPI /\ PI = flatten BPI.
 
@@ -79,48 +89,12 @@ Section OCaml_IMM_Compilation.
     red in COMP. red. desc. eauto.
   Qed. 
 
-  Lemma Forall2_index {A B: Type} (l1: list A) (l2: list B) P
-        (FORALL2: Forall2 P l1 l2)
-        x y i (XI: Some x = nth_error l1 i) (YI: Some y = nth_error l2 i):
-    P x y.
-  Proof.
-    generalize dependent l2. generalize dependent l1.
-    set (T := fun i => forall l1 : list A,
-                  Some x = nth_error l1 i ->
-                  forall l2 : list B, Forall2 P l1 l2 -> Some y = nth_error l2 i -> P x y).
-    eapply (strong_induction T).
-    ins. red. ins. unfold T in IH.
-    destruct l1; [destruct n; vauto |]. destruct l2; [destruct n; vauto |]. 
-    destruct n eqn:N.
-    { subst. simpl in *. inversion H. inversion H1. subst.
-      inversion H0. auto. }
-    subst. simpl in *. eapply IH; eauto.
-    inversion H0. auto.
-  Qed.
-
-
-  Lemma Forall2_length {A B: Type} (l1: list A) (l2: list B) P
-        (FORALL2: Forall2 P l1 l2):
-    length l1 = length l2.
-  Proof.
-    generalize dependent l2. induction l1.
-    { ins. inversion FORALL2. auto. }
-    ins. inversion FORALL2. subst. simpl. f_equal.
-    apply IHl1. auto.
-  Qed. 
-      
   Definition is_compiled (ProgO: Prog.Prog.t) (ProgI: Prog.Prog.t) :=
     ⟪ SAME_THREADS: forall t_id, IdentMap.In t_id ProgO <-> IdentMap.In t_id ProgI ⟫ /\
     ⟪ THREADS_COMPILED: forall thread PO PI (TO: Some PO = IdentMap.find thread ProgO)
                           (TI: Some PI = IdentMap.find thread ProgI),
         is_thread_compiled PO PI ⟫.
 
-  Lemma compilation_addresses_restricted PO BPI (COMP: is_thread_block_compiled PO BPI)
-        cond addr0 i (IN: Some (Instr.ifgoto cond addr0) = nth_error PO i):
-    addr0 <= length PO.
-  Proof.
-  Admitted.     
-  
   Lemma every_instruction_compiled PO BPI (COMP: is_thread_block_compiled PO BPI)
         i instr block (INSTR: Some instr = nth_error PO i)
         (BLOCK: Some block = nth_error BPI i):
@@ -158,21 +132,104 @@ Section OCaml_IMM_Compilation.
     apply compilation_same_length_weak. apply itbc_implies_itbcw. auto.
   Qed. 
 
-  Lemma steps_same_instrs sti sti' (STEPS: exists tid, (step tid)＊ sti sti'):
-    instrs sti = instrs sti'.
+  Lemma resulting_block_compiled_weak PO BPI b block
+        (COMP : itbc_weak PO BPI)
+        (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
+        (BLOCK: Some block = nth_error BPI b):
+    exists oinstr : Instr.t, is_instruction_compiled oinstr block.
+  Proof. 
+    red in COMP. desc.
+    assert (exists block0, Some block0 = nth_error BPI0 b) as [block0 BLOCK0].
+    { apply OPT_VAL, nth_error_Some.
+      replace (length BPI0) with (length BPI).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. eapply Forall2_length. eauto. }
+    assert (exists oinstr, Some oinstr = nth_error PO b) as [oinstr OINSTR]. 
+    { apply OPT_VAL. apply nth_error_Some.
+      replace (length PO) with (length BPI).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. apply compilation_same_length_weak. red. eauto. }
+    assert (is_instruction_compiled oinstr block0) as COMP_.
+    { eapply Forall2_index; eauto. }
+    assert (block_corrected BPI0' block0 block) as CORR.
+    { eapply Forall2_index; eauto. }
+    assert (exists oinstr0 : Instr.t, is_instruction_compiled oinstr0 block) as COMP'.
+    { inversion COMP_. 
+      6: { subst. inversion CORR. subst. inversion H3. subst.
+           inversion H1; vauto. }
+      all: (exists oinstr; subst).
+      all: (inversion CORR; subst; inversion H3; subst;
+            inversion H1; vauto).
+      all: (inversion H5; subst; inversion H2; subst; vauto). }
+    splits; auto.
+  Qed. 
+
+  Lemma resulting_block_compiled PO BPI b block
+        (COMP : is_thread_block_compiled PO BPI)
+        (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
+        (BLOCK: Some block = nth_error BPI b):
+    exists oinstr : Instr.t, is_instruction_compiled oinstr block.
   Proof.
-    destruct STEPS as [tid STEPS]. apply crt_num_steps in STEPS.
-    destruct STEPS as [n STEPS].
-    generalize dependent sti'.
-    induction n.
-    - intros sti' STEPS. simpl in STEPS. generalize STEPS. basic_solver 10.
-    - intros sti' STEPS.
-      rewrite step_prev in STEPS. destruct STEPS as [sti'' STEPS'']. desc.
-      replace (instrs sti) with (instrs sti'').
-      { red in STEPS''0. desf. red in STEPS''0. desf. }
-      symmetry. eapply IHn. eauto.
+    eapply resulting_block_compiled_weak; eauto. eapply itbc_implies_itbcw. eauto. 
+  Qed. 
+
+  Lemma COMPILED_NONEMPTY_weak PO BPI (COMP: itbc_weak PO BPI):
+    Forall (fun l : list Instr.t => l <> []) BPI.
+  Proof.
+    apply ForallE. intros block BLOCK.
+    apply In_nth_error in BLOCK. desc. symmetry in BLOCK. 
+    red in COMP. desc.
+    assert (exists block0, Some block0 = nth_error BPI0 n) as [block0 BLOCK0].
+    { apply OPT_VAL, nth_error_Some.
+      replace (length BPI0) with (length BPI).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. eapply Forall2_length. eauto. }
+    cut (block0 <> []).
+    2: { assert (exists instr, Some instr = nth_error PO n) as [instr INSTR].
+         { apply OPT_VAL, nth_error_Some.
+           replace (length PO) with (length BPI0).
+           { apply nth_error_Some, OPT_VAL. eauto. }
+           symmetry. eapply Forall2_length. eauto. }
+         pose proof (Forall2_index COMP _ INSTR BLOCK0).
+         inversion H; simpl; vauto. }
+    ins. red. ins. red in H. apply H.
+    apply length_zero_iff_nil. apply length_zero_iff_nil in H0.
+    rewrite <- H0.
+    pose proof (Forall2_index COMP0 _ BLOCK0 BLOCK). red in H1.
+    eapply Forall2_length; eauto.  
+  Qed. 
+  
+  Lemma COMPILED_NONEMPTY  PO BPI (COMP: is_thread_block_compiled PO BPI):
+    Forall (fun l : list Instr.t => l <> []) BPI.
+  Proof.
+    eapply COMPILED_NONEMPTY_weak. eapply itbc_implies_itbcw. eauto.  
   Qed.
 
+  Lemma progs_positions PO BPI0 BPI b
+    (COMPILED: Forall2 is_instruction_compiled PO BPI0)
+    (CORRECTED: Forall2 (block_corrected BPI0) BPI0 BPI)
+    (IN_PROG: b < length BPI):
+    exists oinstr block block0, 
+      ⟪OINSTR: Some oinstr = nth_error PO b ⟫/\
+      ⟪BLOCK: Some block = nth_error BPI b ⟫/\
+      ⟪BLOCK0: Some block0 = nth_error BPI0 b ⟫/\
+      ⟪COMP: is_instruction_compiled oinstr block0 ⟫/\
+      ⟪CORR: block_corrected BPI0 block0 block ⟫.
+  Proof.
+    apply nth_error_Some, OPT_VAL in IN_PROG. destruct IN_PROG as [block BLOCK].
+    assert (exists block0, Some block0 = nth_error BPI0 b) as [block0 BLOCK0].
+    { apply OPT_VAL. apply nth_error_Some.
+      replace (length BPI0) with (length BPI).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. eapply Forall2_length; eauto. } 
+    assert (exists oinstr, Some oinstr = nth_error PO b) as [oinstr OINSTR]. 
+    { apply OPT_VAL. apply nth_error_Some.        
+      replace (length PO) with (length BPI0).
+      { apply nth_error_Some, OPT_VAL. eauto. }
+      symmetry. eapply Forall2_length; eauto. }
+    repeat eexists; splits; eauto; eapply Forall2_index; eauto. 
+  Qed.
+  
   Definition value_regs value :=
     match value with
     | Value.const _ => []
@@ -209,18 +266,58 @@ Section OCaml_IMM_Compilation.
     | Instr.ifgoto expr _ => expr_regs expr
     end.
 
-  Lemma exchange_reg_dedicated' PI (COMP: exists PO, is_thread_compiled PO PI)
-        instr (INSTR: In instr PI):
+  Definition exchange_reg_reserved_instr instr :=
     match instr with
     | Instr.assign reg expr => reg <> exchange_reg /\ ~ In exchange_reg (expr_regs expr)
     | Instr.load _ reg lexpr => reg <> exchange_reg /\ ~ In exchange_reg (lexpr_regs lexpr)
     | Instr.store _ lexpr expr => ~ In exchange_reg (expr_regs expr) /\ ~ In exchange_reg (lexpr_regs lexpr)
-    | Instr.update rmw _ _ _ _ reg lexpr => ~ In exchange_reg (rmw_regs rmw) /\ ~ In exchange_reg (lexpr_regs lexpr)
+    | Instr.update rmw _ _ _ _ _ lexpr => ~ In exchange_reg (rmw_regs rmw) /\ ~ In exchange_reg (lexpr_regs lexpr)
     | Instr.ifgoto expr _ => ~ In exchange_reg (expr_regs expr)
     | _ => True
     end.
-  Proof. Admitted.
 
+  Definition exchange_reg_reserved PO := Forall exchange_reg_reserved_instr PO. 
+
+  Lemma exchange_reg_compilation_reserved PO PI
+        (REG_RESERVED: exchange_reg_reserved PO)
+        (COMP: is_thread_compiled PO PI)
+        instr (INSTR: In instr PI):
+    exchange_reg_reserved_instr instr. 
+  Proof.
+    destruct COMP as [BPI COMP]. red in COMP. desc.
+    subst. apply in_flatten_iff in INSTR. destruct INSTR as [block [BLOCK INSTR]].
+    red in COMP. desc.
+    apply In_nth_error in BLOCK. desc.
+    forward eapply progs_positions; eauto.
+    { eapply nth_error_Some, OPT_VAL. eauto. }
+    ins. desc.
+    assert (block0 = block) by congruence. subst.
+    cut (exchange_reg_reserved block).
+    { ins. eapply Forall_forall; eauto. }
+    cut (exchange_reg_reserved block1). 
+    { ins. red in CORR.
+      apply ForallE. intros iinstr IINSTR. apply In_nth_error in IINSTR. desc.
+      assert (exists iinstr0, Some iinstr0 = nth_error block1 n0).
+      { apply OPT_VAL, nth_error_Some. erewrite Forall2_length; eauto.
+        apply nth_error_Some, OPT_VAL. eauto. }
+      desc.
+      assert (exchange_reg_reserved_instr iinstr0).
+      { eapply Forall_forall; eauto. eapply nth_error_In; eauto. }
+      forward eapply Forall2_index as ADDR_CORR; eauto.
+      inversion ADDR_CORR; vauto. }
+    forward eapply (proj1 (Forall_forall exchange_reg_reserved_instr PO) REG_RESERVED) as OINSTR_REG. 
+    { eapply nth_error_In; eauto. }
+    inversion COMP1; vauto. 
+  Qed. 
+
+  Definition goto_addresses_restricted PO :=
+    forall cond addr0 i (IN: Some (Instr.ifgoto cond addr0) = nth_error PO i),
+      addr0 <= length PO.
+    
+  Definition omm_clarified PO :=
+    exchange_reg_reserved PO /\
+    goto_addresses_restricted PO. 
+    
   Definition lexpr_of lexpr instr :=
     match instr with
     | Instr.load _ _ lexpr' 
@@ -272,15 +369,14 @@ Section OCaml_IMM_Compilation.
     - destruct op1, op2; vauto; simpl in NOT_EXC; intuition.
   Qed. 
 
-  Lemma eval_instr_expr PI (COMP: exists PO, is_thread_compiled PO PI)
+  Lemma eval_instr_expr PI (REG_RESERVED: exchange_reg_reserved PI)
         st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
         instr (INSTR: In instr PI) expr (EXPR_OF: expr_of expr instr):
     RegFile.eval_expr (regf st) expr = RegFile.eval_expr (regf st') expr.
   Proof.
     apply eval_expr_same; auto.
-    forward eapply exchange_reg_dedicated' as DED; eauto.
-    red in EXPR_OF. 
-    destruct instr; desc; vauto.
+    eapply Forall_forall in REG_RESERVED; eauto.
+    destruct instr; simpl in *; desc; vauto.     
   Qed. 
     
   Lemma eval_lexpr_same st st'
@@ -294,42 +390,36 @@ Section OCaml_IMM_Compilation.
     apply eval_expr_same; auto.  
   Qed. 
 
-  Lemma eval_instr_lexpr PI (COMP: exists PO, is_thread_compiled PO PI)
+  Lemma eval_instr_lexpr PI (REG_RESERVED: exchange_reg_reserved PI)
         st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
         instr (INSTR: In instr PI) lexpr (EXPR_OF: lexpr_of lexpr instr):
     RegFile.eval_lexpr (regf st) lexpr = RegFile.eval_lexpr (regf st') lexpr.
   Proof.
     apply eval_lexpr_same; auto.
-    forward eapply exchange_reg_dedicated' as DED; eauto.
-    red in EXPR_OF. 
-    destruct instr; desc; vauto.
+    eapply Forall_forall in REG_RESERVED; eauto.
+    destruct instr; simpl in *; desc; vauto.     
   Qed. 
     
-  Lemma eval_rmw_expr PI (COMP: exists PO, is_thread_compiled PO PI)
+  Lemma eval_rmw_expr PI (REG_RESERVED: exchange_reg_reserved PI)
         st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
         rmw (INSTR: exists rex x orr orw lhs loc, In (Instr.update rmw rex x orr orw lhs loc) PI)
         expr (EXPR_OF: rmw_expr_of expr rmw):
     RegFile.eval_expr (regf st) expr = RegFile.eval_expr (regf st') expr.
   Proof.
     desc. apply eval_expr_same; auto.
-    forward eapply exchange_reg_dedicated' as DED; eauto.
-    red in EXPR_OF. 
-    destruct rmw; desc; vauto.
-    simpl in DED.
-    red. ins. apply DED.
-    apply in_or_app. 
-    des; vauto. 
+    eapply Forall_forall in REG_RESERVED; eauto.
+    destruct rmw; simpl in *; desc; vauto.
+    des; subst; intuition. 
   Qed. 
     
-  Lemma eval_safe_reg PI (COMP: exists PO, is_thread_compiled PO PI)
+  Lemma eval_safe_reg PI (REG_RESERVED: exchange_reg_reserved PI)
         st st' (REGF_SIM: forall reg (NOT_EXC: reg <> exchange_reg), regf st reg = regf st' reg)
         instr (INSTR: In instr PI) reg (SAFE_REG_OF: safe_reg_of reg instr):
     regf st reg = regf st' reg.
   Proof.
     apply REGF_SIM; auto.
-    forward eapply exchange_reg_dedicated' as DED; eauto.
-    red in SAFE_REG_OF. 
-    destruct instr; desc; vauto.
+    eapply Forall_forall in REG_RESERVED; eauto.
+    destruct instr; simpl in *; desc; vauto.     
   Qed.
 
   Lemma eval_expr_deps_same st st'
@@ -349,15 +439,14 @@ Section OCaml_IMM_Compilation.
       + rewrite set_inter_union_l. apply set_equiv_union; intuition. 
   Qed. 
   
-  Lemma eval_instr_expr_deps PI (COMP: exists PO, is_thread_compiled PO PI)
+  Lemma eval_instr_expr_deps PI (REG_RESERVED: exchange_reg_reserved PI)
         st st' (DEPF_SIM: forall reg (NEXC: reg <> exchange_reg), depf st reg ≡₁ depf st' reg ∩₁ RWO (G st'))
         instr (INSTR: In instr PI) expr (EXPR_OF: expr_of expr instr):
     DepsFile.expr_deps (depf st) expr ≡₁ DepsFile.expr_deps (depf st') expr ∩₁ RWO (G st').
   Proof.
     apply eval_expr_deps_same; auto.
-    forward eapply exchange_reg_dedicated' as DED; eauto.
-    red in EXPR_OF. 
-    destruct instr; desc; vauto.    
+    eapply Forall_forall in REG_RESERVED; eauto.
+    destruct instr; simpl in *; desc; vauto.     
   Qed.
   
   Lemma eval_lexpr_deps_same st st'
@@ -371,16 +460,15 @@ Section OCaml_IMM_Compilation.
     red. ins. apply NOT_EXC. vauto.
   Qed. 
     
-  Lemma eval_instr_lexpr_deps PI (COMP: exists PO, is_thread_compiled PO PI)
+  Lemma eval_instr_lexpr_deps PI (REG_RESERVED: exchange_reg_reserved PI)
         st st' (DEPF_SIM: forall reg (NEXC: reg <> exchange_reg), depf st reg ≡₁ depf st' reg ∩₁ RWO (G st'))
         instr (INSTR: In instr PI) lexpr (EXPR_OF: lexpr_of lexpr instr):
     DepsFile.lexpr_deps (depf st) lexpr ≡₁ DepsFile.lexpr_deps (depf st') lexpr ∩₁ RWO (G st').
   Proof.
     apply eval_lexpr_deps_same; auto.
-    forward eapply exchange_reg_dedicated' as DED; eauto.
-    red in EXPR_OF. 
-    destruct instr; desc; vauto.    
-  Qed.     
+    eapply Forall_forall in REG_RESERVED; eauto.
+    destruct instr; simpl in *; desc; vauto.     
+  Qed.
     
 End OCaml_IMM_Compilation.
 
@@ -410,7 +498,6 @@ Section OCaml_IMM_Correspondence.
        ectrl := bectrl bst;      
     |}.
 
-  (* TODO: understand https://stackoverflow.com/questions/27322979/why-coq-doesnt-allow-inversion-destruct-etc-when-the-goal-is-a-type*)
   Definition block_step_helper block (tid : thread_id) bst1 bst2 :=
     ⟪ AT_BLOCK: Some block = nth_error (binstrs bst1) (bpc bst1) ⟫ /\
     ⟪ BLOCK_STEP: (step tid) ^^ (length block) (bst2st bst1) (bst2st bst2) ⟫. 
@@ -459,6 +546,35 @@ Section OCaml_IMM_Correspondence.
     ⟪ BINSTRS_SAME: binstrs bst1 = binstrs bst2 ⟫ /\
     ⟪ COMPILED: exists PO, is_thread_block_compiled PO (binstrs bst1) ⟫. 
   
+  Lemma near_pc b block d (BLOCK_POS: Some b = nth_error block d)
+        bst st (BST2ST: st = bst2st bst)
+        (AT_BLOCK: Some block = nth_error (binstrs bst) (bpc bst))
+        (BST_NONTERM: bpc bst < length (binstrs bst)):
+    Some b = nth_error (instrs st) (pc st + d).
+  Proof.
+    replace (instrs st) with (flatten (binstrs bst)).
+    2: { unfold bst2st in BST2ST. subst. auto. }
+    replace (pc st) with (length (flatten (firstn (bpc bst) (binstrs bst)))).
+    2: { unfold bst2st in BST2ST. subst. auto. }
+    rewrite <- (firstn_skipn (bpc bst) (binstrs bst)) in AT_BLOCK. 
+    rewrite nth_error_app2 in AT_BLOCK.
+    2: { apply firstn_le_length. }
+    rewrite firstn_length_le in AT_BLOCK; [| omega]. 
+    rewrite Nat.sub_diag in AT_BLOCK.
+    rewrite (@flatten_split _ (binstrs bst) (bpc bst)); [| auto]. 
+    rewrite nth_error_app2; [| omega].
+    rewrite minus_plus.
+    remember (skipn (bpc bst) (binstrs bst)) as ll. 
+    assert (forall {A: Type} l (x: A), Some x = nth_error l 0 -> exists l', l = x :: l'). 
+    { ins. destruct l; vauto. }
+    apply H in AT_BLOCK. desc.
+    rewrite AT_BLOCK. simpl.
+    rewrite nth_error_app1.
+    { cut (exists b, Some b = nth_error block d); auto. 
+      apply OPT_VAL. congruence. }
+    apply nth_error_Some. congruence. 
+  Qed. 
+
   Lemma block_step_nonterminal bst bst' tid
         (OSEQ_STEP: block_step tid bst bst'):
     bpc bst < length (binstrs bst).
@@ -470,7 +586,7 @@ Section OCaml_IMM_Correspondence.
     intuition. congruence.
   Qed.
 
-Definition omm_block_step_PO PO (tid : thread_id) (bst1 bst2: block_state) :=
+  Definition omm_block_step_PO PO (tid : thread_id) (bst1 bst2: block_state) :=
     ⟪ BLOCK_STEP: exists block, block_step_helper block tid bst1 bst2 ⟫ /\
     ⟪ BINSTRS_SAME: binstrs bst1 = binstrs bst2 ⟫ /\
     ⟪ COMPILED: is_thread_block_compiled PO (binstrs bst1) ⟫. 
@@ -479,61 +595,8 @@ Definition omm_block_step_PO PO (tid : thread_id) (bst1 bst2: block_state) :=
     block_step tid bst bst'.
   Proof. red in OMM_BLOCK_STEP; desc. red in BLOCK_STEP. desc. vauto. Qed.
 
-  Definition sublist {A: Type} (l: list A) (start len: nat) := firstn len (skipn start l).  
-    
-  Lemma first_end {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n):
-    firstn (n + 1) l = firstn n l ++ [x].
-  Proof.
-    ins. 
-    symmetry in NTH. apply nth_error_split in NTH as [l1 [l2 [CAT H]]].
-    rewrite <- H. pose proof (@firstn_app_2 A 1 l1 (x :: l2)).
-    rewrite CAT. simpl in H0. rewrite H0.
-    pose proof (@firstn_app_2 A 0 l1). simpl in H1. rewrite app_nil_r, NPeano.Nat.add_0_r in H1.
-    rewrite H1. auto. 
-  Qed.
+  Definition sublist {A: Type} (l: list A) (start len: nat) := firstn len (skipn start l).
       
-
-  Lemma resulting_block_compiled_weak PO BPI b block
-        (COMP : itbc_weak PO BPI)
-        (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
-        (BLOCK: Some block = nth_error BPI b):
-    exists oinstr : Instr.t, is_instruction_compiled oinstr block.
-  Proof. 
-    red in COMP. desc.
-    assert (exists block0, Some block0 = nth_error BPI0 b) as [block0 BLOCK0].
-    { apply OPT_VAL, nth_error_Some.
-      replace (length BPI0) with (length BPI).
-      { apply nth_error_Some, OPT_VAL. eauto. }
-      symmetry. eapply Forall2_length. eauto. }
-    assert (exists oinstr, Some oinstr = nth_error PO b) as [oinstr OINSTR]. 
-    { apply OPT_VAL. apply nth_error_Some.
-      replace (length PO) with (length BPI).
-      { apply nth_error_Some, OPT_VAL. eauto. }
-      symmetry. apply compilation_same_length_weak. red. eauto. }
-    assert (is_instruction_compiled oinstr block0) as COMP_.
-    { eapply Forall2_index; eauto. }
-    assert (block_corrected BPI0' block0 block) as CORR.
-    { eapply Forall2_index; eauto. }
-    assert (exists oinstr0 : Instr.t, is_instruction_compiled oinstr0 block) as COMP'.
-    { inversion COMP_. 
-      6: { subst. inversion CORR. subst. inversion H3. subst.
-           inversion H1; vauto. }
-      all: (exists oinstr; subst).
-      all: (inversion CORR; subst; inversion H3; subst;
-            inversion H1; vauto).
-      all: (inversion H5; subst; inversion H2; subst; vauto). }
-    splits; auto.
-  Qed. 
-
-  Lemma resulting_block_compiled PO BPI b block
-        (COMP : is_thread_block_compiled PO BPI)
-        (BPI_NE: Forall (fun l : list Instr.t => l <> []) BPI)
-        (BLOCK: Some block = nth_error BPI b):
-    exists oinstr : Instr.t, is_instruction_compiled oinstr block.
-  Proof.
-    eapply resulting_block_compiled_weak; eauto. eapply itbc_implies_itbcw. eauto. 
-  Qed. 
-
 End OCaml_IMM_Correspondence. 
 
 Section CorrectedDefinitions.
@@ -548,6 +611,5 @@ Section CorrectedDefinitions.
     addr G1 ≡ addr G2 /\
     ctrl G1 ≡ ctrl G2 /\
     rmw_dep G1 ≡ rmw_dep G2.    
-
   
 End CorrectedDefinitions.   

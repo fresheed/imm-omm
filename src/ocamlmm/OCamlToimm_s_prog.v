@@ -97,14 +97,6 @@ Section OCaml_Program.
       ⟪ TERMINAL : is_terminal s ⟫ /\
       ⟪ PEQ : s.(G) = pe ⟫.
 
-  (* separation should be consistent across all threads *)
- 
-  (* Definition is_matching_mode instr mode := *)
-  (*   match instr with *)
-  (*   | Instr.load md _ _ | Instr.store md _ _ => (mode = md) *)
-  (*   | _ => True *)
-  (*   end. *)
-
   Definition instr_mode instr :=
     match instr with
     | Instr.load mode _ _ | Instr.store mode _ _ | Instr.fence mode => Some mode

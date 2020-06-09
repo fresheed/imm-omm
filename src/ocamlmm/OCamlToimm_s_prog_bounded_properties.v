@@ -6,7 +6,8 @@ Require Import Execution.
 Require Import Execution_eco.
 Require Import imm_s_hb.
 Require Import imm_s.
-Require Import ClosuresProperties. 
+Require Import ClosuresProperties.
+Require Import OCamlToimm_s_steps.
 Require Import OCamlToimm_s_prog_compilation.
 Require Import Prog.
 Require Import ProgToExecution.
@@ -100,15 +101,41 @@ Section BoundedProperties.
     fun lbl => match lbl with
             | Astore _ Orlx _ _ => true
             | _ => false
-            end.
+            end.             
   Definition is_orlx_w := fun {A: Type} (labfun: A -> label) ev =>
                            is_w labfun ev && is_only_rlx labfun ev. 
-             
   Lemma orlx_w_pl: processes_lab (@is_orlx_w actid) orlx_w_matcher. 
   Proof.
     red. intros. unfold is_orlx_w, is_only_rlx, is_w, orlx_w_matcher, Events.mod.
     type_solver. 
+  Qed.
+
+  Definition f_acq_matcher :=
+    fun lbl => match lbl with
+            | Afence mode => mode_le Oacq mode
+            | _ => false
+            end.
+  Definition is_f_acq := fun {A: Type} (labfun: A -> label) ev =>
+                           is_f labfun ev && is_acq labfun ev. 
+  Lemma f_acq_pl: processes_lab (@is_f_acq actid) f_acq_matcher. 
+  Proof.
+    red. intros. unfold is_f_acq, is_f, is_acq, f_acq_matcher, mode_le, Events.mod. 
+    type_solver. 
   Qed. 
+
+  Definition f_acqrel_matcher :=
+    fun lbl => match lbl with
+            | Afence mode => mode_le Oacqrel mode
+            | _ => false
+            end.
+  Definition is_f_acqrel := fun {A: Type} (labfun: A -> label) ev =>
+                           is_f labfun ev && is_acqrel labfun ev. 
+  Lemma f_acqrel_pl: processes_lab (@is_f_acqrel actid) f_acqrel_matcher. 
+  Proof.
+    red. intros. unfold is_f_acqrel, is_f, is_acqrel, f_acqrel_matcher, mode_le, Events.mod. 
+    type_solver. 
+  Qed. 
+  
     
   Definition index_bounded ev_set st :=
     ev_set (lab (G st)) ⊆₁ (fun e => index e < eindex st).

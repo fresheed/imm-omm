@@ -48,7 +48,7 @@ Section ClosuresProperties.
     pose proof (@steps_split (i+1) i 1 eq_refl x z2).
     apply H in Ri1. destruct Ri1 as [z1 [Ri R1]].
     exists z1. exists z2. split; [auto| ]. 
-    apply (same_relation_exp (pow_unit r)). auto.
+    apply (same_relation_exp (pow_1 r)). auto.
   Qed. 
   
   Lemma step_prev x y k: r^^(S k) x y <-> exists z, r^^k x z /\ r z y.

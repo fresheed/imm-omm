@@ -19,6 +19,7 @@ Require Import OCamlToimm_s_prog_build_graph.
 Require Import OCamlToimm_s_compcorrhelpers. 
 Require Import OCamlToimm_s_steps. 
 Require Import Utils.
+Require Import ListHelpers.
 Require Import ClosuresProperties. 
 Require Import Prog.
 Require Import ProgToExecution.
@@ -285,10 +286,11 @@ Section CompilationCorrectness.
   Notation "'hbo'" := (OCaml.hb). 
   Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1).
   Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
-  (* Notation "'Loc_' G l" := (fun x => loc (G.(lab) x) = l) (at level 1). *)
+  
   Variable ProgO ProgI: Prog.Prog.t.
   Hypothesis Compiled: is_compiled ProgO ProgI.
-  Hypothesis OCamlProgO: OCamlProgram ProgO.
+  Hypothesis OCamlProgO: OCamlProgram ProgO.  
+  Hypothesis OMM_CLARIFIED: forall thread PO (THREAD: Some PO = IdentMap.find thread ProgO), omm_clarified PO.
   
   Variable GI: execution.
   Hypothesis WFI: Wf GI.
@@ -701,14 +703,16 @@ Section CompilationCorrectness.
     ins.
     (* bug? desf hangs here *)
     destruct ExecI as [EVENTS THREAD_EXEC]. clear ExecI.
-    red in Compiled. destruct Compiled as [SAME_KEYS THREADS_COMP]. 
-    assert (exists POi, is_thread_compiled POi Pi) as [POi POi_COMP].
-    { assert (exists POi, Some POi = IdentMap.find tid ProgO) as [POi POi_THREAD]. 
-      { apply find_iff_in. apply SAME_KEYS. apply find_iff_in. eauto. }
-      exists POi. eapply THREADS_COMP; eauto. }
+    red in Compiled. destruct Compiled as [SAME_KEYS THREADS_COMP].
+    assert (exists POi, Some POi = IdentMap.find tid ProgO) as [POi POi_THREAD]. 
+    { apply find_iff_in. apply SAME_KEYS. apply find_iff_in. eauto. }
+    assert (is_thread_compiled POi Pi) as POi_COMP.
+    { eapply THREADS_COMP; eauto. }
     forward eapply THREAD_EXEC; eauto. 
     ins. desc. exists pe. split; auto. 
     eapply GI_1thread_omm_premises; eauto.
+    cdes OMM_CLARIFIED. specialize (OMM_CLARIFIED0 tid POi POi_THREAD).
+    desc. auto.
   Qed. 
     
   Lemma comp_corr_result oinstr block0 block BPI_corr

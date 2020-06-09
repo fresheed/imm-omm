@@ -11,9 +11,11 @@ Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
 Require Import OCamlToimm_s.
-Require Import OCamlToimm_s_prog. 
-Require Import OCamlToimm_s_prog_compilation. 
+Require Import OCamlToimm_s_prog.
+Require Import ListHelpers.
+Require Import OCamlToimm_s_prog_compilation.
 Require Import OCamlToimm_s_prog_bounded_properties.
+Require Import OCamlToimm_s_steps.
 Require Import ListHelpersTemp.
 Require Import Utils.
 Require Import ClosuresProperties. 
@@ -92,39 +94,6 @@ Section PairStep.
     Unshelve. auto.
   Qed. 
 
-  Lemma flatten_split {A: Type} (ll: list (list A)) bi (INDEX: bi < length ll):
-    flatten ll = flatten (firstn bi ll) ++ flatten (skipn bi ll).
-  Proof. ins. rewrite <- flatten_app. rewrite firstn_skipn. auto. Qed.
-   
-  Lemma near_pc b block d (BLOCK_POS: Some b = nth_error block d)
-        bst st (BST2ST: st = bst2st bst)
-        (AT_BLOCK: Some block = nth_error (binstrs bst) (bpc bst))
-        (BST_NONTERM: bpc bst < length (binstrs bst)):
-    Some b = nth_error (instrs st) (pc st + d).
-  Proof.
-    replace (instrs st) with (flatten (binstrs bst)).
-    2: { unfold bst2st in BST2ST. subst. auto. }
-    replace (pc st) with (length (flatten (firstn (bpc bst) (binstrs bst)))).
-    2: { unfold bst2st in BST2ST. subst. auto. }
-    rewrite <- (firstn_skipn (bpc bst) (binstrs bst)) in AT_BLOCK. 
-    rewrite nth_error_app2 in AT_BLOCK.
-    2: { apply firstn_le_length. }
-    rewrite firstn_length_le in AT_BLOCK; [| omega]. 
-    rewrite Nat.sub_diag in AT_BLOCK.
-    rewrite (@flatten_split _ (binstrs bst) (bpc bst)); [| auto]. 
-    rewrite nth_error_app2; [| omega].
-    rewrite minus_plus.
-    remember (skipn (bpc bst) (binstrs bst)) as ll. 
-    assert (forall {A: Type} l (x: A), Some x = nth_error l 0 -> exists l', l = x :: l'). 
-    { ins. destruct l; vauto. }
-    apply H in AT_BLOCK. desc.
-    rewrite AT_BLOCK. simpl.
-    rewrite nth_error_app1.
-    { cut (exists b, Some b = nth_error block d); auto. 
-      apply OPT_VAL. congruence. }
-    apply nth_error_Some. congruence. 
-  Qed. 
-
   Lemma reach_with_blocks bst st tid (BST2ST: st = bst2st bst)
         (BLOCK_REACH: (block_step tid)＊ (binit (binstrs bst)) bst):
     exists n_steps, (step tid) ^^ n_steps (init (instrs st)) st.
@@ -196,218 +165,84 @@ Section PairStep.
       specialize (SAME_LAB x H). congruence.  
   Qed.    
 
-  Definition same_struct {A: Type} (ll1 ll2: list (list A)) :=
-    Forall2 (fun l1 l2 => length l1 = length l2) ll1 ll2.
-  
-  Lemma SAME_STRUCT_PREF {A: Type} (ll1 ll2: list (list A)) (SS: same_struct ll1 ll2) i: 
-    length (flatten (firstn i ll1)) = length (flatten (firstn i ll2)).
-  Proof.
-    generalize dependent ll2. generalize dependent i.
-    induction ll1.
-    { ins. inversion SS. subst. auto. }
-    ins. inversion SS. subst.
-    destruct i.
-    { simpl. auto. }
-    simpl. do 2 rewrite length_app. f_equal; auto.  
-  Qed. 
-    
-  Lemma NONEMPTY_PREF {A: Type} (ll: list (list A)) (NE: Forall (fun l => l <> []) ll)
-        i j (SAME_LEN: length (flatten (firstn i ll)) = length (flatten (firstn j ll))) (INDEXI: i <= length ll) (INDEXJ: j <= length ll ): 
-    i = j.
-  Proof.
-    generalize dependent i. generalize dependent j.
-    induction ll.
-    { ins. omega. }
-    ins. destruct i, j; [auto | | |]. 
-    { simpl in SAME_LEN. rewrite length_app in SAME_LEN.
-      inversion NE. subst. destruct a; vauto. }
-    { simpl in SAME_LEN. rewrite length_app in SAME_LEN.
-      inversion NE. subst. destruct a; vauto. }
-    f_equal.
-    apply IHll.
-    { inversion NE. auto. }
-    { apply le_S_n. auto. }
-    2: { apply le_S_n. auto. }
-    simpl in SAME_LEN. do 2 rewrite length_app in SAME_LEN.
-    omega.
-  Qed. 
-  
-  Lemma COMPILED_NONEMPTY_weak  PO BPI (COMP: itbc_weak PO BPI):
-    Forall (fun l : list Instr.t => l <> []) BPI.
-  Proof.
-    apply ForallE. intros block BLOCK.
-    apply In_nth_error in BLOCK. desc. symmetry in BLOCK. 
-    red in COMP. desc.
-    assert (exists block0, Some block0 = nth_error BPI0 n) as [block0 BLOCK0].
-    { apply OPT_VAL, nth_error_Some.
-      replace (length BPI0) with (length BPI).
-      { apply nth_error_Some, OPT_VAL. eauto. }
-      symmetry. eapply Forall2_length. eauto. }
-    cut (block0 <> []).
-    2: { assert (exists instr, Some instr = nth_error PO n) as [instr INSTR].
-         { apply OPT_VAL, nth_error_Some.
-           replace (length PO) with (length BPI0).
-           { apply nth_error_Some, OPT_VAL. eauto. }
-           symmetry. eapply Forall2_length. eauto. }
-         pose proof (Forall2_index COMP _ INSTR BLOCK0).
-         inversion H; simpl; vauto. }
-    ins. red. ins. red in H. apply H.
-    apply length_zero_iff_nil. apply length_zero_iff_nil in H0.
-    rewrite <- H0.
-    pose proof (Forall2_index COMP0 _ BLOCK0 BLOCK). red in H1.
-    eapply Forall2_length; eauto.  
-  Qed. 
-  
-  Lemma COMPILED_NONEMPTY  PO BPI (COMP: is_thread_block_compiled PO BPI):
-    Forall (fun l : list Instr.t => l <> []) BPI.
-  Proof.
-    eapply COMPILED_NONEMPTY_weak. eapply itbc_implies_itbcw. eauto.  
+    Variable (sto: state) (bsti bsti': block_state) (tid: thread_id). 
+    Hypothesis MM_SIM: mm_similar_states sto bsti.
+    (* Hypothesis EXC_RES: exchange_reg_reserved (instrs sto). *)
+    Hypothesis OMM_CLARIFIED: omm_clarified (instrs sto). 
+    Hypothesis OSEQ_STEP: omm_block_step_PO (instrs sto) tid bsti bsti'. 
+        
+    Notation "'sti'" := (bst2st bsti) (at level 1). 
+    Notation "'sti''" := (bst2st bsti') (at level 1).     
+    Notation "'PO'" := (instrs sto) (at level 1).
+
+    Lemma EXC_RES_COMP st (BST2ST: st = bst2st bsti):
+      exchange_reg_reserved (instrs st).
+    Proof.
+      cdes MM_SIM. 
+      subst. red.
+      apply Forall_forall. ins.
+      cdes OMM_CLARIFIED. 
+      eapply exchange_reg_compilation_reserved; eauto.
+      red. eexists. vauto.
+    Qed.
+
+    Lemma INSTR_RES_HELPER st instr n
+          (BST2ST: st = bst2st bsti) 
+          (INSTR: Some instr = nth_error (instrs st) n):
+      exchange_reg_reserved_instr instr.
+    Proof.
+      forward eapply EXC_RES_COMP as RES; eauto.
+      red in RES. eapply (proj1 (Forall_forall _ _)) in RES; eauto.
+      eapply nth_error_In; eauto.
+    Qed. 
+
+    Lemma INSTR_LEXPR_HELPER st instr n lexpr
+        (BST2ST: st = bst2st bsti)
+        (INSTR: Some instr = nth_error (instrs st) n)
+        (EXPR_OF: lexpr_of lexpr instr):
+    RegFile.eval_lexpr (regf sto) lexpr = RegFile.eval_lexpr (regf st) lexpr.
+  Proof. 
+    cdes MM_SIM. desc.
+    eapply (eval_instr_lexpr (EXC_RES_COMP BST2ST)); vauto.
+    eapply nth_error_In. eauto. 
   Qed.
 
-  Lemma INSTR_LEXPR_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
-        sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) lexpr (EXPR_OF: lexpr_of lexpr instr):
-    RegFile.eval_lexpr (regf sto) lexpr = RegFile.eval_lexpr (regf sti) lexpr.
+  Lemma INSTR_EXPR_HELPER st instr n expr
+        (BST2ST: st = bst2st bsti)
+        (INSTR: Some instr = nth_error (instrs st) n)
+        (EXPR_OF: expr_of expr instr):
+    RegFile.eval_expr (regf sto) expr = RegFile.eval_expr (regf st) expr.
   Proof. 
-    red in MM_SIM. desc.
-    eapply eval_instr_lexpr; eauto. 
-    { exists (instrs sto). red. unfold is_thread_compiled_with.
-      eexists. eauto. }
-    { replace (regf sti) with (bregf bsti); vauto. }
-    eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
+    cdes MM_SIM. desc.
+    eapply (eval_instr_expr (EXC_RES_COMP BST2ST)); vauto.
+    eapply nth_error_In. eauto. 
   Qed. 
-
-  Lemma INSTR_EXPR_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
-        sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) expr (EXPR_OF: expr_of expr instr):
-    RegFile.eval_expr (regf sto) expr = RegFile.eval_expr (regf sti) expr.
-  Proof. 
-    red in MM_SIM. desc.
-    eapply eval_instr_expr; eauto. 
-    { exists (instrs sto). red. unfold is_thread_compiled_with.
-      eexists. eauto. }
-    { replace (regf sti) with (bregf bsti); vauto. }
-    eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
-  Qed.
   
-  Lemma INSTR_LEXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
-        sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) lexpr (EXPR_OF: lexpr_of lexpr instr):
-    DepsFile.lexpr_deps (depf sto) lexpr ≡₁ DepsFile.lexpr_deps (depf sti) lexpr ∩₁ (RWO (bG bsti)).
+  Lemma INSTR_LEXPR_DEPS_HELPER st instr n lexpr
+        (BST2ST: st = bst2st bsti)
+        (INSTR: Some instr = nth_error (instrs st) n)
+        (EXPR_OF: lexpr_of lexpr instr):
+    DepsFile.lexpr_deps (depf sto) lexpr ≡₁ DepsFile.lexpr_deps (depf st) lexpr ∩₁ (RWO (bG bsti)).
   Proof. 
-    red in MM_SIM. desc.
-    replace (bG bsti) with (G sti) by vauto. 
-    eapply eval_instr_lexpr_deps; eauto. 
-    { exists (instrs sto). red. unfold is_thread_compiled_with.
-      eexists. eauto. }
-    { replace (regf sti) with (bregf bsti); vauto. }
-    eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
-  Qed.
+    cdes MM_SIM. desc.
+    replace (bG bsti) with (G st) by vauto.
+    eapply (eval_instr_lexpr_deps (EXC_RES_COMP BST2ST)); vauto.
+    eapply nth_error_In. eauto. 
+  Qed. 
   
-  Lemma INSTR_EXPR_DEPS_HELPER sto bsti (MM_SIM: mm_similar_states sto bsti)
-        sti (BST2ST: sti = bst2st bsti) instr n (INSTR: Some instr = nth_error (instrs sti) n) expr (EXPR_OF: expr_of expr instr):
-    DepsFile.expr_deps (depf sto) expr ≡₁ DepsFile.expr_deps (depf sti) expr ∩₁ RWO (bG bsti).
+  Lemma INSTR_EXPR_DEPS_HELPER st instr n expr
+        (BST2ST: st = bst2st bsti)
+        (INSTR: Some instr = nth_error (instrs st) n)
+        (EXPR_OF: expr_of expr instr):
+    DepsFile.expr_deps (depf sto) expr ≡₁ DepsFile.expr_deps (depf st) expr ∩₁ RWO (bG bsti).
   Proof. 
-    red in MM_SIM. desc.
-    replace (bG bsti) with (G sti) by vauto. 
-    eapply eval_instr_expr_deps; eauto. 
-    { exists (instrs sto). red. unfold is_thread_compiled_with.
-      eexists. eauto. }
-    { replace (regf sti) with (bregf bsti); vauto. }
-    eapply nth_error_In. replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto.
-  Qed.
+    cdes MM_SIM. desc.
+    replace (bG bsti) with (G st) by vauto.
+    eapply (eval_instr_expr_deps (EXC_RES_COMP BST2ST)); vauto.
+    eapply nth_error_In. eauto.
+  Qed. 
   
-  Lemma DIFF_LE x y (LT: x <= y): exists d, y = x + d. 
-  Proof.
-    ins. destruct (y - x) eqn:DIFF.
-    { exists 0. omega. }
-    exists (S n). omega. 
-  Qed. 
-
-  Lemma firstn_ge_incl {A: Type} (l: list A) i j (LE: i <= j):
-    firstn j l = firstn i l ++ skipn i (firstn j l).
-  Proof. 
-    destruct (lt_dec j (length l)) as [LTj | GEj]. 
-    2: { rewrite firstn_all2 with (n := j); [| omega].
-         symmetry. eapply firstn_skipn. }
-    rewrite <- firstn_skipn with (n := i) at 1.
-    rewrite firstn_firstn.
-    rewrite (NPeano.Nat.min_l _ _ LE). 
-    eauto.
-  Qed. 
-
-  Lemma skipn_firstn_nil {A: Type} (l: list A) i:
-    skipn i (firstn i l) = [].
-  Proof.
-    generalize dependent l. induction i; vauto. ins. destruct l; auto.
-  Qed. 
-    
-  Lemma ll_index_shift {A: Type} (ll: list (list A)) i j
-         block (ITH: Some block = nth_error ll i) (NE: Forall (fun l => l <> []) ll)
-         (J_BOUND: j <= length ll)
-         (FLT_SHIFT: length (flatten (firstn j ll)) = length (flatten (firstn i ll)) + length block):
-    j = i + 1.
-   Proof.
-     destruct (dec_le j i) as [LE | GT].
-     { rewrite (firstn_ge_incl ll LE) in FLT_SHIFT.  
-       rewrite flatten_app, length_app in FLT_SHIFT.
-       cut (length block > 0); [ins; omega |]. 
-       apply (proj1 (Forall_forall (fun l => l <> []) ll)) with (x := block) in NE. 
-       { destruct block; vauto. simpl. omega. } 
-       eapply nth_error_In. eauto. }
-     apply not_le in GT.
-     rewrite (@firstn_ge_incl _ ll i j) in FLT_SHIFT; [| omega].
-     assert (exists d, j = i + S d).
-     { forward eapply (@DIFF_LE i j); [omega |]. 
-       ins. desc. subst. destruct d; vauto. omega. }
-     desc. subst.
-     cut (d = 0); [ins; omega|].
-     destruct d; auto.
-     exfalso. 
-     rewrite flatten_app, length_app in FLT_SHIFT.
-     apply plus_reg_l in FLT_SHIFT.
-     replace (i + S (S d)) with ((i + 1 + d) + 1) in FLT_SHIFT by omega.
-     assert (exists block', Some block' = nth_error ll (i + 1 + d)) as [block' BLOCK'].
-     { apply OPT_VAL, nth_error_Some. omega. }
-     erewrite first_end in FLT_SHIFT; eauto.
-     rewrite skipn_app in FLT_SHIFT.
-     replace (i - length (firstn (i + 1 + d) ll)) with 0 in FLT_SHIFT.
-     2: { rewrite firstn_length_le; omega. }
-     rewrite <- firstn_skipn with (l := ll) (n := i + 1) in FLT_SHIFT.
-     erewrite first_end in FLT_SHIFT; eauto.
-     rewrite <- app_assoc in FLT_SHIFT.
-     replace i with (length (firstn i ll)) in FLT_SHIFT at 2.
-     2: { apply firstn_length_le. omega. }
-     rewrite <- plus_assoc in FLT_SHIFT. 
-     rewrite firstn_app_2 in FLT_SHIFT.
-     simpl in FLT_SHIFT.
-     rewrite skipn_app in FLT_SHIFT.
-     replace (length (firstn i ll)) with i in FLT_SHIFT. 
-     2: { symmetry. apply firstn_length_le. omega. }
-     rewrite skipn_firstn_nil in FLT_SHIFT. 
-     rewrite Nat.sub_diag in FLT_SHIFT. simpl in FLT_SHIFT.
-     rewrite !flatten_app, !length_app in FLT_SHIFT. simpl in FLT_SHIFT.
-     rewrite app_nil_r in FLT_SHIFT.
-     cut (length block' <> 0); [ins; omega| ]. 
-     pose proof (Forall_forall (fun l : list A => l <> []) ll).
-     cut (block' <> []).
-     { ins. destruct block'; vauto. }
-     apply H; auto.  
-     eapply nth_error_In. eauto.
-   Qed.
-     
-   Lemma correction_same_struct BPI0 BPI ref
-         (CORR: Forall2 (block_corrected ref) BPI0 BPI):
-     same_struct BPI0 BPI.
-   Proof.
-     generalize dependent BPI0.
-     induction BPI.
-     { ins. inversion CORR. red. auto. }
-     ins. inversion CORR. subst.
-     red. apply Forall2_cons.
-     { red in H2. eapply Forall2_length; eauto. }
-     apply IHBPI; auto.
-   Qed. 
-
-   
-  Lemma ectrl_bound_inter st tid ind
+  Lemma ectrl_bound_inter st ind
         (WFT: wf_thread_state tid st) (IND: ind >= eindex st):
      ectrl st ∩₁ eq (ThreadEvent tid ind) ≡₁ ∅.
   Proof. 
@@ -418,7 +253,7 @@ Section PairStep.
     subst. inversion H0. omega. 
   Qed.
 
-  Lemma deps_bound_inter_reg st tid reg ind
+  Lemma deps_bound_inter_reg st reg ind
         (WFT: wf_thread_state tid st) (IND: ind >= eindex st):
     depf st reg ∩₁ eq (ThreadEvent tid ind) ≡₁ ∅.
   Proof. 
@@ -430,7 +265,7 @@ Section PairStep.
     subst. inversion H0. omega.
   Qed. 
 
-  Lemma lexpr_deps_bound_inter st tid lexpr ind
+  Lemma lexpr_deps_bound_inter st lexpr ind
         (WFT: wf_thread_state tid st) (IND: ind >= eindex st):
      DepsFile.lexpr_deps (depf st) lexpr ∩₁ eq (ThreadEvent tid ind) ≡₁ ∅.
   Proof.
@@ -440,7 +275,7 @@ Section PairStep.
     unfold RegFun.find. rewrite deps_bound_inter_reg; auto. 
   Qed.
 
-  Lemma expr_deps_bound_inter st tid expr ind (WFT: wf_thread_state tid st)
+  Lemma expr_deps_bound_inter st expr ind (WFT: wf_thread_state tid st)
         (IND: ind >= eindex st):
      DepsFile.expr_deps (depf st) expr ∩₁ eq (ThreadEvent tid ind) ≡₁ ∅.
   Proof.
@@ -470,47 +305,17 @@ Section PairStep.
                            repeat seq_rewrite id_inter;
                            rewrite !seqA; seq_rewrite <- DOM.
 
-  Lemma progs_positions PO BPI0 BPI b
-    (COMPILED: Forall2 is_instruction_compiled PO BPI0)
-    (CORRECTED: Forall2 (block_corrected BPI0) BPI0 BPI)
-    (IN_PROG: b < length BPI):
-    exists oinstr block block0, 
-      ⟪OINSTR: Some oinstr = nth_error PO b ⟫/\
-      ⟪BLOCK: Some block = nth_error BPI b ⟫/\
-      ⟪BLOCK0: Some block0 = nth_error BPI0 b ⟫/\
-      ⟪COMP: is_instruction_compiled oinstr block0 ⟫/\
-      ⟪CORR: block_corrected BPI0 block0 block ⟫.
-  Proof.
-    apply nth_error_Some, OPT_VAL in IN_PROG. destruct IN_PROG as [block BLOCK].
-    assert (exists block0, Some block0 = nth_error BPI0 b) as [block0 BLOCK0].
-    { apply OPT_VAL. apply nth_error_Some.
-      replace (length BPI0) with (length BPI).
-      { apply nth_error_Some, OPT_VAL. eauto. }
-      symmetry. eapply Forall2_length; eauto. } 
-    assert (exists oinstr, Some oinstr = nth_error PO b) as [oinstr OINSTR]. 
-    { apply OPT_VAL. apply nth_error_Some.        
-      replace (length PO) with (length BPI0).
-      { apply nth_error_Some, OPT_VAL. eauto. }
-      symmetry. eapply Forall2_length; eauto. }
-    repeat eexists; splits; eauto; eapply Forall2_index; eauto. 
-  Qed.
-  
   Lemma SEQ_EQV_CROSS {A: Type} (S1 S2 S3 S4: A -> Prop):
     ⦗S1⦘ ⨾ (S2 × S3) ⨾ ⦗S4⦘ ≡ (S1 ∩₁ S2) × (S3 ∩₁ S4). 
   Proof. ins. basic_solver. Qed.
   
-  Variable bsti bsti': block_state.
-  Notation "'sti'" := (bst2st bsti) (at level 1). 
-  Notation "'sti''" := (bst2st bsti') (at level 1). 
-    
-  Lemma pair_step sto (MM_SIM: mm_similar_states sto bsti)
-        tid PO (OSEQ_STEP: omm_block_step_PO PO tid bsti bsti')
-        (BPC'_BOUND: bpc bsti' <= length (binstrs bsti))
+  Lemma pair_step (BPC'_BOUND: bpc bsti' <= length (binstrs bsti))
         (BLOCK_REACH: (block_step tid)＊ (binit (binstrs bsti)) bsti):
     exists sto', Ostep tid sto sto' /\ mm_similar_states sto' bsti'.
   Proof.
     pose proof (block_step_nonterminal (bs_extract OSEQ_STEP)) as BST_NONTERM.
-    assert (is_thread_block_compiled (instrs sto) (binstrs bsti)) as ITBC by (red in MM_SIM; desc; auto).
+    assert (is_thread_block_compiled PO (binstrs bsti)) as ITBC.
+    { by cdes MM_SIM. }
     assert (binstrs bsti = binstrs bsti') as BINSTRS_SAME by (cdes OSEQ_STEP; auto). 
     red in ITBC. desc.
     forward eapply progs_positions as PP; eauto. desc.
@@ -524,13 +329,15 @@ Section PairStep.
     { ins. forward eapply (@near_pc block_i block i H bsti); eauto. }
     assert (forall (LEN1: length block = 1) (OBS: omm_block_step_PO PO tid bsti bsti'),
                step tid sti sti') as STEP1. 
-    { ins. red in OSEQ_STEP. desc. red in BLOCK_STEP. desc.
+    { ins. red in OSEQ_STEP. desc.
+      cdes OSEQ_STEP. red in BLOCK_STEP. desc.
       rewrite <- BLOCK in AT_BLOCK. inversion AT_BLOCK. subst. simpl in *.
       rewrite LEN1 in BLOCK_STEP0. 
       apply (same_relation_exp (seq_id_l (step tid))). auto. }
     assert (forall (LEN2: length block = 2) (OBS: omm_block_step_PO PO tid bsti bsti'),
                exists sti'', step tid sti sti'' /\ step tid sti'' sti') as STEP2. 
-    { ins. red in OSEQ_STEP. desc. red in BLOCK_STEP. desc.
+    { ins. red in OSEQ_STEP. desc.
+      cdes OSEQ_STEP. red in BLOCK_STEP. desc.
       rewrite <- BLOCK in AT_BLOCK. inversion AT_BLOCK. subst. simpl in *.
       rewrite LEN2 in BLOCK_STEP0. replace 2 with (1 + 1) in BLOCK_STEP0 by omega. 
       rewrite <- (same_relation_exp (pow_nm 1 1 (step tid))) in BLOCK_STEP0.
@@ -552,8 +359,8 @@ Section PairStep.
     { ins.
       forward eapply (@ll_index_shift _ _ (bpc bsti) (bpc bsti') _ BLOCK); eauto. 
       { cdes MM_SIM. eapply COMPILED_NONEMPTY; eauto. }
-      { congruence. }
-      ins. rewrite H. f_equal. by_IH MM_SIM. }
+      ins. destruct H. rewrite <- BINSTRS_SAME in UPC. apply H in UPC.
+      cdes MM_SIM. omega. }
 
     assert (forall sto' (EXT: extends_with tid 0 (lab (G sti') (ThreadEvent tid (eindex sto + 0))) sto sto') (INDEX': eindex sti' = eindex sti + 1)
               (ADD: exists new_lbl ddata daddr dctrl drmw_dep,
@@ -563,9 +370,9 @@ Section PairStep.
       forward eapply (@sim_lab_extension 0 tid sto sti sto' sti'); eauto.
       { cdes MM_SIM. auto. }
       { apply (@E_bounded n_steps tid sti); eauto. }
-      { by_IH MM_SIM. }
+      { by cdes MM_SIM. }
       desc. 
-      replace (0 + 1) with 1 by omega. rewrite (same_relation_exp (pow_unit _)).
+      replace (0 + 1) with 1 by omega. rewrite (same_relation_exp (pow_1 _)).
       red. eexists. red. split; [| simpl; omega]. 
       rewrite Nat.add_0_r. desc. repeat eexists; eauto. }
     (* assert (forall sto' (EXT: extends_with tid 0 (lab (G sti') (ThreadEvent tid (eindex sto + 0))) sto sto') (INDEX': eindex sti' = eindex sti + 1) *)
@@ -578,7 +385,7 @@ Section PairStep.
     (*   { apply (@E_bounded n_steps tid sti); eauto. } *)
     (*   { by_IH MM_SIM. } *)
     (*   desc.  *)
-    (*   replace (0 + 1) with 1 by omega. rewrite (same_relation_exp (pow_unit _)). *)
+    (*   replace (0 + 1) with 1 by omega. rewrite (same_relation_exp (pow_1 _)). *)
     (*   red. eexists. red. split; [| simpl; omega].  *)
     (*   rewrite Nat.add_0_r. desc. repeat eexists; eauto. } *)
 
@@ -627,8 +434,8 @@ Section PairStep.
       { cdes MM_SIM. vauto. }
       assert (ECTRL_EQ: ectrl sto ≡₁ ectrl sti ∩₁ (RWO (G sti))).
       { cdes MM_SIM. vauto. }
-      forward eapply INSTR_LEXPR_HELPER as LEXPR_SAME; [vauto| vauto | vauto | vauto| ].
-      forward eapply INSTR_LEXPR_DEPS_HELPER as LEXPR_DEPS_SAME; [vauto| vauto | vauto | vauto| ].
+      forward eapply INSTR_LEXPR_HELPER as LEXPR_SAME; [vauto| vauto | vauto |  ].
+      forward eapply INSTR_LEXPR_DEPS_HELPER as LEXPR_DEPS_SAME; [vauto| vauto | vauto | ].
       simpl in RWO_SPLITS.
       cdes MM_SIM.
       red. splits.
@@ -689,19 +496,20 @@ Section PairStep.
       pose proof (BLOCK_CONTENTS 0 f eq_refl) as BLOCK_CONTENTS0. 
       pose proof (BLOCK_CONTENTS 1 st eq_refl) as BLOCK_CONTENTS1. 
       apply (STEP2 eq_refl) in OSEQ_STEP.
-      desc. rename sti'' into sti_.
+      move OSEQ_STEP at bottom. 
+      destruct OSEQ_STEP as [sti_ [STEP STEP']]. (* rename sti'' into sti_. *)
       assert ((step tid) ^^ (n_steps + 1) (init (instrs sti_)) sti_) as REACH1. 
       { rewrite <- (same_relation_exp (pow_nm n_steps 1 (step tid))).
         red. exists sti. splits. 
         { erewrite <- (@steps_same_instrs sti); vauto. }
-        rewrite (same_relation_exp (pow_unit _)). auto. }
+        rewrite (same_relation_exp (pow_1 _)). auto. }
 
-      apply (@ISTEP1 sti sti_ f _ BLOCK_CONTENTS0) in OSEQ_STEP; [| simpl; omega].
-      destruct OSEQ_STEP as [SAME_INSTRS [lbls ISTEP0_]].
+      apply (@ISTEP1 sti sti_ f _ BLOCK_CONTENTS0) in STEP; [| simpl; omega].
+      destruct STEP as [SAME_INSTRS [lbls ISTEP0_]].
       infer_istep_ ISTEP0_ f II. 
       replace (flatten (binstrs bsti)) with (instrs sti_) in BLOCK_CONTENTS1. 
-      apply (@ISTEP1 sti_ sti' st _ BLOCK_CONTENTS1) in OSEQ_STEP0; [| vauto]. 
-      destruct OSEQ_STEP0 as [SAME_INSTRS1 [lbls1 ISTEP1_]].
+      apply (@ISTEP1 sti_ sti' st _ BLOCK_CONTENTS1) in STEP'; [| vauto]. 
+      destruct STEP' as [SAME_INSTRS1 [lbls1 ISTEP1_]].
       infer_istep_ ISTEP1_ st II. 
       
       set (sto' :=
@@ -746,6 +554,7 @@ Section PairStep.
       cdes MM_SIM. 
       pose proof INSTR_LEXPR_HELPER as LEXPR_SAME. specialize LEXPR_SAME with (instr := (Instr.store Orlx lexpr expr)). specialize_full LEXPR_SAME; vauto. 
       pose proof INSTR_LEXPR_DEPS_HELPER as LEXPR_DEPS_SAME. specialize LEXPR_DEPS_SAME with (instr := (Instr.store Orlx lexpr expr)). specialize_full LEXPR_DEPS_SAME; vauto. 
+      pose proof INSTR_EXPR_DEPS_HELPER as EXPR_DEPS_SAME. specialize EXPR_DEPS_SAME with (instr := (Instr.store Orlx lexpr expr)). specialize_full EXPR_DEPS_SAME; vauto. 
       pose proof INSTR_EXPR_HELPER as EXPR_SAME. specialize EXPR_SAME with (instr := (Instr.store Orlx lexpr expr)). specialize_full EXPR_SAME; vauto. 
       simpl in RWO_SPLITS, RWO_SPLITS1.
       red. splits.
@@ -777,18 +586,16 @@ Section PairStep.
         red. eexists. red. rewrite Nat.add_0_r. split; auto.
         repeat eexists. eauto. }
         { subst sto'. simpl. by_IH MM_SIM2. }
-        { expand_intra sto'' UG0 bsti sti. rewrite UINDEX, UG, UDEPS. 
+        { generalize dependent EXPR_DEPS_SAME. (* to prevent it from disappearing *)
+          expand_intra sto'' UG0 bsti sti. intros. rewrite UINDEX, UG, UDEPS. 
           simpl. replace_bg_rels bsti sti. remove_emptiness.
           rewrite !SEQ_EQV_CROSS.
           discr_dom (wft_dataE WFT) sti.
           rewrite comm_helper. discr_intra_body. remove_emptiness.  
           rewrite <- restr_relE.
           apply union_more; [by_IH MM_SIM2| ].
-          apply cross_more.
-          { rewrite eval_instr_expr_deps with (PI := instrs sti) (instr := (Instr.store Orlx lexpr expr)); vauto.
-            { rewrite set_interC. eauto. }
-            { auto. }
-            eapply nth_error_In. simpl. eauto. }
+          apply cross_more. 
+          { rewrite H. basic_solver. }
           simpl. rewrite MM_SIM6. auto. }
         { expand_intra sto'' UG0 bsti sti. rewrite UINDEX, UG, UECTRL.
           simpl. replace_bg_rels bsti sti. remove_emptiness.
@@ -826,19 +633,19 @@ Section PairStep.
       pose proof (BLOCK_CONTENTS 0 f eq_refl) as BLOCK_CONTENTS0. 
       pose proof (BLOCK_CONTENTS 1 ld eq_refl) as BLOCK_CONTENTS1. 
       apply (STEP2 eq_refl) in OSEQ_STEP.
-      desc. rename sti'' into sti_.
+      destruct OSEQ_STEP as [sti_ [STEP STEP']]. 
       assert ((step tid) ^^ (n_steps + 1) (init (instrs sti_)) sti_) as REACH1. 
       { rewrite <- (same_relation_exp (pow_nm n_steps 1 (step tid))).
         red. exists sti. splits. 
         { erewrite <- (@steps_same_instrs sti); vauto. }
-        rewrite (same_relation_exp (pow_unit _)). auto. }
+        rewrite (same_relation_exp (pow_1 _)). auto. }
 
-      apply (@ISTEP1 sti sti_ f _ BLOCK_CONTENTS0) in OSEQ_STEP; [| simpl; omega].
-      destruct OSEQ_STEP as [SAME_INSTRS [lbls ISTEP0_]].
+      apply (@ISTEP1 sti sti_ f _ BLOCK_CONTENTS0) in STEP; [| simpl; omega].
+      destruct STEP as [SAME_INSTRS [lbls ISTEP0_]].
       infer_istep_ ISTEP0_ f II. 
       replace (flatten (binstrs bsti)) with (instrs sti_) in BLOCK_CONTENTS1. 
-      apply (@ISTEP1 sti_ sti' ld _ BLOCK_CONTENTS1) in OSEQ_STEP0; [| vauto]. 
-      destruct OSEQ_STEP0 as [SAME_INSTRS1 [lbls1 ISTEP1_]].
+      apply (@ISTEP1 sti_ sti' ld _ BLOCK_CONTENTS1) in STEP'; [| vauto]. 
+      destruct STEP' as [SAME_INSTRS1 [lbls1 ISTEP1_]].
       infer_istep_ ISTEP1_ ld II. 
       
       set (sto'' :=
@@ -953,19 +760,19 @@ Section PairStep.
       pose proof (BLOCK_CONTENTS 0 f eq_refl) as BLOCK_CONTENTS0. 
       pose proof (BLOCK_CONTENTS 1 exc eq_refl) as BLOCK_CONTENTS1. 
       apply (STEP2 eq_refl) in OSEQ_STEP.
-      desc. rename sti'' into sti_.
+      destruct OSEQ_STEP as [sti_ [STEP STEP']]. 
       assert ((step tid) ^^ (n_steps + 1) (init (instrs sti_)) sti_) as REACH1. 
       { rewrite <- (same_relation_exp (pow_nm n_steps 1 (step tid))).
         red. exists sti. splits. 
         { erewrite <- (@steps_same_instrs sti); vauto. }
-        rewrite (same_relation_exp (pow_unit _)). auto. }
+        rewrite (same_relation_exp (pow_1 _)). auto. }
 
-      apply (@ISTEP1 sti sti_ f _ BLOCK_CONTENTS0) in OSEQ_STEP; [| simpl; omega].
-      destruct OSEQ_STEP as [SAME_INSTRS [lbls ISTEP0_]].
+      apply (@ISTEP1 sti sti_ f _ BLOCK_CONTENTS0) in STEP; [| simpl; omega].
+      destruct STEP as [SAME_INSTRS [lbls ISTEP0_]].
       infer_istep_ ISTEP0_ f II. 
       replace (flatten (binstrs bsti)) with (instrs sti_) in BLOCK_CONTENTS1. 
-      apply (@ISTEP1 sti_ sti' exc _ BLOCK_CONTENTS1) in OSEQ_STEP0; [| vauto]. 
-      destruct OSEQ_STEP0 as [SAME_INSTRS1 [lbls1 ISTEP1_]].
+      apply (@ISTEP1 sti_ sti' exc _ BLOCK_CONTENTS1) in STEP'; [| vauto]. 
+      destruct STEP' as [SAME_INSTRS1 [lbls1 ISTEP1_]].
       infer_istep_ ISTEP1_ exc II.
       set (sto'' :=
              {| instrs := instrs sto;
@@ -1002,15 +809,10 @@ Section PairStep.
       pose proof INSTR_LEXPR_HELPER as LEXPR_SAME. specialize LEXPR_SAME with (instr := (Instr.update (Instr.exchange expr_new) false Xpln Osc Osc exchange_reg lexpr)). specialize_full LEXPR_SAME; vauto. 
       pose proof INSTR_LEXPR_DEPS_HELPER as LEXPR_DEPS_SAME. specialize LEXPR_DEPS_SAME with (instr := (Instr.update (Instr.exchange expr_new) false Xpln Osc Osc exchange_reg lexpr)). specialize_full LEXPR_DEPS_SAME; vauto. 
       assert (RegFile.eval_expr (regf sto) expr_new = RegFile.eval_expr (regf sti) expr_new) as EXPR_SAME.
-      { eapply eval_rmw_expr; eauto. 
-        { exists (instrs sto). red.
-          unfold is_thread_compiled_with.
-          eexists. eauto. }
-        repeat eexists. eapply nth_error_In.
-        replace (flatten (binstrs bsti)) with (instrs sti); eauto. subst. vauto. }
-      (* pose proof INSTR_EXPR_HELPER as EXPR_SAME. specialize EXPR_SAME with (instr := (Instr.update (Instr.exchange expr_new) Xpln Osc Osc exchange_reg lexpr)). *)
-      (* specialize_full EXPR_SAME; vauto. *)
-      (* { Unshelve. 2: exact expr_new. simpl.  *)
+      { eapply (eval_rmw_expr (EXC_RES_COMP eq_refl)); eauto.
+        2: { Unshelve. 2: exact (Instr.exchange expr_new). vauto. }
+        repeat (eexists; eauto). eapply nth_error_In.
+        symmetry. vauto. }
       simpl in RWO_SPLITS, RWO_SPLITS1.      
       red. splits.
       { subst sto''. simpl. congruence. }
@@ -1057,10 +859,10 @@ Section PairStep.
           cdes MM_SIM2. 
           rewrite (eval_expr_deps_same sto sti); eauto.
           { basic_solver. }
-          forward eapply exchange_reg_dedicated' as DEDICATED.  
-          { vauto. }
-          { Unshelve. 2: exact (Instr.update (Instr.exchange expr_new) false Xpln Osc Osc exchange_reg lexpr). eapply nth_error_In; eauto. }
-          simpl in DEDICATED. desc. auto. }
+          pose proof (EXC_RES_COMP eq_refl). red in H.
+          apply (proj1 (Forall_forall _ _)) with (x := (Instr.update (Instr.exchange expr_new) false Xpln Osc Osc exchange_reg lexpr)) in H.
+          2: { eapply nth_error_In. eauto. }
+          simpl in H. desc. auto. }
         { expand_intra sto'' UG0 bsti sti. rewrite UINDEX, UG, UECTRL.
           simpl. replace_bg_rels bsti sti. remove_emptiness.
           expand_rels.
@@ -1190,16 +992,15 @@ Section PairStep.
         { cut (bpc bsti' = bpc bsti + 1).
           { ins. rewrite H. cdes MM_SIM. congruence. }
           simpl in UPC.
-          forward eapply (@ll_index_shift _ _ (bpc bsti) (bpc bsti') _ BLOCK); eauto. 
+          forward eapply (@ll_index_shift _ _ (bpc bsti) (bpc bsti') _ BLOCK) as [H _]; eauto. 
           { eapply COMPILED_NONEMPTY. red. eexists; eauto. }
-          simpl. simpl in UPC. congruence. }
+          apply H. simpl.  simpl in UPC. congruence. }
         simpl in UPC. (* inversion OCOND. *)
         rewrite <- UPC in BLOCK_CONTENTS0. eapply NONEMPTY_PREF.
         { eapply COMPILED_NONEMPTY. red. eexists; eauto. }
         { congruence. }
-        { replace (length (binstrs bsti)) with (length (instrs sto)).  
-          { eapply compilation_addresses_restricted; vauto. }
-          apply compilation_same_length. vauto. }
+        { erewrite <- compilation_same_length; vauto.
+          cdes OMM_CLARIFIED. eapply OMM_CLARIFIED1. eauto. }
         omega. }
       { subst sto'. simpl in UG. rewrite UG. simpl. cdes MM_SIM. auto. }
       { ins. rewrite UREGS. cdes MM_SIM. auto. }
@@ -1209,13 +1010,11 @@ Section PairStep.
         cdes MM_SIM. 
         apply set_equiv_union; [| auto]. 
         apply eval_expr_deps_same; vauto.
-        forward eapply exchange_reg_dedicated' as DEDICATED. 
-        { vauto. }
-        { Unshelve. 2: exact (Instr.ifgoto expr (length (flatten (firstn n (binstrs bsti))))). eapply nth_error_In; eauto. }
-        simpl in DEDICATED. desc. auto. }
+        pose proof (EXC_RES_COMP eq_refl). red in H.
+        apply (proj1 (Forall_forall _ _)) with (x := Instr.ifgoto expr (length (flatten (firstn n (binstrs bsti))))) in H; vauto.
+        eapply nth_error_In. eauto. }
       subst sto'. replace_bg_rels bsti' sti'. rewrite UINDEX. simpl.
       cdes MM_SIM. auto.  
   Qed. 
       
-
-End PairStep.  
+  End PairStep.

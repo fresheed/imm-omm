@@ -26,34 +26,6 @@ Set Implicit Arguments.
 
 Section CompCorrHelpers.
     
-  Definition f_acq_matcher :=
-    fun lbl => match lbl with
-            | Afence mode => mode_le Oacq mode
-            | _ => false
-            end.
-  Definition is_f_acq := fun {A: Type} (labfun: A -> label) ev =>
-                           is_f labfun ev && is_acq labfun ev. 
-             
-  Lemma f_acq_pl: processes_lab (@is_f_acq actid) f_acq_matcher. 
-  Proof.
-    red. intros. unfold is_f_acq, is_f, is_acq, f_acq_matcher, mode_le, Events.mod. 
-    type_solver. 
-  Qed. 
-
-  Definition f_acqrel_matcher :=
-    fun lbl => match lbl with
-            | Afence mode => mode_le Oacqrel mode
-            | _ => false
-            end.
-  Definition is_f_acqrel := fun {A: Type} (labfun: A -> label) ev =>
-                           is_f labfun ev && is_acqrel labfun ev. 
-             
-  Lemma f_acqrel_pl: processes_lab (@is_f_acqrel actid) f_acqrel_matcher. 
-  Proof.
-    red. intros. unfold is_f_acqrel, is_f, is_acqrel, f_acqrel_matcher, mode_le, Events.mod. 
-    type_solver. 
-  Qed. 
-
   Notation "'E' G" := G.(acts_set) (at level 1).
   Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1).
   Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1).
@@ -446,12 +418,9 @@ Section CompCorrHelpers.
       replace (eindex st2 - 1) with (eindex st1); auto. omega. }
     Qed.
       
-  Lemma compilation_injective PO1 PO2 BPI (COMP1: is_thread_block_compiled PO1 BPI) (COMP2: is_thread_block_compiled PO2 BPI):
-    PO1 = PO2.
-  Proof. Admitted. 
-  
   Lemma GI_1thread_omm_premises_block bst tid PO 
-        (COMP: is_thread_block_compiled PO (binstrs bst)) 
+        (COMP: is_thread_block_compiled PO (binstrs bst))
+        (GOTO_RESTR: goto_addresses_restricted PO)
         (BLOCK_STEPS: (omm_block_step_PO PO tid)＊ (binit (binstrs bst)) bst):
     omm_premises_hold (bG bst).
   Proof.
@@ -476,7 +445,7 @@ Section CompCorrHelpers.
     assert (forall i instr (BLOCK_I: Some instr = nth_error block i) instr' (OTHER: Some instr' = nth_error (instrs st_prev) (pc st_prev + i)) (NEQ: instr <> instr'), False).
     { ins. specialize (BLOCK_CONTENTS _ _ BLOCK_I). congruence. }
     assert (exists k, (step tid) ^^ k (init (instrs st_prev)) st_prev) as [k REACH].
-    { apply crt_num_steps. subst st_prev. apply ommblocks_imply_steps with (PO := PO).
+    { apply crt_num_steps. subst st_prev. apply ommblocks_imply_steps with (PO := PO); auto. 
       apply crt_num_steps. eexists. rewrite BINSTRS_SAME0. eauto. }
     assert (forall st', (step tid) st_prev st' -> (step tid) ^^ (k + 1) (init (instrs st')) st') as REACH'. 
     { ins. replace (instrs st') with (instrs st_prev).
@@ -897,8 +866,10 @@ Section CompCorrHelpers.
       subst st_prev. simpl in *. congruence. }
   Qed. 
 
-  Lemma GI_1thread_omm_premises tid PO PI (COMP: is_thread_compiled PO PI) Gi
-        (EXEC: thread_execution tid PI Gi):
+  Lemma GI_1thread_omm_premises tid PO PI Gi
+        (COMP: is_thread_compiled PO PI)
+        (EXEC: thread_execution tid PI Gi)
+        (GOTO_RESTR: goto_addresses_restricted PO):
     omm_premises_hold Gi.
   Proof.
     red in EXEC. destruct EXEC as [st_fin [STEPS [TERM GRAPH]]]. 
