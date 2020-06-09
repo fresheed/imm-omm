@@ -236,3 +236,36 @@ Section ForallHelpers.
   Qed.
 
 End ForallHelpers.   
+
+Section Sublist.
+  Variable A: Type.
+  
+  Definition sublist (l: list A) (start len: nat) := firstn len (skipn start l).
+
+  Lemma sublist_items (whole: list A) start size result
+        (SL: result = sublist whole start size)
+        (FULL: length result = size):
+    forall i (INDEX: i < size), nth_error result i = nth_error whole (start + i). 
+  Proof.
+    intros.
+    unfold sublist in SL.
+    assert (forall {A: Type} (pref res suf: list A) i (INDEX: i < length res), nth_error res i = nth_error (pref ++ res ++ suf) (length pref + i)).
+    { intros. induction pref.
+      - simpl. symmetry. apply nth_error_app1. auto.
+      - simpl. apply IHpref. }
+    forward eapply (@H _ (firstn start whole) result (skipn size (skipn start whole))) as H'. 
+    { rewrite FULL. eauto. }
+    assert (STRUCT: whole = firstn start whole ++ result ++ skipn size (skipn start whole)).
+    { rewrite <- (firstn_skipn start whole) at 1.
+      cut (result ++ skipn size (skipn start whole) = skipn start whole).
+      { intros. congruence. }
+      rewrite SL. apply firstn_skipn. }
+    rewrite H'. rewrite STRUCT at 4.
+    cut (length (firstn start whole) = start); auto.
+    apply firstn_length_le.
+    destruct (le_lt_dec start (length whole)); auto.
+    rewrite skipn_all2 in SL; [| omega]. rewrite firstn_nil in SL.
+    rewrite SL in FULL. simpl in FULL. omega. 
+  Qed.  
+
+End Sublist. 

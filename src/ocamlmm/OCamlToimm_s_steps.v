@@ -28,47 +28,6 @@ Set Implicit Arguments.
 
 Section Steps.
 
-(* Notation "'E' G" := G.(acts_set) (at level 1). *)
-(* Notation "'R' G" := (fun a => is_true (is_r G.(lab) a)) (at level 1). *)
-(* Notation "'R_ex' G" := (fun a => is_true (R_ex G.(lab) a)) (at level 1). *)
-(* Notation "'W' G" := (fun a => is_true (is_w G.(lab) a)) (at level 1). *)
-(* Notation "'RW' G" := (R G ∪₁ W G) (at level 1). *)
-(* Notation "'F' G" := (fun a => is_true (is_f G.(lab) a)) (at level 1). *)
-(* Notation "'ORlx' G" := (fun a => is_true (is_only_rlx G.(lab) a)) (at level 1). *)
-(* Notation "'ORlxW' G" := (fun a => is_true (is_orlx_w G.(lab) a)) (at level 1). *)
-(* Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1).  *)
-(* Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1).  *)
-(* Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1).  *)
-(* Notation "'hbo'" := (OCaml.hb).  *)
-(* Notation "'same_loc' G" := (same_loc G.(lab)) (at level 1). *)
-(* Notation "'Tid_' t" := (fun x => tid x = t) (at level 1). *)
-
-
-Lemma sublist_items {A: Type} (whole: list A) start size result (SL: result = sublist whole start size) (FULL: length result = size):
-  forall i (INDEX: i < size), nth_error result i = nth_error whole (start + i). 
-Proof.
-  (* TODO: simplify? *)
-  intros.
-  unfold sublist in SL.
-  assert (forall {A: Type} (pref res suf: list A) i (INDEX: i < length res), nth_error res i = nth_error (pref ++ res ++ suf) (length pref + i)).
-  { intros. induction pref.
-    - simpl. symmetry. apply nth_error_app1. auto.
-    - simpl. apply IHpref. }
-  forward eapply (@H _ (firstn start whole) result (skipn size (skipn start whole))) as H'. 
-  { rewrite FULL. eauto. }
-  assert (STRUCT: whole = firstn start whole ++ result ++ skipn size (skipn start whole)).
-  { rewrite <- (firstn_skipn start whole) at 1.
-    cut (result ++ skipn size (skipn start whole) = skipn start whole).
-    { intros. congruence. }
-    rewrite SL. apply firstn_skipn. }
-  rewrite H'. rewrite STRUCT at 4.
-  cut (length (firstn start whole) = start); auto.
-  apply firstn_length_le.
-  destruct (le_lt_dec start (length whole)); auto.
-  rewrite skipn_all2 in SL; [| omega]. rewrite firstn_nil in SL.
-  rewrite SL in FULL. simpl in FULL. omega. 
-Qed.
-
 Lemma init_mm_same: forall PO BPI (COMP: is_thread_block_compiled PO BPI),
     mm_similar_states (init PO) (binit BPI).
 Proof.
@@ -398,54 +357,6 @@ Proof.
     do 2 right. left. subst igt. eauto.
 Qed.
 
-(* Lemma block_start_st st block instr (BLOCK: on_block st block) *)
-(*       (AT_PC: Some instr = nth_error (instrs st) (pc st)): *)
-(*   (exists mode, instr = Prog.Instr.fence mode) \/ *)
-(*   (exists loc expr, instr = Prog.Instr.load Orlx loc expr) \/ *)
-(*   (exists cond loc, instr = Prog.Instr.ifgoto cond loc) \/ *)
-(*   (exists reg expr, instr = Prog.Instr.assign reg expr). *)
-(* Proof. *)
-(*   red in BLOCK. desc. *)
-(*   inversion COMP_BLOCK. *)
-(*   all: subst; simpl in *. *)
-(*   (* TODO: refactor *) *)
-(*   - assert (AT_PC1: Some ld = nth_error (instrs st) (pc st)). *)
-(*     { apply eq_trans with (y := nth_error [ld] 0); auto. *)
-(*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-(*       eapply sublist_items; eauto. } *)
-(*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-(*     right. left. subst ld. eauto. *)
-(*   - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)). *)
-(*     { apply eq_trans with (y := nth_error [f; st0] 0); auto. *)
-(*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-(*       eapply sublist_items; eauto. } *)
-(*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-(*     left. subst f. eauto. *)
-(*   - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)). *)
-(*     { apply eq_trans with (y := nth_error [f; ld] 0); auto. *)
-(*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-(*       eapply sublist_items; eauto. } *)
-(*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-(*     left. subst f. eauto. *)
-(*   - assert (AT_PC1: Some f = nth_error (instrs st) (pc st)). *)
-(*     { apply eq_trans with (y := nth_error [f; exc] 0); auto. *)
-(*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-(*       eapply sublist_items; eauto. } *)
-(*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-(*     left. subst f. eauto. *)
-(*   - assert (AT_PC1: Some asn = nth_error (instrs st) (pc st)). *)
-(*     { apply eq_trans with (y := nth_error [asn] 0); auto. *)
-(*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-(*       eapply sublist_items; eauto. } *)
-(*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-(*     do 3 right. subst asn. eauto. *)
-(*   - assert (AT_PC1: Some igt = nth_error (instrs st) (pc st)). *)
-(*     { apply eq_trans with (y := nth_error [igt] 0); auto. *)
-(*       rewrite <- (NPeano.Nat.add_0_r (pc st)). *)
-(*       eapply sublist_items; eauto. } *)
-(*     rewrite <- AT_PC in AT_PC1. inversion AT_PC1. *)
-(*     do 2 right. left. subst igt. eauto. *)
-(* Qed. *)
 
 Lemma block_mid pc PI block instr (BLOCK: on_block_pc pc PI block)
       (BLOCK_LEN: length block >= 2)
@@ -478,38 +389,6 @@ Proof.
     replace instr with exc; [| congruence].
     subst exc. eauto. }
 Qed.
-
-(* Lemma block_mid_st st block instr (BLOCK: on_block st block) *)
-(*       (BLOCK_LEN: length block >= 2) *)
-(*       (AT_PC1: Some instr = nth_error (instrs st) (pc st + 1)): *)
-(*   (exists loc expr, instr = Prog.Instr.store Orlx loc expr) \/ *)
-(*   (exists loc expr, instr = Prog.Instr.load Osc loc expr) \/ *)
-(*   (exists expr loc, instr = Prog.Instr.update (Prog.Instr.exchange expr) Xpln Osc Osc exchange_reg loc). *)
-(* Proof. *)
-(*   red in BLOCK. desc. *)
-(*   inversion COMP_BLOCK. *)
-(*   all: (rename H into OINSTR; rename H0 into BLOCK_CONTENTS). *)
-(*   all: subst block; simpl in *. *)
-(*   (* trivial cases for single instruction blocks *) *)
-(*   all: try omega. *)
-(*   (* now only 2-blocks remain*) *)
-(*   (* TODO: refactor *) *)
-(*   { assert (AT_PC1': Some st0 = nth_error (instrs st) (pc st + 1)). *)
-(*     { apply eq_trans with (y := nth_error [f; st0] 1); auto. *)
-(*       eapply sublist_items; eauto. } *)
-(*     replace instr with st0; [| congruence]. *)
-(*     subst st0. eauto. } *)
-(*   { assert (AT_PC1': Some ld = nth_error (instrs st) (pc st + 1)). *)
-(*     { apply eq_trans with (y := nth_error [f; ld] 1); auto. *)
-(*       eapply sublist_items; eauto. } *)
-(*     replace instr with ld; [| congruence]. *)
-(*     subst ld. eauto. } *)
-(*   { assert (AT_PC1': Some exc = nth_error (instrs st) (pc st + 1)). *)
-(*     { apply eq_trans with (y := nth_error [f; exc] 1); auto. *)
-(*       eapply sublist_items; eauto. } *)
-(*     replace instr with exc; [| congruence]. *)
-(*     subst exc. eauto. } *)
-(* Qed. *)
 
 Lemma no_acb_between_pc pc1 pc2 n (PC2: pc2 = pc1 + n)
       block (* (BLOCK: on_block st1 block) *)

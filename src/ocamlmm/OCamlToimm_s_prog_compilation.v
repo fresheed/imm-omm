@@ -229,6 +229,10 @@ Section OCaml_IMM_Compilation.
       symmetry. eapply Forall2_length; eauto. }
     repeat eexists; splits; eauto; eapply Forall2_index; eauto. 
   Qed.
+
+End OCaml_IMM_Compilation.
+
+Section ExprEvaluation.   
   
   Definition value_regs value :=
     match value with
@@ -310,14 +314,6 @@ Section OCaml_IMM_Compilation.
     inversion COMP1; vauto. 
   Qed. 
 
-  Definition goto_addresses_restricted PO :=
-    forall cond addr0 i (IN: Some (Instr.ifgoto cond addr0) = nth_error PO i),
-      addr0 <= length PO.
-    
-  Definition omm_clarified PO :=
-    exchange_reg_reserved PO /\
-    goto_addresses_restricted PO. 
-    
   Definition lexpr_of lexpr instr :=
     match instr with
     | Instr.load _ _ lexpr' 
@@ -470,7 +466,7 @@ Section OCaml_IMM_Compilation.
     destruct instr; simpl in *; desc; vauto.     
   Qed.
     
-End OCaml_IMM_Compilation.
+End ExprEvaluation.   
 
 
 Section OCaml_IMM_Correspondence.
@@ -595,8 +591,14 @@ Section OCaml_IMM_Correspondence.
     block_step tid bst bst'.
   Proof. red in OMM_BLOCK_STEP; desc. red in BLOCK_STEP. desc. vauto. Qed.
 
-  Definition sublist {A: Type} (l: list A) (start len: nat) := firstn len (skipn start l).
-      
+  Definition goto_addresses_restricted PO :=
+    forall cond addr0 i (IN: Some (Instr.ifgoto cond addr0) = nth_error PO i),
+      addr0 <= length PO.
+    
+  Definition omm_clarified PO :=
+    exchange_reg_reserved PO /\
+    goto_addresses_restricted PO. 
+    
 End OCaml_IMM_Correspondence. 
 
 Section CorrectedDefinitions.
