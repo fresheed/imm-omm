@@ -1,12 +1,11 @@
 (******************************************************************************)
-(** * ocaml MM is weaker than IMM_S   *)
+(** Definition of OCaml program                                               *)
 (******************************************************************************)
 From hahn Require Import Hahn.
 Require Import Omega.
 Require Import Events.
 Require Import Execution.
 Require Import Execution_eco.
-(* Require Import imm_common. *)
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import Prog.
@@ -19,6 +18,9 @@ Set Implicit Arguments.
 
 Section OCaml_Program.
 
+  (** The difference between Oistep_ and istep_ is the dindex parameter which allows to skip some indices *)
+  (** Such gaps allow to construct a graph whose structure resembles one of IMM graph without fences *)
+  
   Inductive Oistep_ tid labels s1 s2 instr dindex: Prop :=
   | Oassign reg expr
            (LABELS : labels = nil)

@@ -1,3 +1,6 @@
+(******************************************************************************)
+(** OMM to IMM compilation scheme                                             *)
+(******************************************************************************)
 From hahn Require Import Hahn.
 Require Import Omega.
 Require Import Events.

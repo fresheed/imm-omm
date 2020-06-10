@@ -1,5 +1,5 @@
 (******************************************************************************)
-(** * ocaml MM is weaker than IMM_S   *)
+(** Construction of single- and multithreaded program execution graph         *)
 (******************************************************************************)
 Require Import Classical Peano_dec.
 From hahn Require Import Hahn.
@@ -9,14 +9,10 @@ Require Import Execution.
 Require Import Execution_eco.
 Require Import imm_s_hb.
 Require Import imm_s.
-Require Import OCaml.
-Require Import OCamlToimm_s.
-Require Import OCamlToimm_s_prog. 
-Require Import OCamlToimm_s_prog_compilation.
-Require Import OCamlToimm_s_prog_pair_step. 
-(* Require Import OCamlToimm_s_prog_bounded_properties.  *)
-(* Require Import OCamlToimm_s_compcorrhelpers.  *)
-Require Import OCamlToimm_s_steps. 
+Require Import OmmProgram.
+Require Import OmmImmCompScheme.
+Require Import OmmImmSimulation. 
+Require Import BlockSteps. 
 Require Import Utils.
 Require Import ClosuresProperties. 
 Require Import Prog.
@@ -124,16 +120,7 @@ Section BUILD_OMM_GRAPH.
           { ins. generalize dependent bst. induction n. 
             { ins. red in H0. desc. unfold binit in H0. subst bst. auto. }
             ins. red in H0. desc. specialize (IHn _ H0). cdes H1. congruence. }
-          eapply H0; eauto. 
-          (* cdes STEPS_FROM'. rewrite BINSTRS_SAME.   *)
-
-          (* replace BPI with (binstrs bsti_fin); auto. symmetry.  *)
-          (* apply (@inclusion_t_ind _ (block_step tid) (fun x y => binstrs x = binstrs y)). *)
-          (* { red. ins. eapply SAME_BINSTRS. eauto. } *)
-          (* { red. ins. congruence. } *)
-          (* apply t_step_rt. exists bsti_i. split. *)
-          (* { apply bs_extract. auto. } *)
-        (* apply OB_B. apply crt_num_steps. eexists. eauto. *) }
+          eapply H0; eauto. }
         assert (instrs sto' = PO) as STO_INSTRS. 
         { replace PO with (instrs (init PO)); auto. symmetry. 
           apply omm_steps_same_instrs. exists tid. apply crt_num_steps. eauto. }
@@ -540,7 +527,7 @@ Section BUILD_OMM_GRAPH.
                  e = ThreadEvent thread index /\
                  GOi_prop thread GOi) as E_GO_STRUCT.
   { ins.
-    apply EGO in E_ACT. (* subst GO. subst GO_actsset.  *)
+    apply EGO in E_ACT. 
     red in E_ACT. destruct E_ACT as [[thread' POi' PI' GI'] [THREAD [GOi [EGOi_prop EGOi]]]]. 
     red in EGOi_prop. red in THREAD. desc. simpl in *. 
     red in SBL'. desc. rewrite (set_equiv_exp RESTR_EVENTS) in EGOi.

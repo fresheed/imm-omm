@@ -1,3 +1,7 @@
+(******************************************************************************)
+(** Various list-related lemmas **)
+(******************************************************************************)
+
 Require Import List.
 From hahn Require Import Hahn.
 Require Import Omega.
@@ -48,6 +52,17 @@ End ListHelpersTemp.
 Section ListHelpers.
   Variable A: Type. 
 
+  Lemma first_end (l: list A) n x (NTH: Some x = List.nth_error l n):
+    firstn (n + 1) l = firstn n l ++ cons x nil.
+  Proof.
+    ins. 
+    symmetry in NTH. apply nth_error_split in NTH as [l1 [l2 [CAT H]]].
+    rewrite <- H. pose proof (@firstn_app_2 A 1 l1 (x :: l2)).
+    rewrite CAT. simpl in H0. rewrite H0.
+    pose proof (@firstn_app_2 A 0 l1). simpl in H1. rewrite app_nil_r, NPeano.Nat.add_0_r in H1.
+    rewrite H1. auto. 
+  Qed.      
+  
   Lemma firstn_ge_incl (l: list A) i j (LE: i <= j):
     firstn j l = firstn i l ++ skipn i (firstn j l).
   Proof. 
@@ -67,7 +82,8 @@ Section ListHelpers.
   Qed.     
 End ListHelpers. 
 
-Section ListList.
+
+Section ListListHelpers.
   Variable A: Type. 
 
   Definition same_struct (ll1 ll2: list (list A)) :=
@@ -178,7 +194,7 @@ Section ListList.
      eapply nth_error_In. eauto.
   Qed.
      
-End ListList. 
+End ListListHelpers. 
 
 
 Section Forall2Helpers.
@@ -236,6 +252,7 @@ Section ForallHelpers.
   Qed.
 
 End ForallHelpers.   
+
 
 Section Sublist.
   Variable A: Type.

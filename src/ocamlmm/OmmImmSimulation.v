@@ -1,5 +1,5 @@
 (******************************************************************************)
-(** * ocaml MM is weaker than IMM_S   *)
+(** Similarity between OMM and IMM states is a simulation relation            *)
 (******************************************************************************)
 Require Import Classical Peano_dec.
 From hahn Require Import Hahn.
@@ -9,13 +9,11 @@ Require Import Execution.
 Require Import Execution_eco.
 Require Import imm_s_hb.
 Require Import imm_s.
-Require Import OCaml.
-Require Import OCamlToimm_s.
-Require Import OCamlToimm_s_prog.
+Require Import OmmProgram.
 Require Import ListHelpers.
-Require Import OCamlToimm_s_prog_compilation.
-Require Import OCamlToimm_s_prog_bounded_properties.
-Require Import OCamlToimm_s_steps.
+Require Import OmmImmCompScheme.
+Require Import BoundedRelsProperties.
+Require Import BlockSteps.
 Require Import ListHelpersTemp.
 Require Import Utils.
 Require Import ClosuresProperties. 

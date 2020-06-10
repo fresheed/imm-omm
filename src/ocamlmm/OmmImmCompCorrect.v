@@ -1,5 +1,5 @@
 (******************************************************************************)
-(** * ocaml MM is weaker than IMM_S   *)
+(** OMM -> IMM compilation correctness                                        *)
 (******************************************************************************)
 Require Import Classical Peano_dec.
 From hahn Require Import Hahn.
@@ -10,14 +10,14 @@ Require Import Execution_eco.
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
-Require Import OCamlToimm_s.
-Require Import OCamlToimm_s_prog. 
-Require Import OCamlToimm_s_prog_compilation. 
-Require Import OCamlToimm_s_prog_pair_step. 
-Require Import OCamlToimm_s_prog_bounded_properties. 
-Require Import OCamlToimm_s_prog_build_graph. 
-Require Import OCamlToimm_s_compcorrhelpers. 
-Require Import OCamlToimm_s_steps. 
+Require Import ImmImpliesOmm.
+Require Import OmmProgram. 
+Require Import OmmImmCompScheme.
+Require Import OmmImmSimulation.
+Require Import BoundedRelsProperties.
+Require Import GraphConstruction.
+Require Import BlockSteps.
+Require Import CompSchemeGraph.
 Require Import Utils.
 Require Import ListHelpers.
 Require Import ClosuresProperties. 
@@ -43,17 +43,6 @@ Section OCamlMM_TO_IMM_S_PROG.
   Notation "'Sc' G" := (fun a => is_true (is_sc G.(lab) a)) (at level 1). 
   Notation "'Acq' G" := (fun a => is_true (is_acq G.(lab) a)) (at level 1). 
   Notation "'Acqrel' G" := (fun a => is_true (is_acqrel G.(lab) a)) (at level 1). 
-
-
-  Lemma same_beh_implies_similar_intrarels GO GI (SB: same_behavior GO GI):
-    ⟪DATA_SIM: data GO ≡ restr_rel (RWO GI) (data GI) ⟫ /\
-    ⟪CTRL_SIM: ctrl GO ≡ restr_rel (RWO GI) (ctrl GI) ⟫ /\ 
-    ⟪ADDR_SIM: addr GO ≡ restr_rel (RWO GI) (addr GI) ⟫ /\
-    ⟪SB_SIM: sb GO ≡ restr_rel (RWO GI) (sb GI) ⟫.
-  Proof.
-    cdes SB. cdes SAME_LOCAL. splits; auto. 
-    unfold sb. rewrite RESTR_EVENTS. basic_solver. 
-  Qed. 
 
   (* TODO: generalize all of it*)
   Lemma W_SIM GO GI (SBL: same_behavior_local GO GI):
@@ -104,13 +93,11 @@ Section OCamlMM_TO_IMM_S_PROG.
       rewrite set_interC.
       rewrite RESTR_EVENTS.
       basic_solver. }
-    (* pose proof (same_beh_implies_similar_rels SAME_BEH).  *)
     symmetry in SAME_CO.
     assert (forall (r1 r2 r3: relation actid), r1 ⊆ r2 -> r1 \ r3 ⊆ r2 \r3) as MINUS_INCL. 
     { ins. basic_solver. }
     assert (forall (r1 r3: relation actid) S1 S2, r1 ≡ ⦗S1⦘ ⨾ r1 ⨾ ⦗S2⦘ -> r1 \ r3 ≡ ⦗S1⦘ ⨾ (r1 \ r3) ⨾ ⦗S2⦘) as MINUS_EQUIV. 
     { ins. seq_rewrite H. basic_solver. }
-    (* TODO: should we include addr, ctrl equality in same_behavior? *)
     inversion WF. 
     assert (co GO ≡ ⦗E GO⦘ ⨾ co GO ⨾ ⦗E GO⦘) as ECO. 
     { rewrite RESTR_EVENTS, <- SAME_CO.
@@ -142,7 +129,6 @@ Section OCamlMM_TO_IMM_S_PROG.
     assert (CTRL_INCL: ctrl GO ⊆ sb GO).
     { rewrite RESTR_CTRL, SB_SIM. apply restr_rel_mori; basic_solver. }
     
-    (* red in SAME_BEH'. desc.   *)
     split; vauto.
     all: try (seq_rewrite RESTR_RMW; basic_solver). 
     all: try (seq_rewrite RESTR_RMWDEP; basic_solver). 
@@ -1103,7 +1089,7 @@ Section CompilationCorrectness.
   Proof.
     pose proof GI_omm_premises as GI_OMM_PREM. red in GI_OMM_PREM. desc.
     pose proof GI_locations_separated. 
-    eapply (@OCamlToimm_s.imm_to_ocaml_consistent GI); eauto.
+    eapply (@imm_to_ocaml_consistent GI); eauto.
     { rewrite set_interA.
       arewrite (W GI ∩₁ ORlx GI ≡₁ fun x : actid => is_orlx_w (lab GI) x). 
       { unfold set_inter, is_orlx_w. basic_solver. }
@@ -1395,7 +1381,7 @@ Section CompilationCorrectness.
     pose proof (Wf_subgraph SAME_BEH WFI) as WFO.
     splits; auto.    
     apply graph_switch; auto.
-    apply (imm_implies_omm). 
+    apply imm_implies_omm. 
   Qed.  
 
 End CompilationCorrectness.       

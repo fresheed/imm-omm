@@ -1,5 +1,5 @@
 (******************************************************************************)
-(** * ocaml MM is weaker than IMM_S   *)
+(** Conversions between single steps and block execution steps                *)
 (******************************************************************************)
 Require Import Classical Peano_dec.
 From hahn Require Import Hahn.
@@ -10,11 +10,9 @@ Require Import Execution_eco.
 Require Import imm_s_hb.
 Require Import imm_s.
 Require Import OCaml.
-Require Import OCamlToimm_s.
-Require Import OCamlToimm_s_prog.
+Require Import OmmProgram.
 Require Import ListHelpers.
-Require Import OCamlToimm_s_prog_compilation. 
-(* Require Import OCamlToimm_s_prog_bounded_properties. *)
+Require Import OmmImmCompScheme. 
 Require Import ListHelpersTemp.
 Require Import Utils.
 Require Import ClosuresProperties. 
@@ -414,11 +412,6 @@ Proof.
     { apply eq_trans with (y := nth_error [f; st] 0); auto.
       replace pc1 with (pc1 + 0) by omega.
       eapply sublist_items; eauto. }
-    (* assert (NEXT_PC: pc st2 = pc st1 + 1). *)
-    (* { apply (same_relation_exp (pow_1 (step tid))) in STEPS. *)
-    (*   red in STEPS. desc. red in STEPS. desc. *)
-    (*   inversion ISTEP0; auto. *)
-    (*   rewrite II, <- AT_PC in ISTEP. discriminate. } *)
     
     red. intros ACB2. (* red in ACB2. *)
     destruct ACB2 as [[block2 BLOCK2]| TERM2].
@@ -440,11 +433,6 @@ Proof.
     { apply eq_trans with (y := nth_error [f; ld] 0); auto.
       replace pc1 with (pc1 + 0) by omega.
       eapply sublist_items; eauto. }
-    (* assert (NEXT_PC: pc st2 = pc st1 + 1). *)
-    (* { apply (same_relation_exp (pow_1 (step tid))) in STEPS. *)
-    (*   red in STEPS. desc. red in STEPS. desc. *)
-    (*   inversion ISTEP0; auto. *)
-    (*   rewrite II, <- AT_PC in ISTEP. discriminate. } *)
     
     red. intros ACB2. 
     destruct ACB2 as [[block2 BLOCK2]| TERM2].

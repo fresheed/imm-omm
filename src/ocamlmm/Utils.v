@@ -1,11 +1,17 @@
+(******************************************************************************)
+(** Various lemmas (mainly about relations)                                   *)
+(******************************************************************************)
+
 Require Import Classical Peano_dec.
 From PromisingLib Require Import Basic Loc.
 From hahn Require Import Hahn.
 Require Import List.
 Set Implicit Arguments.
 
+Section Relations.
+Variable A B: Type. 
 
-Lemma inclusion_minus {A: Type} (s u m: A -> Prop):
+Lemma inclusion_minus (s u m: A -> Prop):
   s ⊆₁ u \₁ m <-> s ⊆₁ u /\ s ∩₁ m ⊆₁ ∅.
 Proof.
   split; [| basic_solver].
@@ -14,19 +20,7 @@ Proof.
   red. ins. red in H0. desc. specialize (H x H0). desc. vauto. 
 Qed. 
   
-Lemma OPT_VAL: forall {A: Type} (opt: option A), opt <> None <-> exists o, Some o = opt.
-Proof. 
-  intros. destruct opt eqn:v. 
-  - red. split; intros. 
-    + eexists. eauto.
-    + discriminate.
-  - red. split; intros.
-    + intuition.
-    + destruct H. discriminate H.  
-Qed.  
-
-
-Lemma empty_inter_minus_same {A: Type} (X Y: A -> Prop):
+Lemma empty_inter_minus_same (X Y: A -> Prop):
   X ∩₁ Y ≡₁ ∅ -> X \₁ Y ≡₁ X.
 Proof. 
   ins. red. split; [basic_solver| ].
@@ -37,7 +31,7 @@ Proof.
   red. ins. apply H. basic_solver. 
 Qed.
 
-Lemma same_relation_exp_iff {A: Type} (r r': relation A):
+Lemma same_relation_exp_iff {C: Type} (r r': relation C):
   r ≡ r' <-> (forall x y, r x y <-> r' x y).
 Proof.
   red. split.
@@ -46,23 +40,23 @@ Proof.
   all: red; ins; apply H; auto.
 Qed.  
 
-Lemma set_equiv_exp_iff {A : Type} (s s' : A -> Prop):
-  s ≡₁ s' <-> forall x : A, s x <-> s' x.
+Lemma set_equiv_exp_iff {C: Type} (s s' : C -> Prop):
+  s ≡₁ s' <-> forall x : C, s x <-> s' x.
 Proof.
   red. split; [apply set_equiv_exp| ].
   ins. red. split.
   all: red; ins; apply H; auto.
 Qed. 
 
-Lemma seq_eqv_lr_l {A: Type} (d1 d2: A -> Prop) r:
+Lemma seq_eqv_lr_l (d1 d2: A -> Prop) r:
   r ≡ ⦗d1⦘ ⨾ r ⨾ ⦗d2⦘ -> r ≡ ⦗d1⦘ ⨾ r.
 Proof. ins. rewrite H. basic_solver. Qed. 
 
-Lemma seq_eqv_lr_r {A: Type} (d1 d2: A -> Prop) r:
+Lemma seq_eqv_lr_r (d1 d2: A -> Prop) r:
   r ≡ ⦗d1⦘ ⨾ r ⨾ ⦗d2⦘ -> r ≡ r ⨾ ⦗d2⦘.
 Proof. ins. rewrite H. basic_solver. Qed.
 
-Lemma inter_subset_helper {A: Type} (S S1 S2: A -> Prop):
+Lemma inter_subset_helper (S S1 S2: A -> Prop):
   (forall x (Sx: S x), S1 x <-> S2 x) -> S ∩₁ S1 ≡₁ S ∩₁ S2.
 Proof.
   ins. apply set_equiv_exp_iff. ins. specialize (H x).
@@ -70,7 +64,7 @@ Proof.
   split; ins; desc; split; intuition.
 Qed.
 
-Lemma set_finite_alt {A: Type} (S: A -> Prop) (FIN: set_finite S):
+Lemma set_finite_alt (S: A -> Prop) (FIN: set_finite S):
   exists findom, forall x, S x <-> In x findom.
 Proof.
   destruct FIN as [lst FIN].
@@ -79,7 +73,7 @@ Proof.
   ins. apply in_filterP_iff in H. desc. auto. 
 Qed.
 
-Lemma bunion_more_alt: forall {A B : Type} (x y : A -> Prop),
+Lemma bunion_more_alt: forall (x y : A -> Prop),
     x ≡₁ y ->
     forall (x0 y0 : A -> relation B), (forall a, x0 a ≡ y0 a) -> (⋃x ∈ x, x0 x) ≡ (⋃x ∈ y, y0 x).
 Proof.
@@ -93,15 +87,15 @@ Proof.
 Qed.
 
     
-Lemma IN_SET_UNION {A: Type} (l1 l2: list A):
-  (fun x => In x (l1 ++ l2)) ≡₁ (fun x => In x l1) ∪₁ (fun x => In x l2).
+Lemma IN_SET_UNION (l1 l2: list A):
+ (fun x => In x (l1 ++ l2)) ≡₁ (fun x => In x l1) ∪₁ (fun x => In x l2).
 Proof. 
   ins. apply set_equiv_exp_iff. ins. split.
   { ins. red. apply in_app_or. auto. }
   ins. red in H. apply in_or_app. auto.
 Qed.
 
-Lemma eqv_rel_more_inv {A: Type} (S1 S2: A -> Prop) (EQV_REL: ⦗S1⦘ ≡ ⦗S2⦘):
+Lemma eqv_rel_more_inv (S1 S2: A -> Prop) (EQV_REL: ⦗S1⦘ ≡ ⦗S2⦘):
   S1 ≡₁ S2.
 Proof. 
   apply set_equiv_exp_iff. ins.
@@ -110,7 +104,7 @@ Proof.
   red. splits; desc; intuition.
 Qed.
 
-Lemma unique_restr {A: Type} x y (r: relation A) (Rxy: r x y):
+Lemma unique_restr  x y (r: relation A) (Rxy: r x y):
   ⦗eq x⦘ ⨾ r ⨾ ⦗eq y⦘ ≡ singl_rel x y.
 Proof.
   ins. rewrite seq_eqv_lr. split.
@@ -118,11 +112,11 @@ Proof.
   red. ins. red in H. desc. splits; vauto.
 Qed.
 
-Lemma singl_rel_restr {A: Type} (x y: A):
+Lemma singl_rel_restr (x y: A):
   singl_rel x y ≡ ⦗eq x⦘ ⨾ singl_rel x y ⨾ ⦗eq y⦘. 
 Proof. ins. basic_solver. Qed. 
 
-Lemma rel_endpoints_dom {A: Type} (D C EL ER : A -> Prop) r (DOM: r ≡ ⦗D⦘ ⨾ r ⨾ ⦗C⦘):
+Lemma rel_endpoints_dom (D C EL ER : A -> Prop) r (DOM: r ≡ ⦗D⦘ ⨾ r ⨾ ⦗C⦘):
   ⦗EL⦘ ⨾ r ⨾ ⦗ER⦘ ≡ ⦗EL ∩₁ D⦘ ⨾ r ⨾ ⦗ER ∩₁ C⦘.
 Proof.
   rewrite set_interC with (s' := C). 
@@ -130,7 +124,7 @@ Proof.
   seq_rewrite <- DOM. basic_solver.
 Qed.
 
-Lemma seq_compl_helper {A: Type} (r: relation A) (S: A -> Prop):
+Lemma seq_compl_helper (r: relation A) (S: A -> Prop):
   r ⨾ ⦗set_compl S⦘ ≡ r \ set_full × S.
 Proof.
   rewrite <- (seq_id_l r) at 1.
@@ -145,7 +139,7 @@ Proof.
   ins. apply H1. unfold cross_rel. split; basic_solver. 
 Qed. 
 
-Lemma MINUS_DISTR_L {A: Type} (r: relation A) (S1 S2: A -> Prop):
+Lemma MINUS_DISTR_L (r: relation A) (S1 S2: A -> Prop):
   ⦗S1 \₁ S2⦘ ⨾ r ≡ ⦗S1⦘ ⨾ r \ ⦗S2⦘ ⨾ r.
 Proof. 
   ins. red. split; [| basic_solver].
@@ -155,7 +149,7 @@ Proof.
   red. ins. apply seq_eqv_l in H2. basic_solver.
 Qed. 
 
-Lemma MINUS_DISTR_R {A: Type} (r: relation A) (S1 S2: A -> Prop):
+Lemma MINUS_DISTR_R (r: relation A) (S1 S2: A -> Prop):
   r ⨾ ⦗S1 \₁ S2⦘ ≡ r ⨾ ⦗S1⦘ \ r ⨾ ⦗S2⦘.
 Proof. 
   ins. red. split; [| basic_solver].            
@@ -165,15 +159,15 @@ Proof.
   red. ins. apply seq_eqv_r in H2. basic_solver.
 Qed. 
 
-Lemma MINUS_GROUP {A: Type} (r1 r2 r3: relation A):
-  (r1 \ r2) \ r3 ≡ r1 \ (r2 ∪ r3).
+Lemma MINUS_GROUP (r1 r2 r3: relation A):
+ (r1 \ r2) \ r3 ≡ r1 \ (r2 ∪ r3).
 Proof. 
   ins. red. split; [| basic_solver].
   red. ins. red. red in H. desc. red in H. desc.
   split; auto. red. ins. red in H2. basic_solver.
 Qed.
 
-Lemma SUPSET_RESTR {A: Type} (r1 r2: relation A) S (INCL: r1 ⊆ r2) (RESTR: r2 ≡ ⦗S⦘ ⨾ r2 ⨾ ⦗S⦘):
+Lemma SUPSET_RESTR (r1 r2: relation A) S (INCL: r1 ⊆ r2) (RESTR: r2 ≡ ⦗S⦘ ⨾ r2 ⨾ ⦗S⦘):
   r1 ≡ ⦗S⦘ ⨾ r1 ⨾ ⦗S⦘. 
 Proof.
   ins. split; [| basic_solver].
@@ -185,18 +179,11 @@ Proof.
   splits; auto.
 Qed.
 
-Lemma RESTR_SEQ  {A: Type} (r1 r2: relation A) (D: A -> Prop):
+Lemma RESTR_SEQ  (r1 r2: relation A) (D: A -> Prop):
   restr_rel D r1 ⨾ restr_rel D r2 ⊆ restr_rel D (r1 ⨾ r2). 
 Proof. ins. basic_solver. Qed.
 
-
-Lemma find_iff_in {A: Type} (M: IdentMap.t A) k: 
-  IdentMap.In k M <-> exists elt, Some elt = IdentMap.find k M. 
-Proof.
-  pose proof (@UsualFMapPositive.UsualPositiveMap.Facts.in_find_iff _ M k).
-  pose proof OPT_VAL (IdentMap.find k M).
-  eapply iff_stepl; [eapply H0 | symmetry; eauto]. 
-Qed.
+End Relations.
 
 Ltac remove_emptiness :=
   repeat (rewrite set_inter_empty_r || rewrite set_inter_empty_l ||
@@ -206,14 +193,22 @@ Ltac remove_emptiness :=
           rewrite seq_false_r || rewrite seq_false_l || rewrite eqv_empty ||
           rewrite cross_false_l || rewrite cross_false_r).
 
-Lemma first_end {A: Type} (l: list A) n x (NTH: Some x = List.nth_error l n):
-  firstn (n + 1) l = firstn n l ++ cons x nil.
+Lemma OPT_VAL: forall {A: Type} (opt: option A), opt <> None <-> exists o, Some o = opt.
+Proof. 
+  intros. destruct opt eqn:v. 
+  - red. split; intros. 
+    + eexists. eauto.
+    + discriminate.
+  - red. split; intros.
+    + intuition.
+    + destruct H. discriminate H.  
+Qed.  
+
+Lemma find_iff_in {A: Type} (M: IdentMap.t A) k: 
+  IdentMap.In k M <-> exists elt, Some elt = IdentMap.find k M. 
 Proof.
-  ins. 
-  symmetry in NTH. apply nth_error_split in NTH as [l1 [l2 [CAT H]]].
-  rewrite <- H. pose proof (@firstn_app_2 A 1 l1 (x :: l2)).
-  rewrite CAT. simpl in H0. rewrite H0.
-  pose proof (@firstn_app_2 A 0 l1). simpl in H1. rewrite app_nil_r, NPeano.Nat.add_0_r in H1.
-  rewrite H1. auto. 
+  pose proof (@UsualFMapPositive.UsualPositiveMap.Facts.in_find_iff _ M k).
+  pose proof OPT_VAL (IdentMap.find k M).
+  eapply iff_stepl; [eapply H0 | symmetry; eauto]. 
 Qed.
-      
+

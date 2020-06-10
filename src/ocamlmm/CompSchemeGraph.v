@@ -1,3 +1,6 @@
+(******************************************************************************)
+(** Events of compiled program's execution graph follow the compilation scheme*)
+(******************************************************************************)
 Require Import Classical Peano_dec.
 From hahn Require Import Hahn.
 Require Import Omega.
@@ -6,13 +9,11 @@ Require Import Execution.
 Require Import Execution_eco.
 Require Import imm_s_hb.
 Require Import imm_s.
-Require Import OCaml.
-Require Import OCamlToimm_s.
-Require Import OCamlToimm_s_prog.
-Require Import OCamlToimm_s_prog_compilation.
-Require Import OCamlToimm_s_prog_pair_step.
-Require Import OCamlToimm_s_prog_bounded_properties. 
-Require Import OCamlToimm_s_steps.
+(* Require Import OCamlToimm_s_prog. *)
+Require Import OmmImmCompScheme.
+Require Import OmmImmSimulation.
+Require Import BoundedRelsProperties. 
+Require Import BlockSteps.
 Require Import Utils.
 Require Import ClosuresProperties. 
 Require Import Prog.
@@ -44,9 +45,6 @@ Section CompCorrHelpers.
   Notation "'Tid_' t" := (fun x => tid x = t) (at level 1).
 
   Definition omm_premises_hold G :=
-    (* separated *)
-    (* let Loc_ := fun l x => loc G.(lab) x = Some l in *)
-    (* ⟪ LSM : forall l, (Loc_ l \₁ is_init ⊆₁ (ORlx G)  \/  Loc_ l \₁ is_init ⊆₁ (Sc G)) ⟫ /\ *)
     ⟪ WSCFACQRMW : E G ∩₁ W G ∩₁ Sc G ≡₁ codom_rel (⦗AcqF G⦘ ⨾ immediate (sb G) ⨾ rmw G) ⟫ /\
     ⟪ RMWSC  : rmw G ≡ ⦗Sc G⦘ ⨾ rmw G⨾ ⦗Sc G⦘ ⟫ /\
     ⟪ WRLXF : E G ∩₁ ORlxW G ⊆₁ codom_rel (⦗AcqrelF G⦘ ⨾ immediate (sb G)) ⟫ /\
@@ -110,21 +108,6 @@ Section CompCorrHelpers.
     all: inversion UG; auto.
   Qed. 
         
-  (* Lemma step2_index_increase st1 st2 tid index label1 label2 (STEP2: step2 st1 st2 tid index label1 label2): *)
-  (*   eindex st1 < eindex st2. *)
-  (* Proof. *)
-  (*   red in STEP2. desc. *)
-  (*   assert (forall G a b c d e f g h, G <> add_rmw G a b c d e f g h) as ADD_RMW_NEQ.  *)
-  (*   { ins. red. ins. unfold add_rmw in H. *)
-  (*     apply (@f_equal _ _ acts) in H. simpl in H. *)
-  (*     apply (@f_equal _ _ (@length _)) in H. simpl in H. omega. }  *)
-  (*   do 2 (red in STEP; desc). *)
-  (*   inversion ISTEP0. *)
-  (*   all: try (rewrite UG in ADD1; apply ADD_RMW_NEQ in ADD1; by vauto). *)
-  (*   all: omega. *)
-  (* Qed.  *)
-        
-
 
   Lemma immediate_sb_repr st thread (WFT: wf_thread_state thread st):
     immediate (sb (G st)) ≡ (fun e1 e2 =>
@@ -274,7 +257,6 @@ Section CompCorrHelpers.
       { desc. subst. eexists. splits; eauto. omega. }
       desc. subst. eexists. splits; eauto. omega.
       }
-    (* { apply LBL_STEP.  *)
     all: apply LBL_STEP; eauto with label_ext.
     all: eapply nonnop_bounded; eauto with label_ext; vauto.
   Qed. 
@@ -454,8 +436,6 @@ Section CompCorrHelpers.
     assert (wf_thread_state tid st_prev) as WFT.
     { apply wf_thread_state_steps with (s := init (instrs st_prev)); [apply wf_thread_state_init| ]. 
       apply crt_num_steps. eauto. }
-    (* assert (forall G, W G ∩₁ ORlx G ≡₁ fun x : actid => is_orlx_w (lab G) x) as ORLX_W_ALT.  *)
-    (* { unfold set_inter, is_orlx_w. basic_solver. } *)
     assert (forall {A: Type} (D: A -> Prop) r, immediate (restr_rel D r) ≡ restr_rel D (immediate (restr_rel D r))) as RESTR_IMM. 
     { ins. basic_solver. }
 
@@ -619,9 +599,7 @@ Section CompCorrHelpers.
       { cut (Some instr0 = Some ld); [ins; vauto| ].
         rewrite ISTEP1. vauto. }
       subst instr0. inversion H1. subst ord. subst lexpr. subst reg.
-      (* subst x. *)
       subst l.
-      (* subst val.   *)
       
       remember (Afence Oacq) as lbl. 
       remember (Aload false Osc (RegFile.eval_lexpr (regf st_prev') loc) val) as lbl'.
@@ -801,11 +779,6 @@ Section CompCorrHelpers.
       assert (forall st_, immediate (sb (G st_)) ≡ ⦗E (G st_)⦘ ⨾ immediate (sb (G st_)) ⨾ ⦗E (G st_)⦘) as SB_IMM_E.
       { ins. unfold sb. rewrite <- restr_relE. rewrite RESTR_IMM.
         rewrite restr_relE. basic_solver 10. }
-      (* assert (wf_thread_state tid st_prev') as WFT'. *)
-      (* { eapply wf_thread_state_step; eauto. red. eexists. red. splits; eauto. } *)
-      (* assert (wf_thread_state tid st) as WFT''. *)
-      (* { eapply wf_thread_state_step; eauto. red. eexists. red. *)
-      (*   splits; [congruence| ]. exists exc. splits; eauto. congruence. } *)
       splits.
       { subst ev ev' ev''. rewrite UINDEX in *.
         rewrite E_EXT, W_EXT, SC_EXT at 1. 

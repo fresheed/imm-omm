@@ -1,3 +1,8 @@
+(******************************************************************************)
+(** Facts about transitive and reflexive-transitive closures **)
+(******************************************************************************)
+
+
 Require Import Peano_dec.
 Require Import Prog.
 From hahn Require Import Hahn.

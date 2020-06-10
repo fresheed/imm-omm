@@ -1,5 +1,5 @@
 (******************************************************************************)
-(** * OCaml MM is weaker than IMM_S   *)
+(** An IMM_S-consistent graph of compiled program is OMM-consistent           *)
 (******************************************************************************)
 Require Import Classical Peano_dec.
 From hahn Require Import Hahn.
