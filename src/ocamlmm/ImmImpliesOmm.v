@@ -1,5 +1,5 @@
 (******************************************************************************)
-(** * OCaml MM is weaker than IMM_S   *)
+(** An IMM_S-consistent graph of compiled program is OMM-consistent           *)
 (******************************************************************************)
 Require Import Classical Peano_dec.
 From hahn Require Import Hahn.
@@ -74,14 +74,14 @@ Notation "'Loc_' l" := (fun x => loc x = Some l) (at level 1).
 Notation "'ohb'" := G.(OCaml.hb).
 
 Hypothesis LSM : forall l,
-    ⟪ LM : Loc_ l \₁ is_init ⊆₁ ORlx ⟫ \/
-    ⟪ LM : Loc_ l \₁ is_init ⊆₁ Sc ⟫.
+    ⟪ LM : E ∩₁ Loc_ l \₁ is_init ⊆₁ ORlx ⟫ \/
+    ⟪ LM : E ∩₁ Loc_ l \₁ is_init ⊆₁ Sc ⟫.
 
-Hypothesis WSCFACQRMW : W∩₁Sc ≡₁ codom_rel (⦗F∩₁ Acq⦘ ⨾ immediate sb ⨾ rmw).
+Hypothesis WRLXF : E ∩₁ W ∩₁ ORlx ⊆₁ codom_rel (⦗F ∩₁ Acqrel⦘ ⨾ immediate sb).
+Hypothesis RSCF  : E ∩₁ R ∩₁ Sc  ⊆₁ codom_rel (⦗F ∩₁ Acq⦘ ⨾ immediate sb).
+Hypothesis WSCFACQRMW : E ∩₁ W ∩₁ Sc ≡₁ codom_rel (⦗F ∩₁ Acq⦘ ⨾ immediate sb ⨾ rmw).
 Hypothesis RMWSC  : rmw ≡ ⦗Sc⦘ ⨾ rmw ⨾ ⦗Sc⦘.
 
-Hypothesis WRLXF : W∩₁ORlx ⊆₁ codom_rel (⦗F∩₁Acqrel⦘ ⨾ immediate sb).
-Hypothesis RSCF  : R∩₁Sc  ⊆₁ codom_rel (⦗F∩₁Acq⦘ ⨾ immediate sb).
 
 Lemma sc_rf_in_sw (WF: Wf G):
     ⦗Sc⦘ ⨾ rf ⨾ ⦗Sc⦘ ⊆ sw. 
@@ -124,7 +124,7 @@ Proof using LSM RMWSC RSCF WRLXF WSCFACQRMW.
   
   assert (sc_per_loc G) as SPL.
   { apply coherence_sc_per_loc. apply IPC. }
-  assert (W ∩₁ Sc ⊆₁ codom_rel rmw) as WSCRMW. 
+  assert (E ∩₁ W ∩₁ Sc ⊆₁ codom_rel rmw) as WSCRMW. 
   { rewrite WSCFACQRMW. basic_solver. }
            
   apply inclusion_t_ind, hb_trans; auto.
@@ -135,6 +135,9 @@ Proof using LSM RMWSC RSCF WRLXF WSCFACQRMW.
   rewrite (dom_r WF.(wf_coD)).
   rewrite !seqA.
   rewrite <- id_inter.
+  arewrite (co ≡ co ⨾ ⦗E⦘).
+  { rewrite WF.(wf_coE). basic_solver. }
+  rewrite <- id_inter, <- set_interA. 
   rewrite WSCFACQRMW.
   intros w1 w2 [co_rmw_w1_w2 imm_w1_w2].
   apply seq_eqv_l in co_rmw_w1_w2.
@@ -201,11 +204,11 @@ Proof using LSM RMWSC RSCF WRLXF WSCFACQRMW.
   assert (Sc w') as SCW'.
   { specialize (LSM l).
     destruct LSM as [CC|CC].
-    2: { apply CC. split; auto. }
-    exfalso.
+    2: { apply CC. red. splits; auto. red. split; auto. }
+    exfalso. 
     assert (~ is_init r2) as NINITR2.
     { eapply read_or_fence_is_not_init; eauto. }
-    assert ((Loc_ l \₁ is_init) r2) as DD by (by split).
+    assert ((E ∩₁ Loc_ l \₁ is_init) r2) as DD by (by split).
     apply CC in DD. clear -SCR2 DD. mode_solver. }
   
   assert (codom_rel rmw w') as RMWW'.
@@ -275,7 +278,9 @@ Proof using LSM RSCF WRLXF WSCFACQRMW.
     destruct (lab x) eqn:AA; simpls; desf.
     all: eauto. }
   destruct (LSM l) as [LL|LL]; [right|left].
-  all: eapply LL; split; auto.
+  (* cannot do it with all: ?*)
+  { eapply LL. basic_solver. }
+  eapply LL. basic_solver.
 Qed.
 
 Lemma sl_mode (WF: Wf G) r (SL: r ⊆ same_loc):
@@ -292,7 +297,7 @@ Proof using LSM.
   { rewrite <- LX. symmetry. by apply SL. }
   destruct (LSM l) as [LL|LL]; [right|left].
   all: apply seq_eqv_lr; splits; auto.
-  all: eapply LL; split; auto.
+  all: eapply LL; split; basic_solver. 
 Qed.
 
 Lemma sc_ninit (WF: Wf G): Sc ⊆₁ set_compl is_init.
@@ -350,10 +355,18 @@ Proof using LSM RSCF WRLXF WSCFACQRMW.
   { unfolder. ins. desf. splits; auto.
     destruct wr_mode with (x:=y); auto.
     basic_solver. }
-  rewrite id_union. rewrite !seq_union_r.
+  rewrite id_union.
+  arewrite (sb ≡ sb ⨾ ⦗E⦘) at 1.
+  { unfold Execution.sb. basic_solver. }
+  seq_rewrite seq_eqv_minus_lr. rewrite seqA.
+  rewrite seq_union_r. 
+  rewrite <- !id_inter with (s:=E). rewrite <- !set_interA with (s:=E). 
+  rewrite !seq_union_r.
   unionL.
   
-  2: { unionR left. rewrite <- (seq_eqvK (W ∩₁ ORlx)). rewrite WRLXF at 1. 
+  2: { unionR left.
+       rewrite <- (seq_eqvK (E ∩₁ W ∩₁ ORlx)).
+       rewrite WRLXF at 1. 
        unfolder. intros e w H'. destruct H' as [H'' [H' [[f' [f U]] T']]].
        desf.
        assert (~is_init f) as NINITf.
@@ -365,7 +378,7 @@ Proof using LSM RSCF WRLXF WSCFACQRMW.
        destruct SB; auto.
        exfalso. specialize (U1 e). auto. }
   unionR right. 
-  rewrite <- (seq_eqvK (W ∩₁ Sc)) at 1. rewrite WSCFACQRMW at 1. 
+  rewrite <- (seq_eqvK (E ∩₁ W ∩₁ Sc)) at 1. rewrite WSCFACQRMW at 1. 
   unfolder. intros e w [H' [w' [[f' [f U]] V]]].
   destruct U as [N [r' Z]]. 
   desf.
@@ -393,17 +406,25 @@ Qed.
 Lemma sb_r_sc_sync (WF: Wf G):
   ⦗E \₁ F⦘ ⨾  sb ⨾ ⦗R⦘ ⨾ ⦗Sc⦘ ⊆ sb ⨾ ⦗F ∩₁ Acq⦘ ⨾ sb ⨾ ⦗R⦘ ⨾ ⦗Sc⦘.
 Proof using RSCF WRLXF WSCFACQRMW.
-  rewrite <- id_inter. rewrite <- (seq_eqvK (R ∩₁ Sc)). rewrite RSCF at 1.
-  unfolder. intros e r [A [C [[f' [f U]] V]]]. desf.
-  exists f. splits; auto.
-  assert (e <> f) as NEQfe. 
+  rewrite <- id_inter. rewrite <- (seq_eqvK (R ∩₁ Sc)).
+  arewrite (sb ⨾ ⦗R ∩₁ Sc⦘ ≡ sb ⨾ ⦗E ∩₁ R ∩₁ Sc⦘).
+  { unfold Execution.sb. basic_solver. } 
+  rewrite RSCF at 1.
+  unfolder.
+  intros e r [A [C [[f' [f U]] V]]].
+  desf.
+  exists f.
+  assert (E r) as Er.
+  { apply seq_eqv_lr in C. by desc. } 
+  splits; auto.
+  assert (e <> f) as NEQfe.
   { red. type_solver. }
   assert (~is_init f) as NINITf.
-  { generalize (@read_or_fence_is_not_init G WF f). type_solver. }  
+  { generalize (@read_or_fence_is_not_init G WF f). type_solver. }
   pose (sb_semi_total_r WF NINITf NEQfe C U0) as SB.
   destruct SB; auto.
-  exfalso. specialize (U1 e). auto. 
-Qed. 
+  exfalso. specialize (U1 e). auto.
+Qed.
   
 Lemma sb_rf_sc_sc (WF : Wf G) : (* TODO *)
   sb ⨾ rf ⨾ ⦗Sc⦘ ⊆ sb ⨾ ⦗Sc⦘ ⨾ rf ⨾ ⦗Sc⦘.
